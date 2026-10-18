@@ -1,0 +1,65 @@
+{
+ "path": "/v1/youtube/channel/lives",
+ "fields": {
+  "continuationToken": [
+   "string"
+  ],
+  "lives": [
+   "array"
+  ],
+  "lives[]": [
+   "object"
+  ],
+  "lives[].badges": [
+   "array"
+  ],
+  "lives[].channel": [
+   "object"
+  ],
+  "lives[].channel.handle": [
+   "null"
+  ],
+  "lives[].channel.id": [
+   "null"
+  ],
+  "lives[].channel.thumbnail": [
+   "null"
+  ],
+  "lives[].channel.title": [
+   "null"
+  ],
+  "lives[].id": [
+   "string"
+  ],
+  "lives[].lengthSeconds": [
+   "integer"
+  ],
+  "lives[].lengthText": [
+   "string"
+  ],
+  "lives[].publishedTimeText": [
+   "string"
+  ],
+  "lives[].thumbnail": [
+   "string"
+  ],
+  "lives[].title": [
+   "string"
+  ],
+  "lives[].type": [
+   "string"
+  ],
+  "lives[].url": [
+   "string"
+  ],
+  "lives[].viewCountInt": [
+   "integer"
+  ],
+  "lives[].viewCountText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

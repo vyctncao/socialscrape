@@ -1,0 +1,248 @@
+{
+ "path": "/v1/tiktok/get-trending-feed",
+ "fields": {
+  "aweme_list": [
+   "array"
+  ],
+  "aweme_list[]": [
+   "object"
+  ],
+  "aweme_list[].author": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_medium": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_medium.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_medium.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_medium.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_medium.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_medium.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_medium.width": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_thumb": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_thumb.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_thumb.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_thumb.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_thumb.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_thumb.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_thumb.width": [
+   "integer"
+  ],
+  "aweme_list[].author.events": [
+   "null"
+  ],
+  "aweme_list[].author.language": [
+   "string"
+  ],
+  "aweme_list[].author.nickname": [
+   "string"
+  ],
+  "aweme_list[].author.region": [
+   "string"
+  ],
+  "aweme_list[].author.sec_uid": [
+   "string"
+  ],
+  "aweme_list[].author.short_id": [
+   "string"
+  ],
+  "aweme_list[].author.signature": [
+   "string"
+  ],
+  "aweme_list[].author.social_info": [
+   "string"
+  ],
+  "aweme_list[].author.uid": [
+   "string"
+  ],
+  "aweme_list[].aweme_id": [
+   "string"
+  ],
+  "aweme_list[].create_time": [
+   "integer"
+  ],
+  "aweme_list[].create_time_utc": [
+   "string"
+  ],
+  "aweme_list[].desc": [
+   "string"
+  ],
+  "aweme_list[].desc_language": [
+   "string"
+  ],
+  "aweme_list[].image_post_info": [
+   "object"
+  ],
+  "aweme_list[].image_post_info.images": [
+   "array"
+  ],
+  "aweme_list[].image_post_info.images[]": [
+   "object"
+  ],
+  "aweme_list[].image_post_info.images[].display_image": [
+   "object"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.height": [
+   "integer"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.preview": [
+   "object"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.preview.data": [
+   "string"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.preview.meta_key": [
+   "string"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.preview.preview_type": [
+   "integer"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.uri": [
+   "string"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.url_list": [
+   "array"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].image_post_info.images[].display_image.width": [
+   "integer"
+  ],
+  "aweme_list[].image_post_info.post_extra": [
+   "string"
+  ],
+  "aweme_list[].image_post_info.title": [
+   "string"
+  ],
+  "aweme_list[].is_ad": [
+   "boolean"
+  ],
+  "aweme_list[].is_eligible_for_commission": [
+   "boolean"
+  ],
+  "aweme_list[].region": [
+   "string"
+  ],
+  "aweme_list[].statistics": [
+   "object"
+  ],
+  "aweme_list[].statistics.aweme_id": [
+   "string"
+  ],
+  "aweme_list[].statistics.collect_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.comment_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.digg_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.download_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.forward_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.lose_comment_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.lose_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.play_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.repost_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.share_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.whatsapp_share_count": [
+   "integer"
+  ],
+  "aweme_list[].url": [
+   "string"
+  ],
+  "aweme_list[].video": [
+   "object"
+  ],
+  "aweme_list[].video.cover": [
+   "object"
+  ],
+  "aweme_list[].video.cover.height": [
+   "integer"
+  ],
+  "aweme_list[].video.cover.uri": [
+   "string"
+  ],
+  "aweme_list[].video.cover.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.cover.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.cover.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.cover.width": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr": [
+   "object"
+  ],
+  "aweme_list[].video.play_addr.height": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr.uri": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.url_key": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.play_addr.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.play_addr.width": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

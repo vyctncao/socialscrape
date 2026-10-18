@@ -1,0 +1,83 @@
+{
+ "path": "/v1/youtube/video/sponsors",
+ "fields": {
+  "sponsorDetection": [
+   "object"
+  ],
+  "sponsorDetection.methods": [
+   "array"
+  ],
+  "sponsorDetection.methods[]": [
+   "string"
+  ],
+  "sponsorDetection.note": [
+   "string"
+  ],
+  "sponsorDetection.status": [
+   "string"
+  ],
+  "sponsorDetection.transcriptAvailable": [
+   "boolean"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "suspectedSponsors": [
+   "array"
+  ],
+  "suspectedSponsors[]": [
+   "object"
+  ],
+  "suspectedSponsors[].confidence": [
+   "string"
+  ],
+  "suspectedSponsors[].evidence": [
+   "array"
+  ],
+  "suspectedSponsors[].evidence[]": [
+   "object"
+  ],
+  "suspectedSponsors[].evidence[].source": [
+   "string"
+  ],
+  "suspectedSponsors[].evidence[].text": [
+   "string"
+  ],
+  "suspectedSponsors[].name": [
+   "string"
+  ],
+  "suspectedSponsors[].website": [
+   "string"
+  ],
+  "video": [
+   "object"
+  ],
+  "video.channel": [
+   "object"
+  ],
+  "video.channel.handle": [
+   "string"
+  ],
+  "video.channel.id": [
+   "string"
+  ],
+  "video.channel.title": [
+   "string"
+  ],
+  "video.channel.url": [
+   "string"
+  ],
+  "video.id": [
+   "string"
+  ],
+  "video.isPaidPromotion": [
+   "boolean"
+  ],
+  "video.title": [
+   "string"
+  ],
+  "video.url": [
+   "string"
+  ]
+ }
+}

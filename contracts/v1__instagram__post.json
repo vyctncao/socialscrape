@@ -1,0 +1,311 @@
+{
+ "path": "/v1/instagram/post",
+ "fields": {
+  "data": [
+   "object"
+  ],
+  "data.xdt_shortcode_media": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.__typename": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.accessibility_caption": [
+   "null"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info.artist_name": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info.audio_id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info.should_mute_audio": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info.should_mute_audio_reason": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info.song_name": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.clips_music_attribution_info.uses_original_audio": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.display_url": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges": [
+   "array"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[]": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.created_at": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.did_report_as_spam": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.edge_liked_by": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.edge_liked_by.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.is_restricted_pending": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.owner": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.owner.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.owner.is_verified": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.owner.profile_pic_url": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.owner.username": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.text": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_comment.edges[].node.viewer_has_liked": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_like": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_like.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_preview_like.edges": [
+   "array"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption.edges": [
+   "array"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption.edges[]": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption.edges[].node": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption.edges[].node.created_at": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption.edges[].node.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_caption.edges[].node.text": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges": [
+   "array"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[]": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.created_at": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.did_report_as_spam": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_liked_by": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_liked_by.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_threaded_comments": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_threaded_comments.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_threaded_comments.edges": [
+   "array"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_threaded_comments.page_info": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_threaded_comments.page_info.end_cursor": [
+   "null"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.edge_threaded_comments.page_info.has_next_page": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.is_restricted_pending": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.owner": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.owner.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.owner.is_verified": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.owner.profile_pic_url": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.owner.username": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.text": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.edges[].node.viewer_has_liked": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.page_info": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.page_info.end_cursor": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.edge_media_to_parent_comment.page_info.has_next_page": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.has_audio": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.is_ad": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.is_affiliate": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.is_paid_partnership": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.is_video": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.location": [
+   "null"
+  ],
+  "data.xdt_shortcode_media.owner": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.owner.blocked_by_viewer": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.edge_followed_by": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.owner.edge_followed_by.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.owner.edge_owner_to_timeline_media": [
+   "object"
+  ],
+  "data.xdt_shortcode_media.owner.edge_owner_to_timeline_media.count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.owner.followed_by_viewer": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.full_name": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.owner.has_blocked_viewer": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.id": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.owner.is_embeds_disabled": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.is_private": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.is_unpublished": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.is_verified": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.pass_tiering_recommendation": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.profile_pic_url": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.owner.requested_by_viewer": [
+   "boolean"
+  ],
+  "data.xdt_shortcode_media.owner.restricted_by_viewer": [
+   "null"
+  ],
+  "data.xdt_shortcode_media.owner.username": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.product_type": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.shortcode": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.taken_at_timestamp": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.thumbnail_src": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.video_duration": [
+   "number"
+  ],
+  "data.xdt_shortcode_media.video_play_count": [
+   "integer"
+  ],
+  "data.xdt_shortcode_media.video_url": [
+   "string"
+  ],
+  "data.xdt_shortcode_media.video_view_count": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

@@ -1,0 +1,503 @@
+{
+ "path": "/v1/instagram/user/reels",
+ "fields": {
+  "items": [
+   "array"
+  ],
+  "items[]": [
+   "object"
+  ],
+  "items[].caption": [
+   "object"
+  ],
+  "items[].caption.bit_flags": [
+   "integer"
+  ],
+  "items[].caption.content_type": [
+   "string"
+  ],
+  "items[].caption.created_at": [
+   "integer"
+  ],
+  "items[].caption.created_at_utc": [
+   "integer"
+  ],
+  "items[].caption.did_report_as_spam": [
+   "boolean"
+  ],
+  "items[].caption.is_covered": [
+   "boolean"
+  ],
+  "items[].caption.is_ranked_comment": [
+   "boolean"
+  ],
+  "items[].caption.media_id": [
+   "string"
+  ],
+  "items[].caption.pk": [
+   "string"
+  ],
+  "items[].caption.private_reply_status": [
+   "integer"
+  ],
+  "items[].caption.share_enabled": [
+   "boolean"
+  ],
+  "items[].caption.status": [
+   "string"
+  ],
+  "items[].caption.strong_id__": [
+   "string"
+  ],
+  "items[].caption.text": [
+   "string"
+  ],
+  "items[].caption.type": [
+   "integer"
+  ],
+  "items[].caption.user": [
+   "object"
+  ],
+  "items[].caption.user.fbid_v2": [
+   "string"
+  ],
+  "items[].caption.user.full_name": [
+   "string"
+  ],
+  "items[].caption.user.id": [
+   "string"
+  ],
+  "items[].caption.user.is_private": [
+   "boolean"
+  ],
+  "items[].caption.user.is_unpublished": [
+   "boolean"
+  ],
+  "items[].caption.user.is_verified": [
+   "boolean"
+  ],
+  "items[].caption.user.pk": [
+   "string"
+  ],
+  "items[].caption.user.pk_id": [
+   "string"
+  ],
+  "items[].caption.user.profile_pic_id": [
+   "string"
+  ],
+  "items[].caption.user.profile_pic_url": [
+   "string"
+  ],
+  "items[].caption.user.strong_id__": [
+   "string"
+  ],
+  "items[].caption.user.username": [
+   "string"
+  ],
+  "items[].caption.user_id": [
+   "string"
+  ],
+  "items[].code": [
+   "string"
+  ],
+  "items[].comment_count": [
+   "integer"
+  ],
+  "items[].created_at": [
+   "string"
+  ],
+  "items[].display_uri": [
+   "string"
+  ],
+  "items[].id": [
+   "string"
+  ],
+  "items[].ig_play_count": [
+   "integer"
+  ],
+  "items[].image_versions2": [
+   "object"
+  ],
+  "items[].image_versions2.additional_candidates": [
+   "object"
+  ],
+  "items[].image_versions2.additional_candidates.first_frame": [
+   "object"
+  ],
+  "items[].image_versions2.additional_candidates.first_frame.height": [
+   "integer"
+  ],
+  "items[].image_versions2.additional_candidates.first_frame.url": [
+   "string"
+  ],
+  "items[].image_versions2.additional_candidates.first_frame.width": [
+   "integer"
+  ],
+  "items[].image_versions2.additional_candidates.igtv_first_frame": [
+   "object"
+  ],
+  "items[].image_versions2.additional_candidates.igtv_first_frame.height": [
+   "integer"
+  ],
+  "items[].image_versions2.additional_candidates.igtv_first_frame.url": [
+   "string"
+  ],
+  "items[].image_versions2.additional_candidates.igtv_first_frame.width": [
+   "integer"
+  ],
+  "items[].image_versions2.additional_candidates.smart_frame": [
+   "object"
+  ],
+  "items[].image_versions2.additional_candidates.smart_frame.height": [
+   "integer"
+  ],
+  "items[].image_versions2.additional_candidates.smart_frame.url": [
+   "string"
+  ],
+  "items[].image_versions2.additional_candidates.smart_frame.width": [
+   "integer"
+  ],
+  "items[].image_versions2.candidates": [
+   "array"
+  ],
+  "items[].image_versions2.candidates[]": [
+   "object"
+  ],
+  "items[].image_versions2.candidates[].height": [
+   "integer"
+  ],
+  "items[].image_versions2.candidates[].url": [
+   "string"
+  ],
+  "items[].image_versions2.candidates[].width": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates": [
+   "object"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default": [
+   "object"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.file_size_kb": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.max_thumbnails_per_sprite": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.rendered_width": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.sprite_height": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.sprite_urls": [
+   "array"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.sprite_urls[]": [
+   "string"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.sprite_width": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.thumbnail_duration": [
+   "number"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.thumbnail_height": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.thumbnail_width": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.thumbnails_per_row": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.total_thumbnail_num_per_sprite": [
+   "integer"
+  ],
+  "items[].image_versions2.scrubber_spritesheet_info_candidates.default.video_length": [
+   "number"
+  ],
+  "items[].like_count": [
+   "integer"
+  ],
+  "items[].owner": [
+   "object"
+  ],
+  "items[].owner.account_badges": [
+   "array"
+  ],
+  "items[].owner.account_type": [
+   "integer"
+  ],
+  "items[].owner.eligible_for_text_app_activation_badge": [
+   "boolean"
+  ],
+  "items[].owner.fan_club_info": [
+   "object"
+  ],
+  "items[].owner.fan_club_info.autosave_to_exclusive_highlight": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.connected_member_count": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.fan_club_id": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.fan_club_name": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.fan_consideration_page_revamp_eligiblity": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.has_created_ssc": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.has_enough_subscribers_for_ssc": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.is_fan_club_gifting_eligible": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.is_fan_club_referral_eligible": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.is_free_trial_eligible": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.largest_public_bc_id": [
+   "null"
+  ],
+  "items[].owner.fan_club_info.subscriber_count": [
+   "null"
+  ],
+  "items[].owner.fbid_v2": [
+   "string"
+  ],
+  "items[].owner.feed_post_reshare_disabled": [
+   "boolean"
+  ],
+  "items[].owner.full_name": [
+   "string"
+  ],
+  "items[].owner.has_anonymous_profile_picture": [
+   "boolean"
+  ],
+  "items[].owner.hd_profile_pic_url_info": [
+   "object"
+  ],
+  "items[].owner.hd_profile_pic_url_info.height": [
+   "integer"
+  ],
+  "items[].owner.hd_profile_pic_url_info.url": [
+   "string"
+  ],
+  "items[].owner.hd_profile_pic_url_info.width": [
+   "integer"
+  ],
+  "items[].owner.hd_profile_pic_versions": [
+   "array"
+  ],
+  "items[].owner.hd_profile_pic_versions[]": [
+   "object"
+  ],
+  "items[].owner.hd_profile_pic_versions[].height": [
+   "integer"
+  ],
+  "items[].owner.hd_profile_pic_versions[].url": [
+   "string"
+  ],
+  "items[].owner.hd_profile_pic_versions[].width": [
+   "integer"
+  ],
+  "items[].owner.id": [
+   "string"
+  ],
+  "items[].owner.is_embeds_disabled": [
+   "boolean"
+  ],
+  "items[].owner.is_private": [
+   "boolean"
+  ],
+  "items[].owner.is_unpublished": [
+   "boolean"
+  ],
+  "items[].owner.is_verified": [
+   "boolean"
+  ],
+  "items[].owner.pk": [
+   "string"
+  ],
+  "items[].owner.pk_id": [
+   "string"
+  ],
+  "items[].owner.profile_pic_id": [
+   "string"
+  ],
+  "items[].owner.profile_pic_url": [
+   "string"
+  ],
+  "items[].owner.show_account_transparency_details": [
+   "boolean"
+  ],
+  "items[].owner.strong_id__": [
+   "string"
+  ],
+  "items[].owner.third_party_downloads_enabled": [
+   "integer"
+  ],
+  "items[].owner.transparency_product_enabled": [
+   "boolean"
+  ],
+  "items[].owner.username": [
+   "string"
+  ],
+  "items[].play_count": [
+   "integer"
+  ],
+  "items[].taken_at": [
+   "integer"
+  ],
+  "items[].url": [
+   "string"
+  ],
+  "items[].user": [
+   "object"
+  ],
+  "items[].user.account_badges": [
+   "array"
+  ],
+  "items[].user.account_type": [
+   "integer"
+  ],
+  "items[].user.eligible_for_text_app_activation_badge": [
+   "boolean"
+  ],
+  "items[].user.fan_club_info": [
+   "object"
+  ],
+  "items[].user.fan_club_info.autosave_to_exclusive_highlight": [
+   "null"
+  ],
+  "items[].user.fan_club_info.connected_member_count": [
+   "null"
+  ],
+  "items[].user.fan_club_info.fan_club_id": [
+   "null"
+  ],
+  "items[].user.fan_club_info.fan_club_name": [
+   "null"
+  ],
+  "items[].user.fan_club_info.fan_consideration_page_revamp_eligiblity": [
+   "null"
+  ],
+  "items[].user.fan_club_info.has_created_ssc": [
+   "null"
+  ],
+  "items[].user.fan_club_info.has_enough_subscribers_for_ssc": [
+   "null"
+  ],
+  "items[].user.fan_club_info.is_fan_club_gifting_eligible": [
+   "null"
+  ],
+  "items[].user.fan_club_info.is_fan_club_referral_eligible": [
+   "null"
+  ],
+  "items[].user.fan_club_info.is_free_trial_eligible": [
+   "null"
+  ],
+  "items[].user.fan_club_info.largest_public_bc_id": [
+   "null"
+  ],
+  "items[].user.fan_club_info.subscriber_count": [
+   "null"
+  ],
+  "items[].user.fbid_v2": [
+   "string"
+  ],
+  "items[].user.feed_post_reshare_disabled": [
+   "boolean"
+  ],
+  "items[].user.full_name": [
+   "string"
+  ],
+  "items[].user.has_anonymous_profile_picture": [
+   "boolean"
+  ],
+  "items[].user.hd_profile_pic_url_info": [
+   "object"
+  ],
+  "items[].user.hd_profile_pic_url_info.height": [
+   "integer"
+  ],
+  "items[].user.hd_profile_pic_url_info.url": [
+   "string"
+  ],
+  "items[].user.hd_profile_pic_url_info.width": [
+   "integer"
+  ],
+  "items[].user.hd_profile_pic_versions": [
+   "array"
+  ],
+  "items[].user.hd_profile_pic_versions[]": [
+   "object"
+  ],
+  "items[].user.hd_profile_pic_versions[].height": [
+   "integer"
+  ],
+  "items[].user.hd_profile_pic_versions[].url": [
+   "string"
+  ],
+  "items[].user.hd_profile_pic_versions[].width": [
+   "integer"
+  ],
+  "items[].user.id": [
+   "string"
+  ],
+  "items[].user.is_embeds_disabled": [
+   "boolean"
+  ],
+  "items[].user.is_private": [
+   "boolean"
+  ],
+  "items[].user.is_unpublished": [
+   "boolean"
+  ],
+  "items[].user.is_verified": [
+   "boolean"
+  ],
+  "items[].user.pk": [
+   "string"
+  ],
+  "items[].user.pk_id": [
+   "string"
+  ],
+  "items[].user.profile_pic_id": [
+   "string"
+  ],
+  "items[].user.profile_pic_url": [
+   "string"
+  ],
+  "items[].user.show_account_transparency_details": [
+   "boolean"
+  ],
+  "items[].user.strong_id__": [
+   "string"
+  ],
+  "items[].user.third_party_downloads_enabled": [
+   "integer"
+  ],
+  "items[].user.transparency_product_enabled": [
+   "boolean"
+  ],
+  "items[].user.username": [
+   "string"
+  ],
+  "max_id": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

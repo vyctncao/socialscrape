@@ -1,0 +1,236 @@
+{
+ "path": "/v1/tiktok/user/live",
+ "fields": {
+  "is_live": [
+   "boolean"
+  ],
+  "liveRoom": [
+   "object"
+  ],
+  "liveRoom.coverUrl": [
+   "string"
+  ],
+  "liveRoom.gameTagId": [
+   "integer"
+  ],
+  "liveRoom.hashTagId": [
+   "integer"
+  ],
+  "liveRoom.hevcStreamData": [
+   "object"
+  ],
+  "liveRoom.hevcStreamData.pull_data": [
+   "object"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options": [
+   "object"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality": [
+   "object"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality.icon_type": [
+   "integer"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality.level": [
+   "integer"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality.name": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality.resolution": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality.sdk_key": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.default_quality.v_codec": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities": [
+   "array"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[]": [
+   "object"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[].icon_type": [
+   "integer"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[].level": [
+   "integer"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[].name": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[].resolution": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[].sdk_key": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.qualities[].v_codec": [
+   "string"
+  ],
+  "liveRoom.hevcStreamData.pull_data.options.show_quality_button": [
+   "boolean"
+  ],
+  "liveRoom.hevcStreamData.pull_data.stream_data": [
+   "string"
+  ],
+  "liveRoom.liveRoomMode": [
+   "integer"
+  ],
+  "liveRoom.liveRoomStats": [
+   "object"
+  ],
+  "liveRoom.liveRoomStats.enterCount": [
+   "integer"
+  ],
+  "liveRoom.liveRoomStats.userCount": [
+   "integer"
+  ],
+  "liveRoom.liveSubOnly": [
+   "integer"
+  ],
+  "liveRoom.multiStreamScene": [
+   "integer"
+  ],
+  "liveRoom.multiStreamSource": [
+   "integer"
+  ],
+  "liveRoom.paidEvent": [
+   "object"
+  ],
+  "liveRoom.paidEvent.event_id": [
+   "integer"
+  ],
+  "liveRoom.paidEvent.paid_type": [
+   "integer"
+  ],
+  "liveRoom.squareCoverImg": [
+   "string"
+  ],
+  "liveRoom.startTime": [
+   "integer"
+  ],
+  "liveRoom.status": [
+   "integer"
+  ],
+  "liveRoom.streamData": [
+   "object"
+  ],
+  "liveRoom.streamData.pull_data": [
+   "object"
+  ],
+  "liveRoom.streamData.pull_data.options": [
+   "object"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality": [
+   "object"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality.icon_type": [
+   "integer"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality.level": [
+   "integer"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality.name": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality.resolution": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality.sdk_key": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.default_quality.v_codec": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities": [
+   "array"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[]": [
+   "object"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[].icon_type": [
+   "integer"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[].level": [
+   "integer"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[].name": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[].resolution": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[].sdk_key": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.qualities[].v_codec": [
+   "string"
+  ],
+  "liveRoom.streamData.pull_data.options.show_quality_button": [
+   "boolean"
+  ],
+  "liveRoom.streamData.pull_data.stream_data": [
+   "string"
+  ],
+  "liveRoom.streamId": [
+   "string"
+  ],
+  "liveRoom.title": [
+   "string"
+  ],
+  "liveRoomUserInfo": [
+   "object"
+  ],
+  "liveRoomUserInfo.avatarLarger": [
+   "string"
+  ],
+  "liveRoomUserInfo.avatarMedium": [
+   "string"
+  ],
+  "liveRoomUserInfo.avatarThumb": [
+   "string"
+  ],
+  "liveRoomUserInfo.followStatus": [
+   "integer"
+  ],
+  "liveRoomUserInfo.followerCount": [
+   "integer"
+  ],
+  "liveRoomUserInfo.followingCount": [
+   "integer"
+  ],
+  "liveRoomUserInfo.id": [
+   "string"
+  ],
+  "liveRoomUserInfo.nickname": [
+   "string"
+  ],
+  "liveRoomUserInfo.roomId": [
+   "string"
+  ],
+  "liveRoomUserInfo.secUid": [
+   "string"
+  ],
+  "liveRoomUserInfo.secret": [
+   "boolean"
+  ],
+  "liveRoomUserInfo.signature": [
+   "string"
+  ],
+  "liveRoomUserInfo.status": [
+   "integer"
+  ],
+  "liveRoomUserInfo.uniqueId": [
+   "string"
+  ],
+  "liveRoomUserInfo.verified": [
+   "boolean"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "path": "/v2/instagram/media/transcript",
+ "fields": {
+  "success": [
+   "boolean"
+  ],
+  "transcripts": [
+   "array"
+  ],
+  "transcripts[]": [
+   "object"
+  ],
+  "transcripts[].id": [
+   "string"
+  ],
+  "transcripts[].shortcode": [
+   "string"
+  ],
+  "transcripts[].text": [
+   "string"
+  ]
+ }
+}

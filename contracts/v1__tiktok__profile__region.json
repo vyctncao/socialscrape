@@ -1,0 +1,20 @@
+{
+ "path": "/v1/tiktok/profile/region",
+ "fields": {
+  "credits": [
+   "integer"
+  ],
+  "handle": [
+   "string"
+  ],
+  "profile_url": [
+   "string"
+  ],
+  "region": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

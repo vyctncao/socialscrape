@@ -1,0 +1,65 @@
+{
+ "path": "/v1/youtube/playlist",
+ "fields": {
+  "continuationToken": [
+   "null"
+  ],
+  "owner": [
+   "object"
+  ],
+  "owner.handle": [
+   "string"
+  ],
+  "owner.id": [
+   "string"
+  ],
+  "owner.name": [
+   "string"
+  ],
+  "owner.url": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "title": [
+   "string"
+  ],
+  "totalVideos": [
+   "integer"
+  ],
+  "videos": [
+   "array"
+  ],
+  "videos[]": [
+   "object"
+  ],
+  "videos[].channel": [
+   "object"
+  ],
+  "videos[].channel.title": [
+   "string"
+  ],
+  "videos[].channel.url": [
+   "string"
+  ],
+  "videos[].id": [
+   "string"
+  ],
+  "videos[].lengthSeconds": [
+   "integer"
+  ],
+  "videos[].lengthText": [
+   "string"
+  ],
+  "videos[].thumbnail": [
+   "string"
+  ],
+  "videos[].title": [
+   "string"
+  ],
+  "videos[].url": [
+   "string"
+  ]
+ }
+}

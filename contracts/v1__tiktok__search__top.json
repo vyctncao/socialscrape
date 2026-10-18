@@ -1,0 +1,770 @@
+{
+ "path": "/v1/tiktok/search/top",
+ "fields": {
+  "cursor": [
+   "integer"
+  ],
+  "items": [
+   "array"
+  ],
+  "items[]": [
+   "object"
+  ],
+  "items[].author": [
+   "object"
+  ],
+  "items[].author.accept_private_policy": [
+   "boolean"
+  ],
+  "items[].author.account_labels": [
+   "null"
+  ],
+  "items[].author.ad_cover_url": [
+   "null"
+  ],
+  "items[].author.advance_feature_item_order": [
+   "null"
+  ],
+  "items[].author.advanced_feature_info": [
+   "null"
+  ],
+  "items[].author.authority_status": [
+   "integer"
+  ],
+  "items[].author.avatar_168x168": [
+   "object"
+  ],
+  "items[].author.avatar_168x168.height": [
+   "integer"
+  ],
+  "items[].author.avatar_168x168.uri": [
+   "string"
+  ],
+  "items[].author.avatar_168x168.url_list": [
+   "array"
+  ],
+  "items[].author.avatar_168x168.url_list[]": [
+   "string"
+  ],
+  "items[].author.avatar_168x168.url_prefix": [
+   "null"
+  ],
+  "items[].author.avatar_168x168.width": [
+   "integer"
+  ],
+  "items[].author.avatar_300x300": [
+   "object"
+  ],
+  "items[].author.avatar_300x300.height": [
+   "integer"
+  ],
+  "items[].author.avatar_300x300.uri": [
+   "string"
+  ],
+  "items[].author.avatar_300x300.url_list": [
+   "array"
+  ],
+  "items[].author.avatar_300x300.url_list[]": [
+   "string"
+  ],
+  "items[].author.avatar_300x300.url_prefix": [
+   "null"
+  ],
+  "items[].author.avatar_300x300.width": [
+   "integer"
+  ],
+  "items[].author.avatar_larger": [
+   "object"
+  ],
+  "items[].author.avatar_larger.height": [
+   "integer"
+  ],
+  "items[].author.avatar_larger.uri": [
+   "string"
+  ],
+  "items[].author.avatar_larger.url_list": [
+   "array"
+  ],
+  "items[].author.avatar_larger.url_list[]": [
+   "string"
+  ],
+  "items[].author.avatar_larger.url_prefix": [
+   "null"
+  ],
+  "items[].author.avatar_larger.width": [
+   "integer"
+  ],
+  "items[].author.avatar_medium": [
+   "object"
+  ],
+  "items[].author.avatar_medium.height": [
+   "integer"
+  ],
+  "items[].author.avatar_medium.uri": [
+   "string"
+  ],
+  "items[].author.avatar_medium.url_list": [
+   "array"
+  ],
+  "items[].author.avatar_medium.url_list[]": [
+   "string"
+  ],
+  "items[].author.avatar_medium.url_prefix": [
+   "null"
+  ],
+  "items[].author.avatar_medium.width": [
+   "integer"
+  ],
+  "items[].author.avatar_thumb": [
+   "object"
+  ],
+  "items[].author.avatar_thumb.height": [
+   "integer"
+  ],
+  "items[].author.avatar_thumb.uri": [
+   "string"
+  ],
+  "items[].author.avatar_thumb.url_list": [
+   "array"
+  ],
+  "items[].author.avatar_thumb.url_list[]": [
+   "string"
+  ],
+  "items[].author.avatar_thumb.url_prefix": [
+   "null"
+  ],
+  "items[].author.avatar_thumb.width": [
+   "integer"
+  ],
+  "items[].author.avatar_uri": [
+   "string"
+  ],
+  "items[].author.aweme_count": [
+   "integer"
+  ],
+  "items[].author.bold_fields": [
+   "null"
+  ],
+  "items[].author.can_message_follow_status_list": [
+   "array"
+  ],
+  "items[].author.can_message_follow_status_list[]": [
+   "integer"
+  ],
+  "items[].author.can_set_geofencing": [
+   "null"
+  ],
+  "items[].author.cha_list": [
+   "null"
+  ],
+  "items[].author.comment_filter_status": [
+   "integer"
+  ],
+  "items[].author.comment_setting": [
+   "integer"
+  ],
+  "items[].author.commerce_user_level": [
+   "integer"
+  ],
+  "items[].author.cover_url": [
+   "null"
+  ],
+  "items[].author.custom_verify": [
+   "string"
+  ],
+  "items[].author.cv_level": [
+   "string"
+  ],
+  "items[].author.download_prompt_ts": [
+   "integer"
+  ],
+  "items[].author.enabled_filter_all_comments": [
+   "boolean"
+  ],
+  "items[].author.enterprise_verify_reason": [
+   "string"
+  ],
+  "items[].author.events": [
+   "null"
+  ],
+  "items[].author.fake_data_info": [
+   "object"
+  ],
+  "items[].author.fb_expire_time": [
+   "integer"
+  ],
+  "items[].author.follow_status": [
+   "integer"
+  ],
+  "items[].author.follower_count": [
+   "integer"
+  ],
+  "items[].author.follower_status": [
+   "integer"
+  ],
+  "items[].author.followers_detail": [
+   "null"
+  ],
+  "items[].author.following_count": [
+   "integer"
+  ],
+  "items[].author.friends_status": [
+   "integer"
+  ],
+  "items[].author.geofencing": [
+   "null"
+  ],
+  "items[].author.hide_search": [
+   "boolean"
+  ],
+  "items[].author.homepage_bottom_toast": [
+   "null"
+  ],
+  "items[].author.ins_id": [
+   "string"
+  ],
+  "items[].author.is_ad_fake": [
+   "boolean"
+  ],
+  "items[].author.is_block": [
+   "boolean"
+  ],
+  "items[].author.is_discipline_member": [
+   "boolean"
+  ],
+  "items[].author.is_mute": [
+   "integer"
+  ],
+  "items[].author.is_mute_lives": [
+   "integer"
+  ],
+  "items[].author.is_mute_non_story_post": [
+   "integer"
+  ],
+  "items[].author.is_mute_story": [
+   "integer"
+  ],
+  "items[].author.is_star": [
+   "boolean"
+  ],
+  "items[].author.item_list": [
+   "null"
+  ],
+  "items[].author.live_agreement": [
+   "integer"
+  ],
+  "items[].author.live_commerce": [
+   "boolean"
+  ],
+  "items[].author.live_verify": [
+   "integer"
+  ],
+  "items[].author.mention_status": [
+   "integer"
+  ],
+  "items[].author.mutual_relation_avatars": [
+   "null"
+  ],
+  "items[].author.name_field": [
+   "string"
+  ],
+  "items[].author.need_points": [
+   "null"
+  ],
+  "items[].author.need_recommend": [
+   "integer"
+  ],
+  "items[].author.nickname": [
+   "string"
+  ],
+  "items[].author.platform_sync_info": [
+   "null"
+  ],
+  "items[].author.prevent_download": [
+   "boolean"
+  ],
+  "items[].author.relative_users": [
+   "null"
+  ],
+  "items[].author.reply_with_video_flag": [
+   "integer"
+  ],
+  "items[].author.room_id": [
+   "integer"
+  ],
+  "items[].author.search_highlight": [
+   "null"
+  ],
+  "items[].author.search_user_desc": [
+   "string"
+  ],
+  "items[].author.search_user_name": [
+   "string"
+  ],
+  "items[].author.sec_uid": [
+   "string"
+  ],
+  "items[].author.secret": [
+   "integer"
+  ],
+  "items[].author.shield_comment_notice": [
+   "integer"
+  ],
+  "items[].author.shield_digg_notice": [
+   "integer"
+  ],
+  "items[].author.shield_edit_field_info": [
+   "null"
+  ],
+  "items[].author.shield_follow_notice": [
+   "integer"
+  ],
+  "items[].author.short_id": [
+   "string"
+  ],
+  "items[].author.show_image_bubble": [
+   "boolean"
+  ],
+  "items[].author.special_account": [
+   "object"
+  ],
+  "items[].author.special_account.special_account_list": [
+   "null"
+  ],
+  "items[].author.special_lock": [
+   "integer"
+  ],
+  "items[].author.status": [
+   "integer"
+  ],
+  "items[].author.stitch_setting": [
+   "integer"
+  ],
+  "items[].author.story_status": [
+   "integer"
+  ],
+  "items[].author.total_favorited": [
+   "integer"
+  ],
+  "items[].author.type_label": [
+   "null"
+  ],
+  "items[].author.uid": [
+   "string"
+  ],
+  "items[].author.unique_id": [
+   "string"
+  ],
+  "items[].author.user_canceled": [
+   "boolean"
+  ],
+  "items[].author.user_mode": [
+   "integer"
+  ],
+  "items[].author.user_now_pack_info": [
+   "object"
+  ],
+  "items[].author.user_period": [
+   "integer"
+  ],
+  "items[].author.user_profile_guide": [
+   "null"
+  ],
+  "items[].author.user_rate": [
+   "integer"
+  ],
+  "items[].author.user_spark_info": [
+   "object"
+  ],
+  "items[].author.user_tags": [
+   "null"
+  ],
+  "items[].author.verification_type": [
+   "integer"
+  ],
+  "items[].author.verify_info": [
+   "string"
+  ],
+  "items[].author.video_icon": [
+   "object"
+  ],
+  "items[].author.video_icon.height": [
+   "integer"
+  ],
+  "items[].author.video_icon.uri": [
+   "string"
+  ],
+  "items[].author.video_icon.url_list": [
+   "array"
+  ],
+  "items[].author.video_icon.url_prefix": [
+   "null"
+  ],
+  "items[].author.video_icon.width": [
+   "integer"
+  ],
+  "items[].author.white_cover_url": [
+   "null"
+  ],
+  "items[].author.with_commerce_entry": [
+   "boolean"
+  ],
+  "items[].author.with_shop_entry": [
+   "boolean"
+  ],
+  "items[].content_type": [
+   "string"
+  ],
+  "items[].create_time": [
+   "string"
+  ],
+  "items[].desc": [
+   "string"
+  ],
+  "items[].desc_language": [
+   "string"
+  ],
+  "items[].id": [
+   "string"
+  ],
+  "items[].images": [
+   "array"
+  ],
+  "items[].images[]": [
+   "string"
+  ],
+  "items[].is_ad": [
+   "boolean"
+  ],
+  "items[].is_eligible_for_commission": [
+   "boolean"
+  ],
+  "items[].is_paid_partnership": [
+   "boolean"
+  ],
+  "items[].is_top": [
+   "integer"
+  ],
+  "items[].music": [
+   "object"
+  ],
+  "items[].music.author": [
+   "string"
+  ],
+  "items[].music.duration": [
+   "integer"
+  ],
+  "items[].music.id": [
+   "integer"
+  ],
+  "items[].music.matched_song": [
+   "object"
+  ],
+  "items[].music.matched_song.author": [
+   "string"
+  ],
+  "items[].music.matched_song.id": [
+   "string"
+  ],
+  "items[].music.matched_song.title": [
+   "string"
+  ],
+  "items[].music.play_url": [
+   "string"
+  ],
+  "items[].music.title": [
+   "string"
+  ],
+  "items[].region": [
+   "string"
+  ],
+  "items[].shop_product_url": [
+   "null"
+  ],
+  "items[].statistics": [
+   "object"
+  ],
+  "items[].statistics.aweme_id": [
+   "string"
+  ],
+  "items[].statistics.collect_count": [
+   "integer"
+  ],
+  "items[].statistics.comment_count": [
+   "integer"
+  ],
+  "items[].statistics.digg_count": [
+   "integer"
+  ],
+  "items[].statistics.download_count": [
+   "integer"
+  ],
+  "items[].statistics.forward_count": [
+   "integer"
+  ],
+  "items[].statistics.lose_comment_count": [
+   "integer"
+  ],
+  "items[].statistics.lose_count": [
+   "integer"
+  ],
+  "items[].statistics.play_count": [
+   "integer"
+  ],
+  "items[].statistics.repost_count": [
+   "integer"
+  ],
+  "items[].statistics.share_count": [
+   "integer"
+  ],
+  "items[].statistics.whatsapp_share_count": [
+   "integer"
+  ],
+  "items[].url": [
+   "string"
+  ],
+  "items[].video": [
+   "object"
+  ],
+  "items[].video.ai_dynamic_cover": [
+   "object"
+  ],
+  "items[].video.ai_dynamic_cover.data_size": [
+   "integer"
+  ],
+  "items[].video.ai_dynamic_cover.height": [
+   "integer"
+  ],
+  "items[].video.ai_dynamic_cover.uri": [
+   "string"
+  ],
+  "items[].video.ai_dynamic_cover.url_list": [
+   "array"
+  ],
+  "items[].video.ai_dynamic_cover.url_list[]": [
+   "string"
+  ],
+  "items[].video.ai_dynamic_cover.url_prefix": [
+   "null"
+  ],
+  "items[].video.ai_dynamic_cover.width": [
+   "integer"
+  ],
+  "items[].video.ai_dynamic_cover_bak": [
+   "object"
+  ],
+  "items[].video.ai_dynamic_cover_bak.data_size": [
+   "integer"
+  ],
+  "items[].video.ai_dynamic_cover_bak.height": [
+   "integer"
+  ],
+  "items[].video.ai_dynamic_cover_bak.uri": [
+   "string"
+  ],
+  "items[].video.ai_dynamic_cover_bak.url_list": [
+   "array"
+  ],
+  "items[].video.ai_dynamic_cover_bak.url_list[]": [
+   "string"
+  ],
+  "items[].video.ai_dynamic_cover_bak.url_prefix": [
+   "null"
+  ],
+  "items[].video.ai_dynamic_cover_bak.width": [
+   "integer"
+  ],
+  "items[].video.big_thumbs": [
+   "array"
+  ],
+  "items[].video.bit_rate": [
+   "array"
+  ],
+  "items[].video.bit_rate_audio": [
+   "array"
+  ],
+  "items[].video.cdn_url_expired": [
+   "integer"
+  ],
+  "items[].video.cla_info": [
+   "object"
+  ],
+  "items[].video.cla_info.caption_infos": [
+   "null"
+  ],
+  "items[].video.cla_info.captions_type": [
+   "integer"
+  ],
+  "items[].video.cla_info.creator_edited_caption_id": [
+   "integer"
+  ],
+  "items[].video.cla_info.enable_auto_caption": [
+   "integer"
+  ],
+  "items[].video.cla_info.has_original_audio": [
+   "integer"
+  ],
+  "items[].video.cla_info.hide_original_caption": [
+   "boolean"
+  ],
+  "items[].video.cla_info.is_author_dubbing_qualified": [
+   "boolean"
+  ],
+  "items[].video.cla_info.no_caption_reason": [
+   "integer"
+  ],
+  "items[].video.cla_info.no_caption_reason_v2": [
+   "integer"
+  ],
+  "items[].video.cla_info.vertical_positions": [
+   "null"
+  ],
+  "items[].video.cover": [
+   "object"
+  ],
+  "items[].video.cover.data_size": [
+   "integer"
+  ],
+  "items[].video.cover.height": [
+   "integer"
+  ],
+  "items[].video.cover.uri": [
+   "string"
+  ],
+  "items[].video.cover.url_list": [
+   "array"
+  ],
+  "items[].video.cover.url_list[]": [
+   "string"
+  ],
+  "items[].video.cover.url_prefix": [
+   "null"
+  ],
+  "items[].video.cover.width": [
+   "integer"
+  ],
+  "items[].video.download_addr": [
+   "object"
+  ],
+  "items[].video.download_addr.height": [
+   "integer"
+  ],
+  "items[].video.download_addr.uri": [
+   "string"
+  ],
+  "items[].video.download_addr.url_list": [
+   "array"
+  ],
+  "items[].video.download_addr.url_prefix": [
+   "null"
+  ],
+  "items[].video.download_addr.width": [
+   "integer"
+  ],
+  "items[].video.duration": [
+   "integer"
+  ],
+  "items[].video.dynamic_cover": [
+   "object"
+  ],
+  "items[].video.dynamic_cover.data_size": [
+   "integer"
+  ],
+  "items[].video.dynamic_cover.height": [
+   "integer"
+  ],
+  "items[].video.dynamic_cover.uri": [
+   "string"
+  ],
+  "items[].video.dynamic_cover.url_list": [
+   "array"
+  ],
+  "items[].video.dynamic_cover.url_list[]": [
+   "string"
+  ],
+  "items[].video.dynamic_cover.url_prefix": [
+   "null"
+  ],
+  "items[].video.dynamic_cover.width": [
+   "integer"
+  ],
+  "items[].video.has_watermark": [
+   "boolean"
+  ],
+  "items[].video.height": [
+   "integer"
+  ],
+  "items[].video.is_bytevc1": [
+   "integer"
+  ],
+  "items[].video.is_callback": [
+   "boolean"
+  ],
+  "items[].video.meta": [
+   "string"
+  ],
+  "items[].video.need_set_token": [
+   "boolean"
+  ],
+  "items[].video.origin_cover": [
+   "object"
+  ],
+  "items[].video.origin_cover.data_size": [
+   "integer"
+  ],
+  "items[].video.origin_cover.height": [
+   "integer"
+  ],
+  "items[].video.origin_cover.uri": [
+   "string"
+  ],
+  "items[].video.origin_cover.url_list": [
+   "array"
+  ],
+  "items[].video.origin_cover.url_list[]": [
+   "string"
+  ],
+  "items[].video.origin_cover.url_prefix": [
+   "null"
+  ],
+  "items[].video.origin_cover.width": [
+   "integer"
+  ],
+  "items[].video.play_addr": [
+   "object"
+  ],
+  "items[].video.play_addr.height": [
+   "integer"
+  ],
+  "items[].video.play_addr.uri": [
+   "string"
+  ],
+  "items[].video.play_addr.url_key": [
+   "string"
+  ],
+  "items[].video.play_addr.url_list": [
+   "array"
+  ],
+  "items[].video.play_addr.url_list[]": [
+   "string"
+  ],
+  "items[].video.play_addr.url_prefix": [
+   "null"
+  ],
+  "items[].video.play_addr.width": [
+   "integer"
+  ],
+  "items[].video.ratio": [
+   "string"
+  ],
+  "items[].video.tags": [
+   "null"
+  ],
+  "items[].video.width": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

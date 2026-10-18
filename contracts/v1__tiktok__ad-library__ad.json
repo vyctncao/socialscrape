@@ -1,0 +1,323 @@
+{
+ "path": "/v1/tiktok/ad-library/ad",
+ "fields": {
+  "ad_title": [
+   "string"
+  ],
+  "brand_name": [
+   "string"
+  ],
+  "comment": [
+   "integer"
+  ],
+  "cost": [
+   "integer"
+  ],
+  "country_code": [
+   "array"
+  ],
+  "country_code[]": [
+   "string"
+  ],
+  "creative_center_url": [
+   "string"
+  ],
+  "ctr": [
+   "number"
+  ],
+  "detail_analysis": [
+   "null"
+  ],
+  "favorite": [
+   "boolean"
+  ],
+  "has_summary": [
+   "boolean"
+  ],
+  "highlight_text": [
+   "string"
+  ],
+  "id": [
+   "string"
+  ],
+  "industry_key": [
+   "string"
+  ],
+  "interactive_time_analysis": [
+   "object"
+  ],
+  "interactive_time_analysis.clicks": [
+   "object"
+  ],
+  "interactive_time_analysis.clicks.analysis": [
+   "array"
+  ],
+  "interactive_time_analysis.clicks.analysis[]": [
+   "object"
+  ],
+  "interactive_time_analysis.clicks.analysis[].second": [
+   "integer"
+  ],
+  "interactive_time_analysis.clicks.analysis[].value": [
+   "number"
+  ],
+  "interactive_time_analysis.clicks.duration": [
+   "integer"
+  ],
+  "interactive_time_analysis.clicks.highlight": [
+   "array"
+  ],
+  "interactive_time_analysis.clicks.highlight[]": [
+   "integer"
+  ],
+  "interactive_time_analysis.clicks.metric": [
+   "string"
+  ],
+  "interactive_time_analysis.clicks.percentile": [
+   "number"
+  ],
+  "interactive_time_analysis.conversion": [
+   "object"
+  ],
+  "interactive_time_analysis.conversion.analysis": [
+   "array"
+  ],
+  "interactive_time_analysis.conversion.analysis[]": [
+   "object"
+  ],
+  "interactive_time_analysis.conversion.analysis[].second": [
+   "integer"
+  ],
+  "interactive_time_analysis.conversion.analysis[].value": [
+   "integer"
+  ],
+  "interactive_time_analysis.conversion.duration": [
+   "integer"
+  ],
+  "interactive_time_analysis.conversion.highlight": [
+   "array"
+  ],
+  "interactive_time_analysis.conversion.metric": [
+   "string"
+  ],
+  "interactive_time_analysis.conversion.percentile": [
+   "number"
+  ],
+  "interactive_time_analysis.ctr": [
+   "object"
+  ],
+  "interactive_time_analysis.ctr.analysis": [
+   "array"
+  ],
+  "interactive_time_analysis.ctr.analysis[]": [
+   "object"
+  ],
+  "interactive_time_analysis.ctr.analysis[].second": [
+   "integer"
+  ],
+  "interactive_time_analysis.ctr.analysis[].value": [
+   "number"
+  ],
+  "interactive_time_analysis.ctr.duration": [
+   "integer"
+  ],
+  "interactive_time_analysis.ctr.highlight": [
+   "array"
+  ],
+  "interactive_time_analysis.ctr.highlight[]": [
+   "integer"
+  ],
+  "interactive_time_analysis.ctr.metric": [
+   "string"
+  ],
+  "interactive_time_analysis.ctr.percentile": [
+   "number"
+  ],
+  "interactive_time_analysis.cvr": [
+   "object"
+  ],
+  "interactive_time_analysis.cvr.analysis": [
+   "array"
+  ],
+  "interactive_time_analysis.cvr.analysis[]": [
+   "object"
+  ],
+  "interactive_time_analysis.cvr.analysis[].second": [
+   "integer"
+  ],
+  "interactive_time_analysis.cvr.analysis[].value": [
+   "integer"
+  ],
+  "interactive_time_analysis.cvr.duration": [
+   "integer"
+  ],
+  "interactive_time_analysis.cvr.highlight": [
+   "array"
+  ],
+  "interactive_time_analysis.cvr.metric": [
+   "string"
+  ],
+  "interactive_time_analysis.cvr.percentile": [
+   "number"
+  ],
+  "interactive_time_analysis.remain": [
+   "object"
+  ],
+  "interactive_time_analysis.remain.analysis": [
+   "array"
+  ],
+  "interactive_time_analysis.remain.analysis[]": [
+   "object"
+  ],
+  "interactive_time_analysis.remain.analysis[].second": [
+   "integer"
+  ],
+  "interactive_time_analysis.remain.analysis[].value": [
+   "integer"
+  ],
+  "interactive_time_analysis.remain.duration": [
+   "integer"
+  ],
+  "interactive_time_analysis.remain.highlight": [
+   "array"
+  ],
+  "interactive_time_analysis.remain.metric": [
+   "string"
+  ],
+  "interactive_time_analysis.remain.percentile": [
+   "number"
+  ],
+  "is_search": [
+   "boolean"
+  ],
+  "keyword_list": [
+   "null"
+  ],
+  "landing_page": [
+   "string"
+  ],
+  "like": [
+   "integer"
+  ],
+  "objective_key": [
+   "string"
+  ],
+  "objectives": [
+   "array"
+  ],
+  "objectives[]": [
+   "object"
+  ],
+  "objectives[].label": [
+   "string"
+  ],
+  "objectives[].value": [
+   "integer"
+  ],
+  "pattern_label": [
+   "array"
+  ],
+  "recommended_for_you": [
+   "array"
+  ],
+  "recommended_for_you[]": [
+   "object"
+  ],
+  "recommended_for_you[].ad_title": [
+   "string"
+  ],
+  "recommended_for_you[].brand_name": [
+   "string"
+  ],
+  "recommended_for_you[].cost": [
+   "integer"
+  ],
+  "recommended_for_you[].ctr": [
+   "number"
+  ],
+  "recommended_for_you[].favorite": [
+   "boolean"
+  ],
+  "recommended_for_you[].id": [
+   "string"
+  ],
+  "recommended_for_you[].industry_key": [
+   "string"
+  ],
+  "recommended_for_you[].is_search": [
+   "boolean"
+  ],
+  "recommended_for_you[].like": [
+   "integer"
+  ],
+  "recommended_for_you[].objective_key": [
+   "string"
+  ],
+  "recommended_for_you[].video_info": [
+   "object"
+  ],
+  "recommended_for_you[].video_info.cover": [
+   "string"
+  ],
+  "recommended_for_you[].video_info.duration": [
+   "number"
+  ],
+  "recommended_for_you[].video_info.height": [
+   "integer"
+  ],
+  "recommended_for_you[].video_info.vid": [
+   "string"
+  ],
+  "recommended_for_you[].video_info.video_url": [
+   "object"
+  ],
+  "recommended_for_you[].video_info.video_url.720p": [
+   "string"
+  ],
+  "recommended_for_you[].video_info.width": [
+   "integer"
+  ],
+  "share": [
+   "integer"
+  ],
+  "source": [
+   "string"
+  ],
+  "source_key": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "video_info": [
+   "object"
+  ],
+  "video_info.cover": [
+   "string"
+  ],
+  "video_info.duration": [
+   "number"
+  ],
+  "video_info.height": [
+   "integer"
+  ],
+  "video_info.vid": [
+   "string"
+  ],
+  "video_info.video_url": [
+   "object"
+  ],
+  "video_info.video_url.540p": [
+   "string"
+  ],
+  "video_info.video_url.720p": [
+   "string"
+  ],
+  "video_info.width": [
+   "integer"
+  ],
+  "voice_over": [
+   "boolean"
+  ]
+ }
+}

@@ -1,0 +1,743 @@
+{
+ "path": "/v1/tiktok/product",
+ "fields": {
+  "categories": [
+   "array"
+  ],
+  "categories[]": [
+   "object"
+  ],
+  "categories[].category_id": [
+   "string"
+  ],
+  "categories[].category_name": [
+   "string"
+  ],
+  "categories[].is_leaf": [
+   "boolean"
+  ],
+  "categories[].level": [
+   "integer"
+  ],
+  "categories[].name_key": [
+   "string"
+  ],
+  "categories[].parent_id": [
+   "string"
+  ],
+  "error_code": [
+   "integer"
+  ],
+  "error_message": [
+   "string"
+  ],
+  "product_info": [
+   "object"
+  ],
+  "product_info.product_base": [
+   "object"
+  ],
+  "product_info.product_base.desc_video": [
+   "object"
+  ],
+  "product_info.product_base.desc_video.duration": [
+   "number"
+  ],
+  "product_info.product_base.desc_video.id": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.media_type": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.post_url": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.video_infos": [
+   "array"
+  ],
+  "product_info.product_base.desc_video.video_infos[]": [
+   "object"
+  ],
+  "product_info.product_base.desc_video.video_infos[].backup_url": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.video_infos[].bitrate": [
+   "integer"
+  ],
+  "product_info.product_base.desc_video.video_infos[].file_hash": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.video_infos[].format": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.video_infos[].height": [
+   "integer"
+  ],
+  "product_info.product_base.desc_video.video_infos[].main_url": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.video_infos[].size": [
+   "integer"
+  ],
+  "product_info.product_base.desc_video.video_infos[].url_expire": [
+   "integer"
+  ],
+  "product_info.product_base.desc_video.video_infos[].video_quality": [
+   "string"
+  ],
+  "product_info.product_base.desc_video.video_infos[].width": [
+   "integer"
+  ],
+  "product_info.product_base.images": [
+   "array"
+  ],
+  "product_info.product_base.images[]": [
+   "object"
+  ],
+  "product_info.product_base.images[].height": [
+   "integer"
+  ],
+  "product_info.product_base.images[].thumb_uri": [
+   "string"
+  ],
+  "product_info.product_base.images[].thumb_url_list": [
+   "array"
+  ],
+  "product_info.product_base.images[].thumb_url_list[]": [
+   "string"
+  ],
+  "product_info.product_base.images[].uri": [
+   "string"
+  ],
+  "product_info.product_base.images[].url_list": [
+   "array"
+  ],
+  "product_info.product_base.images[].url_list[]": [
+   "string"
+  ],
+  "product_info.product_base.images[].width": [
+   "integer"
+  ],
+  "product_info.product_base.price": [
+   "object"
+  ],
+  "product_info.product_base.price.currency": [
+   "string"
+  ],
+  "product_info.product_base.price.currency_symbol": [
+   "string"
+  ],
+  "product_info.product_base.price.da_info": [
+   "string"
+  ],
+  "product_info.product_base.price.discount": [
+   "string"
+  ],
+  "product_info.product_base.price.is_interval_price": [
+   "boolean"
+  ],
+  "product_info.product_base.price.max_sku_price": [
+   "string"
+  ],
+  "product_info.product_base.price.min_sku_original_price": [
+   "string"
+  ],
+  "product_info.product_base.price.min_sku_price": [
+   "string"
+  ],
+  "product_info.product_base.price.need_icon": [
+   "boolean"
+  ],
+  "product_info.product_base.price.original_price": [
+   "string"
+  ],
+  "product_info.product_base.price.panel_schema": [
+   "string"
+  ],
+  "product_info.product_base.price.real_price": [
+   "string"
+  ],
+  "product_info.product_base.price.show_hot_zone": [
+   "boolean"
+  ],
+  "product_info.product_base.price.symbol_position": [
+   "integer"
+  ],
+  "product_info.product_base.sold_count": [
+   "integer"
+  ],
+  "product_info.product_base.title": [
+   "string"
+  ],
+  "product_info.product_detail_review": [
+   "object"
+  ],
+  "product_info.product_detail_review.product_rating": [
+   "number"
+  ],
+  "product_info.product_detail_review.review_count": [
+   "integer"
+  ],
+  "product_info.product_detail_review.review_count_str": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_count_str_v2": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items": [
+   "array"
+  ],
+  "product_info.product_detail_review.review_items[]": [
+   "object"
+  ],
+  "product_info.product_detail_review.review_items[].is_anonymous": [
+   "boolean"
+  ],
+  "product_info.product_detail_review.review_items[].is_owner": [
+   "boolean"
+  ],
+  "product_info.product_detail_review.review_items[].is_updated": [
+   "boolean"
+  ],
+  "product_info.product_detail_review.review_items[].link": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review": [
+   "object"
+  ],
+  "product_info.product_detail_review.review_items[].review.display_review_text": [
+   "array"
+  ],
+  "product_info.product_detail_review.review_items[].review.display_review_text[]": [
+   "object"
+  ],
+  "product_info.product_detail_review.review_items[].review.display_review_text[].plain_text": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review.display_review_text[].text_type": [
+   "integer"
+  ],
+  "product_info.product_detail_review.review_items[].review.display_text": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review.has_origin_text": [
+   "boolean"
+  ],
+  "product_info.product_detail_review.review_items[].review.main_review_title": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review.rating": [
+   "integer"
+  ],
+  "product_info.product_detail_review.review_items[].review.review_id": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review.review_timestamp": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review.review_timestamp_fmt": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review_source_name": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review_source_type": [
+   "integer"
+  ],
+  "product_info.product_detail_review.review_items[].review_user": [
+   "object"
+  ],
+  "product_info.product_detail_review.review_items[].review_user.avatar": [
+   "object"
+  ],
+  "product_info.product_detail_review.review_items[].review_user.avatar.url_list": [
+   "array"
+  ],
+  "product_info.product_detail_review.review_items[].review_user.avatar.url_list[]": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review_user.link": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].review_user.name": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].sku_id": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].sku_specification": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].third_party_popup_button_text": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].third_party_popup_content": [
+   "string"
+  ],
+  "product_info.product_detail_review.review_items[].third_party_popup_title": [
+   "string"
+  ],
+  "product_info.product_id": [
+   "string"
+  ],
+  "product_info.sale_props": [
+   "array"
+  ],
+  "product_info.sale_props[]": [
+   "object"
+  ],
+  "product_info.sale_props[].has_image": [
+   "boolean"
+  ],
+  "product_info.sale_props[].prop_id": [
+   "string"
+  ],
+  "product_info.sale_props[].prop_name": [
+   "string"
+  ],
+  "product_info.sale_props[].sale_prop_values": [
+   "array"
+  ],
+  "product_info.sale_props[].sale_prop_values[]": [
+   "object"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image": [
+   "object"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.height": [
+   "integer"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.thumb_uri": [
+   "string"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.thumb_url_list": [
+   "array"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.thumb_url_list[]": [
+   "string"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.uri": [
+   "string"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.url_list": [
+   "array"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.url_list[]": [
+   "string"
+  ],
+  "product_info.sale_props[].sale_prop_values[].image.width": [
+   "integer"
+  ],
+  "product_info.sale_props[].sale_prop_values[].prop_value": [
+   "string"
+  ],
+  "product_info.sale_props[].sale_prop_values[].prop_value_id": [
+   "string"
+  ],
+  "product_info.seller": [
+   "object"
+  ],
+  "product_info.seller.avatar": [
+   "object"
+  ],
+  "product_info.seller.avatar.height": [
+   "integer"
+  ],
+  "product_info.seller.avatar.uri": [
+   "string"
+  ],
+  "product_info.seller.avatar.url_list": [
+   "array"
+  ],
+  "product_info.seller.avatar.url_list[]": [
+   "string"
+  ],
+  "product_info.seller.avatar.width": [
+   "integer"
+  ],
+  "product_info.seller.name": [
+   "string"
+  ],
+  "product_info.seller.product_count": [
+   "integer"
+  ],
+  "product_info.seller.seller_id": [
+   "string"
+  ],
+  "product_info.seller.seller_location": [
+   "string"
+  ],
+  "product_info.seller.tiktok_id": [
+   "string"
+  ],
+  "product_info.seller.tiktok_url": [
+   "string"
+  ],
+  "product_info.seller_id": [
+   "string"
+  ],
+  "product_info.skus": [
+   "array"
+  ],
+  "product_info.skus[]": [
+   "object"
+  ],
+  "product_info.skus[].add_to_cart_button": [
+   "object"
+  ],
+  "product_info.skus[].add_to_cart_button.status": [
+   "integer"
+  ],
+  "product_info.skus[].buy_button": [
+   "object"
+  ],
+  "product_info.skus[].buy_button.default_desc": [
+   "string"
+  ],
+  "product_info.skus[].buy_button.desc": [
+   "string"
+  ],
+  "product_info.skus[].da_info": [
+   "string"
+  ],
+  "product_info.skus[].deduction_text": [
+   "string"
+  ],
+  "product_info.skus[].gtin": [
+   "null"
+  ],
+  "product_info.skus[].minimum_buy_quantity": [
+   "integer"
+  ],
+  "product_info.skus[].need_icon": [
+   "boolean"
+  ],
+  "product_info.skus[].pdp_button_area_id": [
+   "string"
+  ],
+  "product_info.skus[].price": [
+   "object"
+  ],
+  "product_info.skus[].price.discount": [
+   "string"
+  ],
+  "product_info.skus[].price.original_price": [
+   "string"
+  ],
+  "product_info.skus[].price.original_price_value": [
+   "string"
+  ],
+  "product_info.skus[].price.real_price": [
+   "object"
+  ],
+  "product_info.skus[].price.real_price.currency": [
+   "string"
+  ],
+  "product_info.skus[].price.real_price.original_price": [
+   "string"
+  ],
+  "product_info.skus[].price.real_price.price_str": [
+   "string"
+  ],
+  "product_info.skus[].price.real_price.price_val": [
+   "string"
+  ],
+  "product_info.skus[].promotion_limit_quantity": [
+   "integer"
+  ],
+  "product_info.skus[].purchase_limit": [
+   "integer"
+  ],
+  "product_info.skus[].quantity_property": [
+   "object"
+  ],
+  "product_info.skus[].quantity_property.default_add_cart_quantity": [
+   "integer"
+  ],
+  "product_info.skus[].quantity_property.quantity_minus_support_edit": [
+   "boolean"
+  ],
+  "product_info.skus[].sale_prop_value_ids": [
+   "string"
+  ],
+  "product_info.skus[].sku_id": [
+   "string"
+  ],
+  "product_info.skus[].sku_name": [
+   "null"
+  ],
+  "product_info.skus[].sku_sale_props": [
+   "array"
+  ],
+  "product_info.skus[].sku_sale_props[]": [
+   "object"
+  ],
+  "product_info.skus[].sku_sale_props[].prop_id": [
+   "string"
+  ],
+  "product_info.skus[].sku_sale_props[].prop_name": [
+   "string"
+  ],
+  "product_info.skus[].sku_sale_props[].prop_value": [
+   "string"
+  ],
+  "product_info.skus[].sku_sale_props[].prop_value_id": [
+   "string"
+  ],
+  "product_info.skus[].status": [
+   "integer"
+  ],
+  "product_info.skus[].stock": [
+   "integer"
+  ],
+  "product_info.skus[].warehouse_id": [
+   "string"
+  ],
+  "product_info.status": [
+   "integer"
+  ],
+  "related_videos": [
+   "array"
+  ],
+  "related_videos[]": [
+   "object"
+  ],
+  "related_videos[].author_avatar_url": [
+   "string"
+  ],
+  "related_videos[].author_id": [
+   "string"
+  ],
+  "related_videos[].author_name": [
+   "string"
+  ],
+  "related_videos[].author_url": [
+   "string"
+  ],
+  "related_videos[].bc_ad_label_text": [
+   "string"
+  ],
+  "related_videos[].content_url": [
+   "string"
+  ],
+  "related_videos[].cover_image_url": [
+   "string"
+  ],
+  "related_videos[].duration": [
+   "integer"
+  ],
+  "related_videos[].expiration_time": [
+   "string"
+  ],
+  "related_videos[].height": [
+   "integer"
+  ],
+  "related_videos[].item_id": [
+   "string"
+  ],
+  "related_videos[].like_count": [
+   "integer"
+  ],
+  "related_videos[].play_count": [
+   "integer"
+  ],
+  "related_videos[].title": [
+   "string"
+  ],
+  "related_videos[].upload_time": [
+   "string"
+  ],
+  "related_videos[].url": [
+   "string"
+  ],
+  "related_videos[].width": [
+   "integer"
+  ],
+  "sale_region": [
+   "string"
+  ],
+  "shop_info": [
+   "object"
+  ],
+  "shop_info.background": [
+   "object"
+  ],
+  "shop_info.background.image": [
+   "object"
+  ],
+  "shop_info.background.image.height": [
+   "integer"
+  ],
+  "shop_info.background.image.uri": [
+   "string"
+  ],
+  "shop_info.background.image.url_list": [
+   "array"
+  ],
+  "shop_info.background.image.url_list[]": [
+   "string"
+  ],
+  "shop_info.background.image.width": [
+   "integer"
+  ],
+  "shop_info.background.is_default": [
+   "boolean"
+  ],
+  "shop_info.background.shop_background_type": [
+   "integer"
+  ],
+  "shop_info.best_rating": [
+   "string"
+  ],
+  "shop_info.creator_name": [
+   "string"
+  ],
+  "shop_info.desc": [
+   "string"
+  ],
+  "shop_info.display_on_sell_product_count": [
+   "string"
+  ],
+  "shop_info.enable_follow": [
+   "boolean"
+  ],
+  "shop_info.followers_count": [
+   "string"
+  ],
+  "shop_info.format_followers_count": [
+   "string"
+  ],
+  "shop_info.format_global_sold_count": [
+   "string"
+  ],
+  "shop_info.format_sold_count": [
+   "string"
+  ],
+  "shop_info.format_video_count": [
+   "string"
+  ],
+  "shop_info.global_seller_id": [
+   "string"
+  ],
+  "shop_info.global_sold_count": [
+   "string"
+  ],
+  "shop_info.on_sell_product_count": [
+   "integer"
+  ],
+  "shop_info.region": [
+   "string"
+  ],
+  "shop_info.review_count": [
+   "integer"
+  ],
+  "shop_info.seller_id": [
+   "string"
+  ],
+  "shop_info.shop_identity_label": [
+   "object"
+  ],
+  "shop_info.shop_identity_label.identity_label_text": [
+   "string"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light": [
+   "object"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.height": [
+   "integer"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.minetype": [
+   "string"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.ratio": [
+   "integer"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.uri": [
+   "string"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.url_list": [
+   "array"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.url_list[]": [
+   "string"
+  ],
+  "shop_info.shop_identity_label.identity_logo_light.width": [
+   "integer"
+  ],
+  "shop_info.shop_identity_label.label_type": [
+   "integer"
+  ],
+  "shop_info.shop_link": [
+   "string"
+  ],
+  "shop_info.shop_logo": [
+   "object"
+  ],
+  "shop_info.shop_logo.height": [
+   "integer"
+  ],
+  "shop_info.shop_logo.uri": [
+   "string"
+  ],
+  "shop_info.shop_logo.url_list": [
+   "array"
+  ],
+  "shop_info.shop_logo.url_list[]": [
+   "string"
+  ],
+  "shop_info.shop_logo.width": [
+   "integer"
+  ],
+  "shop_info.shop_name": [
+   "string"
+  ],
+  "shop_info.shop_rating": [
+   "string"
+  ],
+  "shop_info.sold_count": [
+   "integer"
+  ],
+  "shop_info.store_sub_score": [
+   "array"
+  ],
+  "shop_info.store_sub_score[]": [
+   "object"
+  ],
+  "shop_info.store_sub_score[].high_light_tag": [
+   "integer"
+  ],
+  "shop_info.store_sub_score[].platform_rate_type": [
+   "integer"
+  ],
+  "shop_info.store_sub_score[].score": [
+   "number"
+  ],
+  "shop_info.store_sub_score[].score_percentage": [
+   "string"
+  ],
+  "shop_info.store_sub_score[].type": [
+   "integer"
+  ],
+  "shop_info.video_count": [
+   "string"
+  ],
+  "shop_info.worst_rating": [
+   "string"
+  ],
+  "shop_performance": [
+   "array"
+  ],
+  "shop_performance[]": [
+   "object"
+  ],
+  "shop_performance[].score_percentile": [
+   "integer"
+  ],
+  "shop_performance[].type": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

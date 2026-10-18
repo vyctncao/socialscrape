@@ -1,0 +1,71 @@
+{
+ "path": "/v1/tiktok/user/following",
+ "fields": {
+  "followings": [
+   "array"
+  ],
+  "followings[]": [
+   "object"
+  ],
+  "followings[].avatar_medium": [
+   "object"
+  ],
+  "followings[].avatar_medium.height": [
+   "integer"
+  ],
+  "followings[].avatar_medium.uri": [
+   "string"
+  ],
+  "followings[].avatar_medium.url_list": [
+   "array"
+  ],
+  "followings[].avatar_medium.url_list[]": [
+   "string"
+  ],
+  "followings[].avatar_medium.url_prefix": [
+   "null"
+  ],
+  "followings[].avatar_medium.width": [
+   "integer"
+  ],
+  "followings[].create_time": [
+   "integer"
+  ],
+  "followings[].follower_count": [
+   "integer"
+  ],
+  "followings[].following_count": [
+   "integer"
+  ],
+  "followings[].language": [
+   "string"
+  ],
+  "followings[].nickname": [
+   "string"
+  ],
+  "followings[].region": [
+   "string"
+  ],
+  "followings[].sec_uid": [
+   "string"
+  ],
+  "followings[].signature": [
+   "string"
+  ],
+  "followings[].uid": [
+   "string"
+  ],
+  "followings[].unique_id": [
+   "string"
+  ],
+  "min_time": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "total": [
+   "integer"
+  ]
+ }
+}

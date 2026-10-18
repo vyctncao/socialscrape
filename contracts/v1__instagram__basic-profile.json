@@ -1,0 +1,182 @@
+{
+ "path": "/v1/instagram/basic-profile",
+ "fields": {
+  "account_badges": [
+   "array"
+  ],
+  "account_type": [
+   "integer"
+  ],
+  "address_street": [
+   "null"
+  ],
+  "ai_agent_type": [
+   "null"
+  ],
+  "bio_links": [
+   "array"
+  ],
+  "biography": [
+   "string"
+  ],
+  "biography_with_entities": [
+   "object"
+  ],
+  "biography_with_entities.entities": [
+   "array"
+  ],
+  "category": [
+   "null"
+  ],
+  "city_name": [
+   "null"
+  ],
+  "external_lynx_url": [
+   "null"
+  ],
+  "external_url": [
+   "string"
+  ],
+  "fbid_v2": [
+   "string"
+  ],
+  "follower_count": [
+   "integer"
+  ],
+  "following_count": [
+   "integer"
+  ],
+  "friendship_status": [
+   "null"
+  ],
+  "full_name": [
+   "string"
+  ],
+  "gating": [
+   "null"
+  ],
+  "has_chaining": [
+   "null"
+  ],
+  "has_profile_pic": [
+   "null"
+  ],
+  "has_story_archive": [
+   "null"
+  ],
+  "hd_profile_pic_url_info": [
+   "object"
+  ],
+  "hd_profile_pic_url_info.url": [
+   "string"
+  ],
+  "id": [
+   "string"
+  ],
+  "is_business": [
+   "boolean"
+  ],
+  "is_embeds_disabled": [
+   "boolean"
+  ],
+  "is_memorialized": [
+   "boolean"
+  ],
+  "is_private": [
+   "boolean"
+  ],
+  "is_professional_account": [
+   "null"
+  ],
+  "is_regulated_c18": [
+   "boolean"
+  ],
+  "is_unpublished": [
+   "boolean"
+  ],
+  "is_verified": [
+   "boolean"
+  ],
+  "latest_besties_reel_media": [
+   "null"
+  ],
+  "latest_reel_media": [
+   "integer"
+  ],
+  "linked_fb_info": [
+   "null"
+  ],
+  "live_broadcast_id": [
+   "null"
+  ],
+  "live_broadcast_visibility": [
+   "null"
+  ],
+  "media_count": [
+   "integer"
+  ],
+  "mutual_followers_count": [
+   "null"
+  ],
+  "pk": [
+   "string"
+  ],
+  "profile_context_links_with_user_ids": [
+   "null"
+  ],
+  "profile_pic_genai_tool_info": [
+   "array"
+  ],
+  "profile_pic_url": [
+   "string"
+  ],
+  "pronouns": [
+   "array"
+  ],
+  "reel_media_seen_timestamp": [
+   "null"
+  ],
+  "regulated_news_in_locations": [
+   "array"
+  ],
+  "remove_message_entrypoint": [
+   "null"
+  ],
+  "should_show_category": [
+   "boolean"
+  ],
+  "show_account_transparency_details": [
+   "boolean"
+  ],
+  "show_text_post_app_badge": [
+   "boolean"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "supervision_info": [
+   "null"
+  ],
+  "text_post_app_badge_label": [
+   "string"
+  ],
+  "text_post_new_post_count": [
+   "null"
+  ],
+  "total_clips_count": [
+   "integer"
+  ],
+  "transparency_label": [
+   "null"
+  ],
+  "transparency_product": [
+   "null"
+  ],
+  "username": [
+   "string"
+  ],
+  "zip": [
+   "null"
+  ]
+ }
+}

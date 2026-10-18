@@ -1,0 +1,47 @@
+{
+ "path": "/v1/youtube/community-post",
+ "fields": {
+  "channel": [
+   "object"
+  ],
+  "channel.handle": [
+   "string"
+  ],
+  "channel.id": [
+   "string"
+  ],
+  "channel.title": [
+   "string"
+  ],
+  "channel.url": [
+   "string"
+  ],
+  "content": [
+   "string"
+  ],
+  "id": [
+   "string"
+  ],
+  "images": [
+   "array"
+  ],
+  "images[]": [
+   "string"
+  ],
+  "likeCount": [
+   "integer"
+  ],
+  "publishedTime": [
+   "string"
+  ],
+  "publishedTimeText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "video": [
+   "null"
+  ]
+ }
+}

@@ -1,0 +1,56 @@
+{
+ "path": "/v1/youtube/channel/playlists",
+ "fields": {
+  "continuationToken": [
+   "string"
+  ],
+  "playlists": [
+   "array"
+  ],
+  "playlists[]": [
+   "object"
+  ],
+  "playlists[].channel": [
+   "object"
+  ],
+  "playlists[].channel.channelUrl": [
+   "string"
+  ],
+  "playlists[].channel.handle": [
+   "string"
+  ],
+  "playlists[].channel.id": [
+   "string"
+  ],
+  "playlists[].channel.title": [
+   "string"
+  ],
+  "playlists[].id": [
+   "string"
+  ],
+  "playlists[].playlistUrl": [
+   "string"
+  ],
+  "playlists[].thumbnail": [
+   "string"
+  ],
+  "playlists[].title": [
+   "string"
+  ],
+  "playlists[].type": [
+   "string"
+  ],
+  "playlists[].videoCount": [
+   "integer"
+  ],
+  "playlists[].videoId": [
+   "string"
+  ],
+  "playlists[].videoUrl": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

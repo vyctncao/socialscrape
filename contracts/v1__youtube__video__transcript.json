@@ -1,0 +1,41 @@
+{
+ "path": "/v1/youtube/video/transcript",
+ "fields": {
+  "language": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "transcript": [
+   "array"
+  ],
+  "transcript[]": [
+   "object"
+  ],
+  "transcript[].endMs": [
+   "string"
+  ],
+  "transcript[].startMs": [
+   "string"
+  ],
+  "transcript[].startTimeText": [
+   "string"
+  ],
+  "transcript[].text": [
+   "string"
+  ],
+  "transcript_only_text": [
+   "string"
+  ],
+  "type": [
+   "string"
+  ],
+  "url": [
+   "string"
+  ],
+  "videoId": [
+   "string"
+  ]
+ }
+}

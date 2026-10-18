@@ -1,0 +1,11 @@
+{
+ "path": "/v1/instagram/user/embed",
+ "fields": {
+  "html": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

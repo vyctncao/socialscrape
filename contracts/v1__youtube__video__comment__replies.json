@@ -1,0 +1,62 @@
+{
+ "path": "/v1/youtube/video/comment/replies",
+ "fields": {
+  "comments": [
+   "array"
+  ],
+  "comments[]": [
+   "object"
+  ],
+  "comments[].author": [
+   "object"
+  ],
+  "comments[].author.avatarUrl": [
+   "string"
+  ],
+  "comments[].author.channelId": [
+   "string"
+  ],
+  "comments[].author.channelUrl": [
+   "string"
+  ],
+  "comments[].author.isCreator": [
+   "boolean"
+  ],
+  "comments[].author.isVerified": [
+   "boolean"
+  ],
+  "comments[].author.name": [
+   "string"
+  ],
+  "comments[].content": [
+   "string"
+  ],
+  "comments[].engagement": [
+   "object"
+  ],
+  "comments[].engagement.likes": [
+   "integer"
+  ],
+  "comments[].engagement.replies": [
+   "integer"
+  ],
+  "comments[].id": [
+   "string"
+  ],
+  "comments[].publishedTime": [
+   "string"
+  ],
+  "comments[].publishedTimeText": [
+   "string"
+  ],
+  "comments[].replyLevel": [
+   "integer"
+  ],
+  "continuationToken": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

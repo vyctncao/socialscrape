@@ -1,0 +1,167 @@
+{
+ "path": "/v1/instagram/search/hashtag",
+ "fields": {
+  "cursor": [
+   "string"
+  ],
+  "hashtag": [
+   "string"
+  ],
+  "media_type": [
+   "string"
+  ],
+  "posts": [
+   "array"
+  ],
+  "posts[]": [
+   "object"
+  ],
+  "posts[].__typename": [
+   "string"
+  ],
+  "posts[].accessibility_caption": [
+   "null"
+  ],
+  "posts[].caption": [
+   "string"
+  ],
+  "posts[].clips_music_attribution_info": [
+   "object"
+  ],
+  "posts[].clips_music_attribution_info.artist_name": [
+   "string"
+  ],
+  "posts[].clips_music_attribution_info.audio_id": [
+   "string"
+  ],
+  "posts[].clips_music_attribution_info.should_mute_audio": [
+   "boolean"
+  ],
+  "posts[].clips_music_attribution_info.should_mute_audio_reason": [
+   "string"
+  ],
+  "posts[].clips_music_attribution_info.song_name": [
+   "string"
+  ],
+  "posts[].clips_music_attribution_info.uses_original_audio": [
+   "boolean"
+  ],
+  "posts[].comment_count": [
+   "integer"
+  ],
+  "posts[].comments": [
+   "array"
+  ],
+  "posts[].comments[]": [
+   "object"
+  ],
+  "posts[].comments[].created_at": [
+   "string"
+  ],
+  "posts[].comments[].id": [
+   "string"
+  ],
+  "posts[].comments[].like_count": [
+   "integer"
+  ],
+  "posts[].comments[].owner": [
+   "object"
+  ],
+  "posts[].comments[].owner.id": [
+   "string"
+  ],
+  "posts[].comments[].owner.is_verified": [
+   "boolean"
+  ],
+  "posts[].comments[].owner.profile_pic_url": [
+   "string"
+  ],
+  "posts[].comments[].owner.username": [
+   "string"
+  ],
+  "posts[].comments[].text": [
+   "string"
+  ],
+  "posts[].display_url": [
+   "string"
+  ],
+  "posts[].has_audio": [
+   "boolean"
+  ],
+  "posts[].id": [
+   "string"
+  ],
+  "posts[].is_ad": [
+   "boolean"
+  ],
+  "posts[].is_affiliate": [
+   "boolean"
+  ],
+  "posts[].is_paid_partnership": [
+   "boolean"
+  ],
+  "posts[].is_video": [
+   "boolean"
+  ],
+  "posts[].like_count": [
+   "integer"
+  ],
+  "posts[].location": [
+   "null"
+  ],
+  "posts[].owner": [
+   "object"
+  ],
+  "posts[].owner.follower_count": [
+   "integer"
+  ],
+  "posts[].owner.full_name": [
+   "string"
+  ],
+  "posts[].owner.id": [
+   "string"
+  ],
+  "posts[].owner.is_private": [
+   "boolean"
+  ],
+  "posts[].owner.is_unpublished": [
+   "boolean"
+  ],
+  "posts[].owner.is_verified": [
+   "boolean"
+  ],
+  "posts[].owner.post_count": [
+   "integer"
+  ],
+  "posts[].owner.profile_pic_url": [
+   "string"
+  ],
+  "posts[].owner.username": [
+   "string"
+  ],
+  "posts[].product_type": [
+   "string"
+  ],
+  "posts[].shortcode": [
+   "string"
+  ],
+  "posts[].taken_at": [
+   "string"
+  ],
+  "posts[].thumbnail_src": [
+   "string"
+  ],
+  "posts[].url": [
+   "string"
+  ],
+  "posts[].video_duration": [
+   "number"
+  ],
+  "posts[].video_url": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

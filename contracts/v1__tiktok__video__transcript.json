@@ -1,0 +1,17 @@
+{
+ "path": "/v1/tiktok/video/transcript",
+ "fields": {
+  "id": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "transcript": [
+   "string"
+  ],
+  "url": [
+   "string"
+  ]
+ }
+}

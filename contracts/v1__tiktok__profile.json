@@ -1,0 +1,170 @@
+{
+ "path": "/v1/tiktok/profile",
+ "fields": {
+  "itemList": [
+   "array"
+  ],
+  "stats": [
+   "object"
+  ],
+  "stats.diggCount": [
+   "integer"
+  ],
+  "stats.followerCount": [
+   "integer"
+  ],
+  "stats.followingCount": [
+   "integer"
+  ],
+  "stats.friendCount": [
+   "integer"
+  ],
+  "stats.heart": [
+   "integer"
+  ],
+  "stats.heartCount": [
+   "integer"
+  ],
+  "stats.videoCount": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "user": [
+   "object"
+  ],
+  "user.avatarLarger": [
+   "string"
+  ],
+  "user.avatarMedium": [
+   "string"
+  ],
+  "user.avatarThumb": [
+   "string"
+  ],
+  "user.bioLink": [
+   "object"
+  ],
+  "user.bioLink.link": [
+   "string"
+  ],
+  "user.bioLink.risk": [
+   "integer"
+  ],
+  "user.canExpPlaylist": [
+   "boolean"
+  ],
+  "user.commentSetting": [
+   "integer"
+  ],
+  "user.commerceUserInfo": [
+   "object"
+  ],
+  "user.commerceUserInfo.commerceUser": [
+   "boolean"
+  ],
+  "user.createTime": [
+   "integer"
+  ],
+  "user.downloadSetting": [
+   "integer"
+  ],
+  "user.duetSetting": [
+   "integer"
+  ],
+  "user.eventList": [
+   "array"
+  ],
+  "user.followingVisibility": [
+   "integer"
+  ],
+  "user.ftc": [
+   "boolean"
+  ],
+  "user.id": [
+   "string"
+  ],
+  "user.isADVirtual": [
+   "boolean"
+  ],
+  "user.isEmbedBanned": [
+   "boolean"
+  ],
+  "user.isOrganization": [
+   "integer"
+  ],
+  "user.language": [
+   "string"
+  ],
+  "user.nickNameModifyTime": [
+   "integer"
+  ],
+  "user.nickname": [
+   "string"
+  ],
+  "user.nowInvitationCardUrl": [
+   "string"
+  ],
+  "user.openFavorite": [
+   "boolean"
+  ],
+  "user.privateAccount": [
+   "boolean"
+  ],
+  "user.profileEmbedPermission": [
+   "integer"
+  ],
+  "user.profileTab": [
+   "object"
+  ],
+  "user.profileTab.showMusicTab": [
+   "boolean"
+  ],
+  "user.profileTab.showPlayListTab": [
+   "boolean"
+  ],
+  "user.profileTab.showQuestionTab": [
+   "boolean"
+  ],
+  "user.recommendReason": [
+   "string"
+  ],
+  "user.relation": [
+   "integer"
+  ],
+  "user.roomId": [
+   "string"
+  ],
+  "user.secUid": [
+   "string"
+  ],
+  "user.secret": [
+   "boolean"
+  ],
+  "user.shortId": [
+   "string"
+  ],
+  "user.signature": [
+   "string"
+  ],
+  "user.stitchSetting": [
+   "integer"
+  ],
+  "user.suggestAccountBind": [
+   "boolean"
+  ],
+  "user.ttSeller": [
+   "boolean"
+  ],
+  "user.uniqueId": [
+   "string"
+  ],
+  "user.uniqueIdModifyTime": [
+   "integer"
+  ],
+  "user.verified": [
+   "boolean"
+  ]
+ }
+}

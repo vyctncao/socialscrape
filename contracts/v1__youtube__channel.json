@@ -1,0 +1,104 @@
+{
+ "path": "/v1/youtube/channel",
+ "fields": {
+  "avatar": [
+   "object"
+  ],
+  "avatar.avatarImageSize": [
+   "string"
+  ],
+  "avatar.image": [
+   "object"
+  ],
+  "avatar.image.processor": [
+   "object"
+  ],
+  "avatar.image.processor.borderImageProcessor": [
+   "object"
+  ],
+  "avatar.image.processor.borderImageProcessor.circular": [
+   "boolean"
+  ],
+  "avatar.image.sources": [
+   "array"
+  ],
+  "avatar.image.sources[]": [
+   "object"
+  ],
+  "avatar.image.sources[].height": [
+   "integer"
+  ],
+  "avatar.image.sources[].url": [
+   "string"
+  ],
+  "avatar.image.sources[].width": [
+   "integer"
+  ],
+  "avatar.loggingDirectives": [
+   "object"
+  ],
+  "avatar.loggingDirectives.trackingParams": [
+   "string"
+  ],
+  "avatar.loggingDirectives.visibility": [
+   "object"
+  ],
+  "avatar.loggingDirectives.visibility.types": [
+   "string"
+  ],
+  "channel": [
+   "string"
+  ],
+  "channelId": [
+   "string"
+  ],
+  "country": [
+   "string"
+  ],
+  "description": [
+   "string"
+  ],
+  "email": [
+   "null"
+  ],
+  "instagram": [
+   "string"
+  ],
+  "joinedDateText": [
+   "string"
+  ],
+  "links": [
+   "array"
+  ],
+  "links[]": [
+   "string"
+  ],
+  "name": [
+   "string"
+  ],
+  "store": [
+   "string"
+  ],
+  "subscriberCount": [
+   "integer"
+  ],
+  "subscriberCountText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "tags": [
+   "string"
+  ],
+  "twitter": [
+   "string"
+  ],
+  "videoCountText": [
+   "string"
+  ],
+  "viewCountText": [
+   "string"
+  ]
+ }
+}

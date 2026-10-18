@@ -1,0 +1,26 @@
+{
+ "path": "/v1/tiktok/user/audience",
+ "fields": {
+  "audienceLocations": [
+   "array"
+  ],
+  "audienceLocations[]": [
+   "object"
+  ],
+  "audienceLocations[].count": [
+   "integer"
+  ],
+  "audienceLocations[].country": [
+   "string"
+  ],
+  "audienceLocations[].countryCode": [
+   "string"
+  ],
+  "audienceLocations[].percentage": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

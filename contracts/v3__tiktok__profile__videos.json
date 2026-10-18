@@ -1,0 +1,1193 @@
+{
+ "path": "/v3/tiktok/profile/videos",
+ "fields": {
+  "aweme_list": [
+   "array"
+  ],
+  "aweme_list[]": [
+   "object"
+  ],
+  "aweme_list[].author": [
+   "object"
+  ],
+  "aweme_list[].author.accept_private_policy": [
+   "boolean"
+  ],
+  "aweme_list[].author.account_labels": [
+   "null"
+  ],
+  "aweme_list[].author.account_region": [
+   "string"
+  ],
+  "aweme_list[].author.ad_cover_url": [
+   "null"
+  ],
+  "aweme_list[].author.advance_feature_item_order": [
+   "null"
+  ],
+  "aweme_list[].author.advanced_feature_info": [
+   "null"
+  ],
+  "aweme_list[].author.apple_account": [
+   "integer"
+  ],
+  "aweme_list[].author.authority_status": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_168x168": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_168x168.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_168x168.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_168x168.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_168x168.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_168x168.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_168x168.width": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_300x300": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_300x300.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_300x300.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_300x300.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_300x300.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_300x300.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_300x300.width": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_larger": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_larger.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_larger.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_larger.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_larger.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_larger.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_larger.width": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_medium": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_medium.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_medium.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_medium.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_medium.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_medium.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_medium.width": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_meta_info_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_meta_info_list[]": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_meta_info_list[].avatar_category": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_meta_info_list[].avatar_meta_info": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_thumb": [
+   "object"
+  ],
+  "aweme_list[].author.avatar_thumb.height": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_thumb.uri": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_thumb.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.avatar_thumb.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].author.avatar_thumb.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.avatar_thumb.width": [
+   "integer"
+  ],
+  "aweme_list[].author.avatar_uri": [
+   "string"
+  ],
+  "aweme_list[].author.aweme_count": [
+   "integer"
+  ],
+  "aweme_list[].author.bind_phone": [
+   "string"
+  ],
+  "aweme_list[].author.bold_fields": [
+   "null"
+  ],
+  "aweme_list[].author.can_message_follow_status_list": [
+   "array"
+  ],
+  "aweme_list[].author.can_message_follow_status_list[]": [
+   "integer"
+  ],
+  "aweme_list[].author.can_set_geofencing": [
+   "null"
+  ],
+  "aweme_list[].author.cha_list": [
+   "null"
+  ],
+  "aweme_list[].author.comment_filter_status": [
+   "integer"
+  ],
+  "aweme_list[].author.comment_setting": [
+   "integer"
+  ],
+  "aweme_list[].author.commerce_user_level": [
+   "integer"
+  ],
+  "aweme_list[].author.cover_url": [
+   "array"
+  ],
+  "aweme_list[].author.create_time": [
+   "integer"
+  ],
+  "aweme_list[].author.custom_verify": [
+   "string"
+  ],
+  "aweme_list[].author.cv_level": [
+   "string"
+  ],
+  "aweme_list[].author.download_prompt_ts": [
+   "integer"
+  ],
+  "aweme_list[].author.download_setting": [
+   "integer"
+  ],
+  "aweme_list[].author.duet_setting": [
+   "integer"
+  ],
+  "aweme_list[].author.enabled_filter_all_comments": [
+   "boolean"
+  ],
+  "aweme_list[].author.enterprise_verify_reason": [
+   "string"
+  ],
+  "aweme_list[].author.events": [
+   "null"
+  ],
+  "aweme_list[].author.fake_data_info": [
+   "object"
+  ],
+  "aweme_list[].author.favoriting_count": [
+   "integer"
+  ],
+  "aweme_list[].author.fb_expire_time": [
+   "integer"
+  ],
+  "aweme_list[].author.follow_status": [
+   "integer"
+  ],
+  "aweme_list[].author.follower_count": [
+   "integer"
+  ],
+  "aweme_list[].author.follower_status": [
+   "integer"
+  ],
+  "aweme_list[].author.followers_detail": [
+   "null"
+  ],
+  "aweme_list[].author.following_count": [
+   "integer"
+  ],
+  "aweme_list[].author.friends_status": [
+   "integer"
+  ],
+  "aweme_list[].author.geofencing": [
+   "null"
+  ],
+  "aweme_list[].author.google_account": [
+   "string"
+  ],
+  "aweme_list[].author.has_email": [
+   "boolean"
+  ],
+  "aweme_list[].author.has_facebook_token": [
+   "boolean"
+  ],
+  "aweme_list[].author.has_insights": [
+   "boolean"
+  ],
+  "aweme_list[].author.has_orders": [
+   "boolean"
+  ],
+  "aweme_list[].author.has_twitter_token": [
+   "boolean"
+  ],
+  "aweme_list[].author.has_youtube_token": [
+   "boolean"
+  ],
+  "aweme_list[].author.hide_search": [
+   "boolean"
+  ],
+  "aweme_list[].author.homepage_bottom_toast": [
+   "null"
+  ],
+  "aweme_list[].author.ins_id": [
+   "string"
+  ],
+  "aweme_list[].author.is_ad_fake": [
+   "boolean"
+  ],
+  "aweme_list[].author.is_block": [
+   "boolean"
+  ],
+  "aweme_list[].author.is_discipline_member": [
+   "boolean"
+  ],
+  "aweme_list[].author.is_mute": [
+   "integer"
+  ],
+  "aweme_list[].author.is_mute_lives": [
+   "integer"
+  ],
+  "aweme_list[].author.is_mute_non_story_post": [
+   "integer"
+  ],
+  "aweme_list[].author.is_mute_story": [
+   "integer"
+  ],
+  "aweme_list[].author.is_phone_binded": [
+   "boolean"
+  ],
+  "aweme_list[].author.is_star": [
+   "boolean"
+  ],
+  "aweme_list[].author.item_list": [
+   "null"
+  ],
+  "aweme_list[].author.language": [
+   "string"
+  ],
+  "aweme_list[].author.live_agreement": [
+   "integer"
+  ],
+  "aweme_list[].author.live_commerce": [
+   "boolean"
+  ],
+  "aweme_list[].author.live_verify": [
+   "integer"
+  ],
+  "aweme_list[].author.mention_status": [
+   "integer"
+  ],
+  "aweme_list[].author.mutual_relation_avatars": [
+   "null"
+  ],
+  "aweme_list[].author.need_points": [
+   "null"
+  ],
+  "aweme_list[].author.need_recommend": [
+   "integer"
+  ],
+  "aweme_list[].author.nickname": [
+   "string"
+  ],
+  "aweme_list[].author.original_musician": [
+   "object"
+  ],
+  "aweme_list[].author.original_musician.digg_count": [
+   "integer"
+  ],
+  "aweme_list[].author.original_musician.music_count": [
+   "integer"
+  ],
+  "aweme_list[].author.original_musician.music_used_count": [
+   "integer"
+  ],
+  "aweme_list[].author.original_musician.new_release_clip_ids": [
+   "null"
+  ],
+  "aweme_list[].author.platform_sync_info": [
+   "null"
+  ],
+  "aweme_list[].author.prevent_download": [
+   "boolean"
+  ],
+  "aweme_list[].author.react_setting": [
+   "integer"
+  ],
+  "aweme_list[].author.region": [
+   "string"
+  ],
+  "aweme_list[].author.relative_users": [
+   "null"
+  ],
+  "aweme_list[].author.reply_with_video_flag": [
+   "integer"
+  ],
+  "aweme_list[].author.room_id": [
+   "integer"
+  ],
+  "aweme_list[].author.search_highlight": [
+   "null"
+  ],
+  "aweme_list[].author.sec_uid": [
+   "string"
+  ],
+  "aweme_list[].author.secret": [
+   "integer"
+  ],
+  "aweme_list[].author.share_info": [
+   "object"
+  ],
+  "aweme_list[].author.share_info.now_invitation_card_image_urls": [
+   "null"
+  ],
+  "aweme_list[].author.share_info.share_desc": [
+   "string"
+  ],
+  "aweme_list[].author.share_info.share_desc_info": [
+   "string"
+  ],
+  "aweme_list[].author.share_info.share_qrcode_url": [
+   "object"
+  ],
+  "aweme_list[].author.share_info.share_qrcode_url.height": [
+   "integer"
+  ],
+  "aweme_list[].author.share_info.share_qrcode_url.uri": [
+   "string"
+  ],
+  "aweme_list[].author.share_info.share_qrcode_url.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.share_info.share_qrcode_url.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.share_info.share_qrcode_url.width": [
+   "integer"
+  ],
+  "aweme_list[].author.share_info.share_title": [
+   "string"
+  ],
+  "aweme_list[].author.share_info.share_title_myself": [
+   "string"
+  ],
+  "aweme_list[].author.share_info.share_title_other": [
+   "string"
+  ],
+  "aweme_list[].author.share_info.share_url": [
+   "string"
+  ],
+  "aweme_list[].author.share_qrcode_uri": [
+   "string"
+  ],
+  "aweme_list[].author.shield_comment_notice": [
+   "integer"
+  ],
+  "aweme_list[].author.shield_digg_notice": [
+   "integer"
+  ],
+  "aweme_list[].author.shield_edit_field_info": [
+   "null"
+  ],
+  "aweme_list[].author.shield_follow_notice": [
+   "integer"
+  ],
+  "aweme_list[].author.short_id": [
+   "string"
+  ],
+  "aweme_list[].author.show_image_bubble": [
+   "boolean"
+  ],
+  "aweme_list[].author.signature": [
+   "string"
+  ],
+  "aweme_list[].author.special_account": [
+   "object"
+  ],
+  "aweme_list[].author.special_account.special_account_list": [
+   "null"
+  ],
+  "aweme_list[].author.special_lock": [
+   "integer"
+  ],
+  "aweme_list[].author.status": [
+   "integer"
+  ],
+  "aweme_list[].author.stitch_setting": [
+   "integer"
+  ],
+  "aweme_list[].author.total_favorited": [
+   "integer"
+  ],
+  "aweme_list[].author.tw_expire_time": [
+   "integer"
+  ],
+  "aweme_list[].author.twitter_id": [
+   "string"
+  ],
+  "aweme_list[].author.twitter_name": [
+   "string"
+  ],
+  "aweme_list[].author.type_label": [
+   "null"
+  ],
+  "aweme_list[].author.uid": [
+   "string"
+  ],
+  "aweme_list[].author.unique_id": [
+   "string"
+  ],
+  "aweme_list[].author.unique_id_modify_time": [
+   "integer"
+  ],
+  "aweme_list[].author.user_canceled": [
+   "boolean"
+  ],
+  "aweme_list[].author.user_mode": [
+   "integer"
+  ],
+  "aweme_list[].author.user_now_pack_info": [
+   "object"
+  ],
+  "aweme_list[].author.user_period": [
+   "integer"
+  ],
+  "aweme_list[].author.user_profile_guide": [
+   "null"
+  ],
+  "aweme_list[].author.user_rate": [
+   "integer"
+  ],
+  "aweme_list[].author.user_spark_info": [
+   "object"
+  ],
+  "aweme_list[].author.user_tags": [
+   "null"
+  ],
+  "aweme_list[].author.verification_type": [
+   "integer"
+  ],
+  "aweme_list[].author.verify_info": [
+   "string"
+  ],
+  "aweme_list[].author.video_icon": [
+   "object"
+  ],
+  "aweme_list[].author.video_icon.height": [
+   "integer"
+  ],
+  "aweme_list[].author.video_icon.uri": [
+   "string"
+  ],
+  "aweme_list[].author.video_icon.url_list": [
+   "array"
+  ],
+  "aweme_list[].author.video_icon.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].author.video_icon.width": [
+   "integer"
+  ],
+  "aweme_list[].author.white_cover_url": [
+   "null"
+  ],
+  "aweme_list[].author.with_commerce_entry": [
+   "boolean"
+  ],
+  "aweme_list[].author.with_shop_entry": [
+   "boolean"
+  ],
+  "aweme_list[].author.youtube_channel_id": [
+   "string"
+  ],
+  "aweme_list[].author.youtube_channel_title": [
+   "string"
+  ],
+  "aweme_list[].author.youtube_expire_time": [
+   "integer"
+  ],
+  "aweme_list[].aweme_id": [
+   "string"
+  ],
+  "aweme_list[].create_time": [
+   "integer"
+  ],
+  "aweme_list[].create_time_utc": [
+   "string"
+  ],
+  "aweme_list[].desc": [
+   "string"
+  ],
+  "aweme_list[].desc_language": [
+   "string"
+  ],
+  "aweme_list[].is_ad": [
+   "boolean"
+  ],
+  "aweme_list[].is_eligible_for_commission": [
+   "boolean"
+  ],
+  "aweme_list[].is_paid_partnership": [
+   "boolean"
+  ],
+  "aweme_list[].region": [
+   "string"
+  ],
+  "aweme_list[].shop_product_url": [
+   "string"
+  ],
+  "aweme_list[].statistics": [
+   "object"
+  ],
+  "aweme_list[].statistics.aweme_id": [
+   "string"
+  ],
+  "aweme_list[].statistics.collect_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.comment_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.digg_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.download_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.forward_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.lose_comment_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.lose_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.play_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.repost_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.share_count": [
+   "integer"
+  ],
+  "aweme_list[].statistics.whatsapp_share_count": [
+   "integer"
+  ],
+  "aweme_list[].url": [
+   "string"
+  ],
+  "aweme_list[].video": [
+   "object"
+  ],
+  "aweme_list[].video.CoverTsp": [
+   "number"
+  ],
+  "aweme_list[].video.ai_dynamic_cover": [
+   "object"
+  ],
+  "aweme_list[].video.ai_dynamic_cover.uri": [
+   "string"
+  ],
+  "aweme_list[].video.ai_dynamic_cover.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.ai_dynamic_cover.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.ai_dynamic_cover.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.ai_dynamic_cover_bak": [
+   "object"
+  ],
+  "aweme_list[].video.ai_dynamic_cover_bak.uri": [
+   "string"
+  ],
+  "aweme_list[].video.ai_dynamic_cover_bak.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.ai_dynamic_cover_bak.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.ai_dynamic_cover_bak.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.animated_cover": [
+   "object"
+  ],
+  "aweme_list[].video.animated_cover.uri": [
+   "string"
+  ],
+  "aweme_list[].video.animated_cover.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.animated_cover.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.animated_cover.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.big_thumbs": [
+   "array"
+  ],
+  "aweme_list[].video.big_thumbs[]": [
+   "object"
+  ],
+  "aweme_list[].video.big_thumbs[].duration": [
+   "number"
+  ],
+  "aweme_list[].video.big_thumbs[].fext": [
+   "string"
+  ],
+  "aweme_list[].video.big_thumbs[].img_num": [
+   "integer"
+  ],
+  "aweme_list[].video.big_thumbs[].img_uris": [
+   "array"
+  ],
+  "aweme_list[].video.big_thumbs[].img_uris[]": [
+   "string"
+  ],
+  "aweme_list[].video.big_thumbs[].img_url": [
+   "string"
+  ],
+  "aweme_list[].video.big_thumbs[].img_urls": [
+   "array"
+  ],
+  "aweme_list[].video.big_thumbs[].img_urls[]": [
+   "string"
+  ],
+  "aweme_list[].video.big_thumbs[].img_x_len": [
+   "integer"
+  ],
+  "aweme_list[].video.big_thumbs[].img_x_size": [
+   "integer"
+  ],
+  "aweme_list[].video.big_thumbs[].img_y_len": [
+   "integer"
+  ],
+  "aweme_list[].video.big_thumbs[].img_y_size": [
+   "integer"
+  ],
+  "aweme_list[].video.big_thumbs[].interval": [
+   "integer"
+  ],
+  "aweme_list[].video.big_thumbs[].uri": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate": [
+   "array"
+  ],
+  "aweme_list[].video.bit_rate[]": [
+   "object"
+  ],
+  "aweme_list[].video.bit_rate[].HDR_bit": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].HDR_type": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].bit_rate": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].dub_infos": [
+   "null"
+  ],
+  "aweme_list[].video.bit_rate[].fid_profile_labels": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].fps": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].gear_name": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].is_bytevc1": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr": [
+   "object"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.data_size": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.file_cs": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.file_hash": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.height": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.uri": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.url_key": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.bit_rate[].play_addr.width": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].quality_type": [
+   "integer"
+  ],
+  "aweme_list[].video.bit_rate[].video_extra": [
+   "string"
+  ],
+  "aweme_list[].video.bit_rate_audio": [
+   "array"
+  ],
+  "aweme_list[].video.cdn_url_expired": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info": [
+   "object"
+  ],
+  "aweme_list[].video.cla_info.caption_infos": [
+   "array"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[]": [
+   "object"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].caption_format": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].caption_length": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].cla_subtitle_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].complaint_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].expire": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].is_auto_generated": [
+   "boolean"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].is_original_caption": [
+   "boolean"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].lang": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].language_code": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].language_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].source_tag": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].sub_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].sub_version": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].subtitle_type": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].translation_type": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].translator_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].url": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].url_list": [
+   "array"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.caption_infos[].variant": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.captions_type": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.creator_edited_caption_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.enable_auto_caption": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.has_original_audio": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.hide_original_caption": [
+   "boolean"
+  ],
+  "aweme_list[].video.cla_info.no_caption_reason": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.original_language_info": [
+   "object"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.can_translate_realtime": [
+   "boolean"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.can_translate_realtime_skip_translation_lang_check": [
+   "boolean"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.first_subtitle_time": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.is_burnin_caption": [
+   "boolean"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.lang": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.language_code": [
+   "string"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.language_id": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.original_language_info.original_caption_type": [
+   "integer"
+  ],
+  "aweme_list[].video.cla_info.vertical_positions": [
+   "null"
+  ],
+  "aweme_list[].video.cover": [
+   "object"
+  ],
+  "aweme_list[].video.cover.height": [
+   "integer"
+  ],
+  "aweme_list[].video.cover.uri": [
+   "string"
+  ],
+  "aweme_list[].video.cover.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.cover.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.cover.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.cover.width": [
+   "integer"
+  ],
+  "aweme_list[].video.cover_is_custom": [
+   "boolean"
+  ],
+  "aweme_list[].video.did_profile_labels": [
+   "string"
+  ],
+  "aweme_list[].video.download_addr": [
+   "object"
+  ],
+  "aweme_list[].video.download_addr.data_size": [
+   "integer"
+  ],
+  "aweme_list[].video.download_addr.file_cs": [
+   "string"
+  ],
+  "aweme_list[].video.download_addr.height": [
+   "integer"
+  ],
+  "aweme_list[].video.download_addr.uri": [
+   "string"
+  ],
+  "aweme_list[].video.download_addr.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.download_addr.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.download_addr.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.download_addr.width": [
+   "integer"
+  ],
+  "aweme_list[].video.download_no_watermark_addr": [
+   "object"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.data_size": [
+   "integer"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.file_cs": [
+   "string"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.file_hash": [
+   "string"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.height": [
+   "integer"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.uri": [
+   "string"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.url_key": [
+   "string"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.download_no_watermark_addr.width": [
+   "integer"
+  ],
+  "aweme_list[].video.duration": [
+   "integer"
+  ],
+  "aweme_list[].video.dynamic_cover": [
+   "object"
+  ],
+  "aweme_list[].video.dynamic_cover.height": [
+   "integer"
+  ],
+  "aweme_list[].video.dynamic_cover.uri": [
+   "string"
+  ],
+  "aweme_list[].video.dynamic_cover.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.dynamic_cover.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.dynamic_cover.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.dynamic_cover.width": [
+   "integer"
+  ],
+  "aweme_list[].video.has_watermark": [
+   "boolean"
+  ],
+  "aweme_list[].video.height": [
+   "integer"
+  ],
+  "aweme_list[].video.is_bytevc1": [
+   "integer"
+  ],
+  "aweme_list[].video.is_callback": [
+   "boolean"
+  ],
+  "aweme_list[].video.is_long_video": [
+   "integer"
+  ],
+  "aweme_list[].video.meta": [
+   "string"
+  ],
+  "aweme_list[].video.misc_download_addrs": [
+   "string"
+  ],
+  "aweme_list[].video.need_set_token": [
+   "boolean"
+  ],
+  "aweme_list[].video.origin_cover": [
+   "object"
+  ],
+  "aweme_list[].video.origin_cover.height": [
+   "integer"
+  ],
+  "aweme_list[].video.origin_cover.uri": [
+   "string"
+  ],
+  "aweme_list[].video.origin_cover.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.origin_cover.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.origin_cover.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.origin_cover.width": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr": [
+   "object"
+  ],
+  "aweme_list[].video.play_addr.data_size": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr.file_cs": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.file_hash": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.height": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr.uri": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.url_key": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.play_addr.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.play_addr.width": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr_bytevc1": [
+   "object"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.data_size": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.file_cs": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.file_hash": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.height": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.uri": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.url_key": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.play_addr_bytevc1.width": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr_h264": [
+   "object"
+  ],
+  "aweme_list[].video.play_addr_h264.data_size": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr_h264.file_cs": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_h264.file_hash": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_h264.height": [
+   "integer"
+  ],
+  "aweme_list[].video.play_addr_h264.uri": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_h264.url_key": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_h264.url_list": [
+   "array"
+  ],
+  "aweme_list[].video.play_addr_h264.url_list[]": [
+   "string"
+  ],
+  "aweme_list[].video.play_addr_h264.url_prefix": [
+   "null"
+  ],
+  "aweme_list[].video.play_addr_h264.width": [
+   "integer"
+  ],
+  "aweme_list[].video.ratio": [
+   "string"
+  ],
+  "aweme_list[].video.source_HDR_type": [
+   "integer"
+  ],
+  "aweme_list[].video.tags": [
+   "null"
+  ],
+  "aweme_list[].video.vid_profile_labels": [
+   "string"
+  ],
+  "aweme_list[].video.video_model": [
+   "string"
+  ],
+  "aweme_list[].video.width": [
+   "integer"
+  ],
+  "max_cursor": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

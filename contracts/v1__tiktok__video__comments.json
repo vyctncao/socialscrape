@@ -1,0 +1,146 @@
+{
+ "path": "/v1/tiktok/video/comments",
+ "fields": {
+  "comments": [
+   "array"
+  ],
+  "comments[]": [
+   "object"
+  ],
+  "comments[].aweme_id": [
+   "string"
+  ],
+  "comments[].comment_language": [
+   "string"
+  ],
+  "comments[].create_time": [
+   "integer"
+  ],
+  "comments[].digg_count": [
+   "integer"
+  ],
+  "comments[].reply_comment_total": [
+   "integer"
+  ],
+  "comments[].text": [
+   "string"
+  ],
+  "comments[].user": [
+   "object"
+  ],
+  "comments[].user.account_labels": [
+   "null"
+  ],
+  "comments[].user.ad_cover_url": [
+   "null"
+  ],
+  "comments[].user.advance_feature_item_order": [
+   "null"
+  ],
+  "comments[].user.advanced_feature_info": [
+   "null"
+  ],
+  "comments[].user.avatar_thumb": [
+   "object"
+  ],
+  "comments[].user.avatar_thumb.uri": [
+   "string"
+  ],
+  "comments[].user.avatar_thumb.url_list": [
+   "array"
+  ],
+  "comments[].user.avatar_thumb.url_list[]": [
+   "string"
+  ],
+  "comments[].user.avatar_thumb.url_prefix": [
+   "null"
+  ],
+  "comments[].user.bold_fields": [
+   "null"
+  ],
+  "comments[].user.can_message_follow_status_list": [
+   "null"
+  ],
+  "comments[].user.can_set_geofencing": [
+   "null"
+  ],
+  "comments[].user.cha_list": [
+   "null"
+  ],
+  "comments[].user.cover_url": [
+   "null"
+  ],
+  "comments[].user.custom_verify": [
+   "string"
+  ],
+  "comments[].user.enterprise_verify_reason": [
+   "string"
+  ],
+  "comments[].user.events": [
+   "null"
+  ],
+  "comments[].user.followers_detail": [
+   "null"
+  ],
+  "comments[].user.geofencing": [
+   "null"
+  ],
+  "comments[].user.homepage_bottom_toast": [
+   "null"
+  ],
+  "comments[].user.item_list": [
+   "null"
+  ],
+  "comments[].user.mutual_relation_avatars": [
+   "null"
+  ],
+  "comments[].user.need_points": [
+   "null"
+  ],
+  "comments[].user.nickname": [
+   "string"
+  ],
+  "comments[].user.platform_sync_info": [
+   "null"
+  ],
+  "comments[].user.relative_users": [
+   "null"
+  ],
+  "comments[].user.search_highlight": [
+   "null"
+  ],
+  "comments[].user.sec_uid": [
+   "string"
+  ],
+  "comments[].user.shield_edit_field_info": [
+   "null"
+  ],
+  "comments[].user.type_label": [
+   "null"
+  ],
+  "comments[].user.uid": [
+   "string"
+  ],
+  "comments[].user.unique_id": [
+   "string"
+  ],
+  "comments[].user.user_profile_guide": [
+   "null"
+  ],
+  "comments[].user.user_tags": [
+   "null"
+  ],
+  "comments[].user.white_cover_url": [
+   "null"
+  ],
+  "cursor": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "total": [
+   "integer"
+  ]
+ }
+}

@@ -1,0 +1,80 @@
+{
+ "path": "/v1/youtube/channel/shorts",
+ "fields": {
+  "channels": [
+   "array"
+  ],
+  "continuationToken": [
+   "string"
+  ],
+  "lives": [
+   "array"
+  ],
+  "playlists": [
+   "array"
+  ],
+  "shelves": [
+   "array"
+  ],
+  "shorts": [
+   "array"
+  ],
+  "shorts[]": [
+   "object"
+  ],
+  "shorts[].commentCountInt": [
+   "integer"
+  ],
+  "shorts[].commentCountText": [
+   "string"
+  ],
+  "shorts[].description": [
+   "string"
+  ],
+  "shorts[].durationFormatted": [
+   "string"
+  ],
+  "shorts[].durationMs": [
+   "integer"
+  ],
+  "shorts[].genre": [
+   "string"
+  ],
+  "shorts[].id": [
+   "string"
+  ],
+  "shorts[].likeCountInt": [
+   "integer"
+  ],
+  "shorts[].likeCountText": [
+   "string"
+  ],
+  "shorts[].publishDate": [
+   "string"
+  ],
+  "shorts[].thumbnail": [
+   "string"
+  ],
+  "shorts[].title": [
+   "string"
+  ],
+  "shorts[].type": [
+   "string"
+  ],
+  "shorts[].url": [
+   "string"
+  ],
+  "shorts[].viewCountInt": [
+   "integer"
+  ],
+  "shorts[].viewCountText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "videos": [
+   "array"
+  ]
+ }
+}

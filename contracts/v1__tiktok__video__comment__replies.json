@@ -1,0 +1,257 @@
+{
+ "path": "/v1/tiktok/video/comment/replies",
+ "fields": {
+  "comments": [
+   "array"
+  ],
+  "comments[]": [
+   "object"
+  ],
+  "comments[].aweme_id": [
+   "string"
+  ],
+  "comments[].cid": [
+   "string"
+  ],
+  "comments[].collect_stat": [
+   "integer"
+  ],
+  "comments[].comment_language": [
+   "string"
+  ],
+  "comments[].comment_post_item_ids": [
+   "null"
+  ],
+  "comments[].create_time": [
+   "integer"
+  ],
+  "comments[].digg_count": [
+   "integer"
+  ],
+  "comments[].fold_status": [
+   "integer"
+  ],
+  "comments[].image_list": [
+   "null"
+  ],
+  "comments[].is_author_digged": [
+   "boolean"
+  ],
+  "comments[].is_comment_translatable": [
+   "boolean"
+  ],
+  "comments[].is_high_purchase_intent": [
+   "boolean"
+  ],
+  "comments[].label_list": [
+   "null"
+  ],
+  "comments[].no_show": [
+   "boolean"
+  ],
+  "comments[].reply_comment": [
+   "null"
+  ],
+  "comments[].reply_id": [
+   "string"
+  ],
+  "comments[].reply_to_reply_id": [
+   "string"
+  ],
+  "comments[].share_info": [
+   "object"
+  ],
+  "comments[].share_info.acl": [
+   "object"
+  ],
+  "comments[].share_info.acl.code": [
+   "integer"
+  ],
+  "comments[].share_info.acl.extra": [
+   "string"
+  ],
+  "comments[].share_info.desc": [
+   "string"
+  ],
+  "comments[].share_info.title": [
+   "string"
+  ],
+  "comments[].share_info.url": [
+   "string"
+  ],
+  "comments[].status": [
+   "integer"
+  ],
+  "comments[].stick_position": [
+   "integer"
+  ],
+  "comments[].text": [
+   "string"
+  ],
+  "comments[].text_extra": [
+   "array"
+  ],
+  "comments[].thread_has_more": [
+   "boolean"
+  ],
+  "comments[].thread_id": [
+   "integer"
+  ],
+  "comments[].trans_btn_style": [
+   "integer"
+  ],
+  "comments[].user": [
+   "object"
+  ],
+  "comments[].user.account_labels": [
+   "null"
+  ],
+  "comments[].user.ad_cover_url": [
+   "null"
+  ],
+  "comments[].user.advance_feature_item_order": [
+   "null"
+  ],
+  "comments[].user.advanced_feature_info": [
+   "null"
+  ],
+  "comments[].user.avatar_thumb": [
+   "object"
+  ],
+  "comments[].user.avatar_thumb.uri": [
+   "string"
+  ],
+  "comments[].user.avatar_thumb.url_list": [
+   "array"
+  ],
+  "comments[].user.avatar_thumb.url_list[]": [
+   "string"
+  ],
+  "comments[].user.avatar_thumb.url_prefix": [
+   "null"
+  ],
+  "comments[].user.bold_fields": [
+   "null"
+  ],
+  "comments[].user.can_message_follow_status_list": [
+   "null"
+  ],
+  "comments[].user.can_set_geofencing": [
+   "null"
+  ],
+  "comments[].user.cha_list": [
+   "null"
+  ],
+  "comments[].user.cover_url": [
+   "null"
+  ],
+  "comments[].user.custom_verify": [
+   "string"
+  ],
+  "comments[].user.enterprise_verify_reason": [
+   "string"
+  ],
+  "comments[].user.events": [
+   "null"
+  ],
+  "comments[].user.followers_detail": [
+   "null"
+  ],
+  "comments[].user.geofencing": [
+   "null"
+  ],
+  "comments[].user.homepage_bottom_toast": [
+   "null"
+  ],
+  "comments[].user.item_list": [
+   "null"
+  ],
+  "comments[].user.mutual_relation_avatars": [
+   "null"
+  ],
+  "comments[].user.need_points": [
+   "null"
+  ],
+  "comments[].user.nickname": [
+   "string"
+  ],
+  "comments[].user.platform_sync_info": [
+   "null"
+  ],
+  "comments[].user.predicted_age_group": [
+   "string"
+  ],
+  "comments[].user.relative_users": [
+   "null"
+  ],
+  "comments[].user.search_highlight": [
+   "null"
+  ],
+  "comments[].user.sec_uid": [
+   "string"
+  ],
+  "comments[].user.shield_edit_field_info": [
+   "null"
+  ],
+  "comments[].user.type_label": [
+   "null"
+  ],
+  "comments[].user.uid": [
+   "string"
+  ],
+  "comments[].user.unique_id": [
+   "string"
+  ],
+  "comments[].user.user_profile_guide": [
+   "null"
+  ],
+  "comments[].user.user_tags": [
+   "null"
+  ],
+  "comments[].user.white_cover_url": [
+   "null"
+  ],
+  "comments[].user_buried": [
+   "boolean"
+  ],
+  "comments[].user_digged": [
+   "integer"
+  ],
+  "cursor": [
+   "integer"
+  ],
+  "extra": [
+   "object"
+  ],
+  "extra.fatal_item_ids": [
+   "array"
+  ],
+  "extra.logid": [
+   "string"
+  ],
+  "extra.now": [
+   "integer"
+  ],
+  "has_more": [
+   "integer"
+  ],
+  "log_pb": [
+   "object"
+  ],
+  "log_pb.impr_id": [
+   "string"
+  ],
+  "status_code": [
+   "integer"
+  ],
+  "status_msg": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "total": [
+   "integer"
+  ]
+ }
+}

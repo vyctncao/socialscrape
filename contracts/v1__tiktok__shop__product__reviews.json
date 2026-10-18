@@ -1,0 +1,98 @@
+{
+ "path": "/v1/tiktok/shop/product/reviews",
+ "fields": {
+  "has_more": [
+   "boolean"
+  ],
+  "product_reviews": [
+   "array"
+  ],
+  "product_reviews[]": [
+   "object"
+  ],
+  "product_reviews[].display_image_url": [
+   "string"
+  ],
+  "product_reviews[].is_incentivized_review": [
+   "boolean"
+  ],
+  "product_reviews[].is_verified_purchase": [
+   "boolean"
+  ],
+  "product_reviews[].product_id": [
+   "string"
+  ],
+  "product_reviews[].product_name": [
+   "string"
+  ],
+  "product_reviews[].review_country": [
+   "string"
+  ],
+  "product_reviews[].review_id": [
+   "string"
+  ],
+  "product_reviews[].review_images": [
+   "array"
+  ],
+  "product_reviews[].review_images[]": [
+   "string"
+  ],
+  "product_reviews[].review_rating": [
+   "integer"
+  ],
+  "product_reviews[].review_text": [
+   "string"
+  ],
+  "product_reviews[].review_time": [
+   "string"
+  ],
+  "product_reviews[].reviewer_avatar_url": [
+   "string"
+  ],
+  "product_reviews[].reviewer_id": [
+   "string"
+  ],
+  "product_reviews[].reviewer_name": [
+   "string"
+  ],
+  "product_reviews[].sku_id": [
+   "string"
+  ],
+  "product_reviews[].sku_specification": [
+   "string"
+  ],
+  "review_ratings": [
+   "object"
+  ],
+  "review_ratings.overall_score": [
+   "number"
+  ],
+  "review_ratings.rating_result": [
+   "object"
+  ],
+  "review_ratings.rating_result.1": [
+   "string"
+  ],
+  "review_ratings.rating_result.2": [
+   "string"
+  ],
+  "review_ratings.rating_result.3": [
+   "string"
+  ],
+  "review_ratings.rating_result.4": [
+   "string"
+  ],
+  "review_ratings.rating_result.5": [
+   "string"
+  ],
+  "review_ratings.review_count": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "total_reviews": [
+   "string"
+  ]
+ }
+}

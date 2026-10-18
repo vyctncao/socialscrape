@@ -1,0 +1,173 @@
+{
+ "path": "/v1/youtube/search",
+ "fields": {
+  "channels": [
+   "array"
+  ],
+  "continuationToken": [
+   "string"
+  ],
+  "lives": [
+   "array"
+  ],
+  "playlists": [
+   "array"
+  ],
+  "shelves": [
+   "array"
+  ],
+  "shelves[]": [
+   "object"
+  ],
+  "shelves[].items": [
+   "array"
+  ],
+  "shelves[].items[]": [
+   "object"
+  ],
+  "shelves[].items[].id": [
+   "string"
+  ],
+  "shelves[].items[].thumbnail": [
+   "string"
+  ],
+  "shelves[].items[].title": [
+   "string"
+  ],
+  "shelves[].items[].type": [
+   "string"
+  ],
+  "shelves[].items[].url": [
+   "string"
+  ],
+  "shelves[].items[].viewCountInt": [
+   "integer"
+  ],
+  "shelves[].items[].viewCountText": [
+   "string"
+  ],
+  "shelves[].title": [
+   "string"
+  ],
+  "shelves[].type": [
+   "string"
+  ],
+  "shorts": [
+   "array"
+  ],
+  "shorts[]": [
+   "object"
+  ],
+  "shorts[].badges": [
+   "array"
+  ],
+  "shorts[].channel": [
+   "object"
+  ],
+  "shorts[].channel.handle": [
+   "string"
+  ],
+  "shorts[].channel.id": [
+   "string"
+  ],
+  "shorts[].channel.thumbnail": [
+   "string"
+  ],
+  "shorts[].channel.title": [
+   "string"
+  ],
+  "shorts[].id": [
+   "string"
+  ],
+  "shorts[].lengthSeconds": [
+   "integer"
+  ],
+  "shorts[].lengthText": [
+   "string"
+  ],
+  "shorts[].publishedTime": [
+   "string"
+  ],
+  "shorts[].publishedTimeText": [
+   "string"
+  ],
+  "shorts[].thumbnail": [
+   "string"
+  ],
+  "shorts[].title": [
+   "string"
+  ],
+  "shorts[].type": [
+   "string"
+  ],
+  "shorts[].url": [
+   "string"
+  ],
+  "shorts[].viewCountInt": [
+   "integer"
+  ],
+  "shorts[].viewCountText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "videos": [
+   "array"
+  ],
+  "videos[]": [
+   "object"
+  ],
+  "videos[].badges": [
+   "array"
+  ],
+  "videos[].channel": [
+   "object"
+  ],
+  "videos[].channel.handle": [
+   "string"
+  ],
+  "videos[].channel.id": [
+   "string"
+  ],
+  "videos[].channel.thumbnail": [
+   "string"
+  ],
+  "videos[].channel.title": [
+   "string"
+  ],
+  "videos[].id": [
+   "string"
+  ],
+  "videos[].lengthSeconds": [
+   "integer"
+  ],
+  "videos[].lengthText": [
+   "string"
+  ],
+  "videos[].publishedTime": [
+   "string"
+  ],
+  "videos[].publishedTimeText": [
+   "string"
+  ],
+  "videos[].thumbnail": [
+   "string"
+  ],
+  "videos[].title": [
+   "string"
+  ],
+  "videos[].type": [
+   "string"
+  ],
+  "videos[].url": [
+   "string"
+  ],
+  "videos[].viewCountInt": [
+   "integer"
+  ],
+  "videos[].viewCountText": [
+   "string"
+  ]
+ }
+}

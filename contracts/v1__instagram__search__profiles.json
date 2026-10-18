@@ -1,0 +1,77 @@
+{
+ "path": "/v1/instagram/search/profiles",
+ "fields": {
+  "cursor": [
+   "null"
+  ],
+  "profiles": [
+   "array"
+  ],
+  "profiles[]": [
+   "object"
+  ],
+  "profiles[].bio_links": [
+   "array"
+  ],
+  "profiles[].biography": [
+   "null"
+  ],
+  "profiles[].category_name": [
+   "null"
+  ],
+  "profiles[].external_url": [
+   "null"
+  ],
+  "profiles[].follower_count": [
+   "null"
+  ],
+  "profiles[].following_count": [
+   "null"
+  ],
+  "profiles[].full_name": [
+   "string"
+  ],
+  "profiles[].google_description": [
+   "null"
+  ],
+  "profiles[].google_title": [
+   "null"
+  ],
+  "profiles[].id": [
+   "string"
+  ],
+  "profiles[].is_business_account": [
+   "null"
+  ],
+  "profiles[].is_private": [
+   "null"
+  ],
+  "profiles[].is_professional_account": [
+   "null"
+  ],
+  "profiles[].is_verified": [
+   "boolean"
+  ],
+  "profiles[].matched_from": [
+   "string"
+  ],
+  "profiles[].media_count": [
+   "null"
+  ],
+  "profiles[].profile_pic_url": [
+   "string"
+  ],
+  "profiles[].url": [
+   "string"
+  ],
+  "profiles[].username": [
+   "string"
+  ],
+  "query": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

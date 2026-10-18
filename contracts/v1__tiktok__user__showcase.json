@@ -1,0 +1,143 @@
+{
+ "path": "/v1/tiktok/user/showcase",
+ "fields": {
+  "cursor": [
+   "string"
+  ],
+  "products": [
+   "array"
+  ],
+  "products[]": [
+   "object"
+  ],
+  "products[].image": [
+   "object"
+  ],
+  "products[].image.height": [
+   "integer"
+  ],
+  "products[].image.uri": [
+   "string"
+  ],
+  "products[].image.url_list": [
+   "array"
+  ],
+  "products[].image.url_list[]": [
+   "string"
+  ],
+  "products[].image.width": [
+   "integer"
+  ],
+  "products[].product_id": [
+   "string"
+  ],
+  "products[].product_price_info": [
+   "object"
+  ],
+  "products[].product_price_info.currency_name": [
+   "string"
+  ],
+  "products[].product_price_info.currency_show_mode": [
+   "integer"
+  ],
+  "products[].product_price_info.currency_symbol": [
+   "string"
+  ],
+  "products[].product_price_info.decimal_point_symbol": [
+   "string"
+  ],
+  "products[].product_price_info.discount_decimal": [
+   "string"
+  ],
+  "products[].product_price_info.discount_format": [
+   "string"
+  ],
+  "products[].product_price_info.origin_price_decimal": [
+   "string"
+  ],
+  "products[].product_price_info.origin_price_format": [
+   "string"
+  ],
+  "products[].product_price_info.promotion_deduction_details": [
+   "object"
+  ],
+  "products[].product_price_info.promotion_deduction_details.seller_subtotal_deduction": [
+   "string"
+  ],
+  "products[].product_price_info.promotion_deduction_details.seller_subtotal_deduction_decimal": [
+   "string"
+  ],
+  "products[].product_price_info.sale_price_decimal": [
+   "string"
+  ],
+  "products[].product_price_info.sale_price_decimal_part_format": [
+   "string"
+  ],
+  "products[].product_price_info.sale_price_format": [
+   "string"
+  ],
+  "products[].product_price_info.sale_price_integer_part_format": [
+   "string"
+  ],
+  "products[].product_price_info.show_currency_space": [
+   "boolean"
+  ],
+  "products[].product_price_info.single_product_price_decimal": [
+   "string"
+  ],
+  "products[].product_price_info.single_product_price_format": [
+   "string"
+  ],
+  "products[].product_price_info.sku_id": [
+   "string"
+  ],
+  "products[].product_price_info.symbol_position": [
+   "integer"
+  ],
+  "products[].rate_info": [
+   "object"
+  ],
+  "products[].rate_info.review_count": [
+   "integer"
+  ],
+  "products[].rate_info.score": [
+   "number"
+  ],
+  "products[].seller_info": [
+   "object"
+  ],
+  "products[].seller_info.seller_id": [
+   "string"
+  ],
+  "products[].seo_url": [
+   "object"
+  ],
+  "products[].seo_url.canonical_url": [
+   "string"
+  ],
+  "products[].seo_url.slug": [
+   "string"
+  ],
+  "products[].seo_url.type": [
+   "integer"
+  ],
+  "products[].seo_url.updated_at": [
+   "null"
+  ],
+  "products[].seo_url.version": [
+   "integer"
+  ],
+  "products[].sold_info": [
+   "object"
+  ],
+  "products[].sold_info.sold_count": [
+   "integer"
+  ],
+  "products[].title": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

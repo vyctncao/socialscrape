@@ -1,0 +1,92 @@
+{
+ "path": "/v1/youtube/channel/community-posts",
+ "fields": {
+  "continuationToken": [
+   "string"
+  ],
+  "posts": [
+   "array"
+  ],
+  "posts[]": [
+   "object"
+  ],
+  "posts[].channel": [
+   "object"
+  ],
+  "posts[].channel.handle": [
+   "string"
+  ],
+  "posts[].channel.id": [
+   "string"
+  ],
+  "posts[].channel.title": [
+   "string"
+  ],
+  "posts[].channel.url": [
+   "string"
+  ],
+  "posts[].content": [
+   "string"
+  ],
+  "posts[].id": [
+   "string"
+  ],
+  "posts[].image": [
+   "string"
+  ],
+  "posts[].images": [
+   "array"
+  ],
+  "posts[].images[]": [
+   "string"
+  ],
+  "posts[].likeCount": [
+   "integer"
+  ],
+  "posts[].likeCountText": [
+   "string"
+  ],
+  "posts[].publishedTime": [
+   "string"
+  ],
+  "posts[].publishedTimeText": [
+   "string"
+  ],
+  "posts[].url": [
+   "string"
+  ],
+  "posts[].video": [
+   "object"
+  ],
+  "posts[].video.id": [
+   "string"
+  ],
+  "posts[].video.lengthSeconds": [
+   "integer"
+  ],
+  "posts[].video.lengthText": [
+   "string"
+  ],
+  "posts[].video.publishedTimeText": [
+   "string"
+  ],
+  "posts[].video.thumbnail": [
+   "string"
+  ],
+  "posts[].video.title": [
+   "string"
+  ],
+  "posts[].video.url": [
+   "string"
+  ],
+  "posts[].video.viewCountInt": [
+   "integer"
+  ],
+  "posts[].video.viewCountText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

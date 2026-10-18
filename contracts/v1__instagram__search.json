@@ -1,0 +1,89 @@
+{
+ "path": "/v1/instagram/search",
+ "fields": {
+  "data": [
+   "object"
+  ],
+  "data.hashtags": [
+   "array"
+  ],
+  "data.hashtags[]": [
+   "object"
+  ],
+  "data.hashtags[].id": [
+   "string"
+  ],
+  "data.hashtags[].media_count": [
+   "integer"
+  ],
+  "data.hashtags[].name": [
+   "string"
+  ],
+  "data.hashtags[].position": [
+   "integer"
+  ],
+  "data.hashtags[].search_result_subtitle": [
+   "null"
+  ],
+  "data.keywords": [
+   "array"
+  ],
+  "data.places": [
+   "array"
+  ],
+  "data.places[]": [
+   "object"
+  ],
+  "data.places[].facebook_places_id": [
+   "string"
+  ],
+  "data.places[].id": [
+   "string"
+  ],
+  "data.places[].name": [
+   "string"
+  ],
+  "data.places[].position": [
+   "integer"
+  ],
+  "data.places[].subtitle": [
+   "string"
+  ],
+  "data.places[].title": [
+   "string"
+  ],
+  "data.query": [
+   "string"
+  ],
+  "data.rank_token": [
+   "string"
+  ],
+  "data.users": [
+   "array"
+  ],
+  "data.users[]": [
+   "object"
+  ],
+  "data.users[].full_name": [
+   "string"
+  ],
+  "data.users[].id": [
+   "string"
+  ],
+  "data.users[].is_verified": [
+   "boolean"
+  ],
+  "data.users[].position": [
+   "integer"
+  ],
+  "data.users[].profile_pic_url": [
+   "string"
+  ],
+  "data.users[].username": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

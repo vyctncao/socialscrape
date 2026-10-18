@@ -1,0 +1,26 @@
+{
+ "path": "/v1/tiktok/search/suggestions",
+ "fields": {
+  "success": [
+   "boolean"
+  ],
+  "suggestions": [
+   "array"
+  ],
+  "suggestions[]": [
+   "object"
+  ],
+  "suggestions[].language": [
+   "string"
+  ],
+  "suggestions[].position": [
+   "integer"
+  ],
+  "suggestions[].score": [
+   "number"
+  ],
+  "suggestions[].text": [
+   "string"
+  ]
+ }
+}

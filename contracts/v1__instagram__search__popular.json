@@ -1,0 +1,89 @@
+{
+ "path": "/v1/instagram/search/popular",
+ "fields": {
+  "cursor": [
+   "string"
+  ],
+  "description": [
+   "object"
+  ],
+  "description.linked_terms": [
+   "array"
+  ],
+  "description.plain_text": [
+   "string"
+  ],
+  "description.source_uris": [
+   "array"
+  ],
+  "description.source_uris[]": [
+   "string"
+  ],
+  "has_more": [
+   "boolean"
+  ],
+  "posts": [
+   "array"
+  ],
+  "posts[]": [
+   "object"
+  ],
+  "posts[].caption": [
+   "string"
+  ],
+  "posts[].display_url": [
+   "string"
+  ],
+  "posts[].id": [
+   "string"
+  ],
+  "posts[].owner": [
+   "object"
+  ],
+  "posts[].owner.id": [
+   "string"
+  ],
+  "posts[].owner.is_verified": [
+   "boolean"
+  ],
+  "posts[].owner.profile_pic_url": [
+   "string"
+  ],
+  "posts[].owner.username": [
+   "string"
+  ],
+  "posts[].play_count": [
+   "integer"
+  ],
+  "posts[].shortcode": [
+   "string"
+  ],
+  "posts[].type": [
+   "string"
+  ],
+  "posts[].url": [
+   "string"
+  ],
+  "posts[].video_url": [
+   "string"
+  ],
+  "query": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "suggested_terms": [
+   "array"
+  ],
+  "suggested_terms[]": [
+   "string"
+  ],
+  "title": [
+   "string"
+  ],
+  "total_media_count": [
+   "integer"
+  ]
+ }
+}

@@ -1,0 +1,41 @@
+{
+ "path": "/v1/youtube/search/typeahead",
+ "fields": {
+  "data": [
+   "object"
+  ],
+  "data.query": [
+   "string"
+  ],
+  "data.suggestions": [
+   "array"
+  ],
+  "data.suggestions[]": [
+   "object"
+  ],
+  "data.suggestions[].channel": [
+   "object"
+  ],
+  "data.suggestions[].channel.handle": [
+   "string"
+  ],
+  "data.suggestions[].channel.id": [
+   "string"
+  ],
+  "data.suggestions[].channel.name": [
+   "string"
+  ],
+  "data.suggestions[].channel.thumbnailUrl": [
+   "string"
+  ],
+  "data.suggestions[].text": [
+   "string"
+  ],
+  "data.suggestions[].type": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

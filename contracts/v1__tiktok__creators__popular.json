@@ -1,0 +1,80 @@
+{
+ "path": "/v1/tiktok/creators/popular",
+ "fields": {
+  "creators": [
+   "array"
+  ],
+  "creators[]": [
+   "object"
+  ],
+  "creators[].avatar_url": [
+   "string"
+  ],
+  "creators[].country_code": [
+   "string"
+  ],
+  "creators[].follower_cnt": [
+   "integer"
+  ],
+  "creators[].items": [
+   "array"
+  ],
+  "creators[].items[]": [
+   "object"
+  ],
+  "creators[].items[].cover_url": [
+   "string"
+  ],
+  "creators[].items[].create_time": [
+   "integer"
+  ],
+  "creators[].items[].item_id": [
+   "string"
+  ],
+  "creators[].items[].liked_cnt": [
+   "integer"
+  ],
+  "creators[].items[].tt_link": [
+   "string"
+  ],
+  "creators[].items[].vv": [
+   "integer"
+  ],
+  "creators[].liked_cnt": [
+   "integer"
+  ],
+  "creators[].nick_name": [
+   "string"
+  ],
+  "creators[].tcm_id": [
+   "string"
+  ],
+  "creators[].tcm_link": [
+   "string"
+  ],
+  "creators[].tt_link": [
+   "string"
+  ],
+  "creators[].user_id": [
+   "string"
+  ],
+  "pagination": [
+   "object"
+  ],
+  "pagination.has_more": [
+   "boolean"
+  ],
+  "pagination.page": [
+   "integer"
+  ],
+  "pagination.size": [
+   "integer"
+  ],
+  "pagination.total": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

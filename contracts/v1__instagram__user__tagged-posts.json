@@ -1,0 +1,62 @@
+{
+ "path": "/v1/instagram/user/tagged-posts",
+ "fields": {
+  "cursor": [
+   "string"
+  ],
+  "has_more": [
+   "boolean"
+  ],
+  "posts": [
+   "array"
+  ],
+  "posts[]": [
+   "object"
+  ],
+  "posts[].caption": [
+   "object"
+  ],
+  "posts[].caption.pk": [
+   "string"
+  ],
+  "posts[].caption.text": [
+   "string"
+  ],
+  "posts[].code": [
+   "string"
+  ],
+  "posts[].comment_count": [
+   "integer"
+  ],
+  "posts[].like_count": [
+   "integer"
+  ],
+  "posts[].media_type": [
+   "integer"
+  ],
+  "posts[].pk": [
+   "string"
+  ],
+  "posts[].url": [
+   "string"
+  ],
+  "posts[].user": [
+   "object"
+  ],
+  "posts[].user.id": [
+   "string"
+  ],
+  "posts[].user.pk": [
+   "string"
+  ],
+  "posts[].user.username": [
+   "string"
+  ],
+  "posts[].view_count": [
+   "null"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

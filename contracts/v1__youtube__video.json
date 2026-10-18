@@ -1,0 +1,179 @@
+{
+ "path": "/v1/youtube/video",
+ "fields": {
+  "captionTracks": [
+   "array"
+  ],
+  "captionTracks[]": [
+   "object"
+  ],
+  "captionTracks[].baseUrl": [
+   "string"
+  ],
+  "captionTracks[].isTranslatable": [
+   "boolean"
+  ],
+  "captionTracks[].kind": [
+   "string"
+  ],
+  "captionTracks[].languageCode": [
+   "string"
+  ],
+  "captionTracks[].name": [
+   "object"
+  ],
+  "captionTracks[].name.simpleText": [
+   "string"
+  ],
+  "captionTracks[].trackName": [
+   "string"
+  ],
+  "captionTracks[].vssId": [
+   "string"
+  ],
+  "channel": [
+   "object"
+  ],
+  "channel.handle": [
+   "string"
+  ],
+  "channel.id": [
+   "string"
+  ],
+  "channel.title": [
+   "string"
+  ],
+  "channel.url": [
+   "string"
+  ],
+  "chapters": [
+   "array"
+  ],
+  "collaborators": [
+   "array"
+  ],
+  "commentCountInt": [
+   "integer"
+  ],
+  "commentCountText": [
+   "string"
+  ],
+  "description": [
+   "null"
+  ],
+  "descriptionLinks": [
+   "array"
+  ],
+  "durationFormatted": [
+   "string"
+  ],
+  "durationMs": [
+   "integer"
+  ],
+  "genre": [
+   "string"
+  ],
+  "id": [
+   "string"
+  ],
+  "isPaidPromotion": [
+   "boolean"
+  ],
+  "keywords": [
+   "array"
+  ],
+  "likeCountInt": [
+   "integer"
+  ],
+  "likeCountText": [
+   "string"
+  ],
+  "most_replayed": [
+   "null"
+  ],
+  "publishDate": [
+   "string"
+  ],
+  "publishDateText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "thumbnail": [
+   "string"
+  ],
+  "title": [
+   "string"
+  ],
+  "type": [
+   "string"
+  ],
+  "url": [
+   "string"
+  ],
+  "viewCountInt": [
+   "integer"
+  ],
+  "viewCountText": [
+   "string"
+  ],
+  "watchNextVideos": [
+   "array"
+  ],
+  "watchNextVideos[]": [
+   "object"
+  ],
+  "watchNextVideos[].channel": [
+   "object"
+  ],
+  "watchNextVideos[].channel.handle": [
+   "string"
+  ],
+  "watchNextVideos[].channel.id": [
+   "string"
+  ],
+  "watchNextVideos[].channel.title": [
+   "string"
+  ],
+  "watchNextVideos[].channel.url": [
+   "string"
+  ],
+  "watchNextVideos[].id": [
+   "string"
+  ],
+  "watchNextVideos[].lengthInSeconds": [
+   "integer"
+  ],
+  "watchNextVideos[].lengthText": [
+   "string"
+  ],
+  "watchNextVideos[].publishDate": [
+   "string"
+  ],
+  "watchNextVideos[].publishDateText": [
+   "string"
+  ],
+  "watchNextVideos[].publishedTime": [
+   "string"
+  ],
+  "watchNextVideos[].publishedTimeText": [
+   "string"
+  ],
+  "watchNextVideos[].thumbnail": [
+   "string"
+  ],
+  "watchNextVideos[].title": [
+   "string"
+  ],
+  "watchNextVideos[].videoUrl": [
+   "string"
+  ],
+  "watchNextVideos[].viewCountInt": [
+   "integer"
+  ],
+  "watchNextVideos[].viewCountText": [
+   "string"
+  ]
+ }
+}

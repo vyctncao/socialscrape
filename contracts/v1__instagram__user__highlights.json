@@ -1,0 +1,50 @@
+{
+ "path": "/v1/instagram/user/highlights",
+ "fields": {
+  "highlights": [
+   "array"
+  ],
+  "highlights[]": [
+   "object"
+  ],
+  "highlights[].__typename": [
+   "string"
+  ],
+  "highlights[].cover_media": [
+   "object"
+  ],
+  "highlights[].cover_media.thumbnail_src": [
+   "string"
+  ],
+  "highlights[].cover_media_cropped_thumbnail": [
+   "object"
+  ],
+  "highlights[].cover_media_cropped_thumbnail.url": [
+   "string"
+  ],
+  "highlights[].id": [
+   "string"
+  ],
+  "highlights[].owner": [
+   "object"
+  ],
+  "highlights[].owner.__typename": [
+   "string"
+  ],
+  "highlights[].owner.id": [
+   "string"
+  ],
+  "highlights[].owner.profile_pic_url": [
+   "string"
+  ],
+  "highlights[].owner.username": [
+   "string"
+  ],
+  "highlights[].title": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

@@ -1,0 +1,65 @@
+{
+ "path": "/v2/instagram/post/comments",
+ "fields": {
+  "comments": [
+   "array"
+  ],
+  "comments[]": [
+   "object"
+  ],
+  "comments[].child_comment_count": [
+   "integer"
+  ],
+  "comments[].comment_like_count": [
+   "integer"
+  ],
+  "comments[].created_at": [
+   "string"
+  ],
+  "comments[].has_more_replies": [
+   "boolean"
+  ],
+  "comments[].id": [
+   "string"
+  ],
+  "comments[].replies": [
+   "array"
+  ],
+  "comments[].replies_cursor": [
+   "null"
+  ],
+  "comments[].text": [
+   "string"
+  ],
+  "comments[].user": [
+   "object"
+  ],
+  "comments[].user.fbid_v2": [
+   "string"
+  ],
+  "comments[].user.id": [
+   "string"
+  ],
+  "comments[].user.is_unpublished": [
+   "null"
+  ],
+  "comments[].user.is_verified": [
+   "boolean"
+  ],
+  "comments[].user.pk": [
+   "string"
+  ],
+  "comments[].user.profile_pic_url": [
+   "string"
+  ],
+  "comments[].user.username": [
+   "string"
+  ],
+  "cursor": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

@@ -1,0 +1,56 @@
+{
+ "path": "/v1/tiktok/search/users",
+ "fields": {
+  "cursor": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "users": [
+   "array"
+  ],
+  "users[]": [
+   "object"
+  ],
+  "users[].avatar_medium": [
+   "object"
+  ],
+  "users[].avatar_medium.height": [
+   "integer"
+  ],
+  "users[].avatar_medium.uri": [
+   "string"
+  ],
+  "users[].avatar_medium.url_list": [
+   "array"
+  ],
+  "users[].avatar_medium.url_list[]": [
+   "string"
+  ],
+  "users[].avatar_medium.url_prefix": [
+   "null"
+  ],
+  "users[].avatar_medium.width": [
+   "integer"
+  ],
+  "users[].follower_count": [
+   "integer"
+  ],
+  "users[].following_count": [
+   "integer"
+  ],
+  "users[].nickname": [
+   "string"
+  ],
+  "users[].sec_uid": [
+   "string"
+  ],
+  "users[].uid": [
+   "string"
+  ],
+  "users[].unique_id": [
+   "string"
+  ]
+ }
+}

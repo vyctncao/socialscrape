@@ -1,0 +1,83 @@
+{
+ "path": "/v1/youtube/shorts/trending",
+ "fields": {
+  "shorts": [
+   "array"
+  ],
+  "shorts[]": [
+   "object"
+  ],
+  "shorts[].channel": [
+   "object"
+  ],
+  "shorts[].channel.handle": [
+   "string"
+  ],
+  "shorts[].channel.id": [
+   "string"
+  ],
+  "shorts[].channel.title": [
+   "string"
+  ],
+  "shorts[].channel.url": [
+   "string"
+  ],
+  "shorts[].chapters": [
+   "array"
+  ],
+  "shorts[].commentCountInt": [
+   "integer"
+  ],
+  "shorts[].commentCountText": [
+   "string"
+  ],
+  "shorts[].description": [
+   "null"
+  ],
+  "shorts[].durationFormatted": [
+   "string"
+  ],
+  "shorts[].durationMs": [
+   "integer"
+  ],
+  "shorts[].id": [
+   "string"
+  ],
+  "shorts[].keywords": [
+   "array"
+  ],
+  "shorts[].keywords[]": [
+   "string"
+  ],
+  "shorts[].likeCountInt": [
+   "integer"
+  ],
+  "shorts[].likeCountText": [
+   "string"
+  ],
+  "shorts[].publishDate": [
+   "string"
+  ],
+  "shorts[].publishDateText": [
+   "string"
+  ],
+  "shorts[].thumbnail": [
+   "string"
+  ],
+  "shorts[].title": [
+   "string"
+  ],
+  "shorts[].url": [
+   "string"
+  ],
+  "shorts[].viewCountInt": [
+   "integer"
+  ],
+  "shorts[].viewCountText": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

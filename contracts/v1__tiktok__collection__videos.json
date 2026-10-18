@@ -1,0 +1,107 @@
+{
+ "path": "/v1/tiktok/collection/videos",
+ "fields": {
+  "collection_id": [
+   "string"
+  ],
+  "has_more": [
+   "boolean"
+  ],
+  "max_cursor": [
+   "string"
+  ],
+  "status_code": [
+   "integer"
+  ],
+  "status_msg": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "videos": [
+   "array"
+  ],
+  "videos[]": [
+   "object"
+  ],
+  "videos[].AIGCDescription": [
+   "string"
+  ],
+  "videos[].CategoryType": [
+   "integer"
+  ],
+  "videos[].IsHDBitrate": [
+   "boolean"
+  ],
+  "videos[].ShowAIGC": [
+   "boolean"
+  ],
+  "videos[].anchors": [
+   "array"
+  ],
+  "videos[].anchors[]": [
+   "object"
+  ],
+  "videos[].anchors[].description": [
+   "string"
+  ],
+  "videos[].anchors[].type": [
+   "integer"
+  ],
+  "videos[].author": [
+   "object"
+  ],
+  "videos[].author.id": [
+   "string"
+  ],
+  "videos[].author.nickname": [
+   "string"
+  ],
+  "videos[].author.uniqueId": [
+   "string"
+  ],
+  "videos[].createTime": [
+   "integer"
+  ],
+  "videos[].desc": [
+   "string"
+  ],
+  "videos[].id": [
+   "string"
+  ],
+  "videos[].stats": [
+   "object"
+  ],
+  "videos[].stats.collectCount": [
+   "integer"
+  ],
+  "videos[].stats.commentCount": [
+   "integer"
+  ],
+  "videos[].stats.diggCount": [
+   "integer"
+  ],
+  "videos[].stats.playCount": [
+   "integer"
+  ],
+  "videos[].stats.shareCount": [
+   "integer"
+  ],
+  "videos[].video": [
+   "object"
+  ],
+  "videos[].video.cover": [
+   "string"
+  ],
+  "videos[].video.duration": [
+   "integer"
+  ],
+  "videos[].video.height": [
+   "integer"
+  ],
+  "videos[].video.width": [
+   "integer"
+  ]
+ }
+}

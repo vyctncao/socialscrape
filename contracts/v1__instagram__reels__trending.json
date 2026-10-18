@@ -1,0 +1,170 @@
+{
+ "path": "/v1/instagram/reels/trending",
+ "fields": {
+  "reels": [
+   "array"
+  ],
+  "reels[]": [
+   "object"
+  ],
+  "reels[].caption": [
+   "string"
+  ],
+  "reels[].clips_metadata": [
+   "object"
+  ],
+  "reels[].clips_metadata.music_info": [
+   "null"
+  ],
+  "reels[].clips_metadata.original_sound_info": [
+   "object"
+  ],
+  "reels[].clips_metadata.original_sound_info.audio_asset_id": [
+   "string"
+  ],
+  "reels[].clips_metadata.original_sound_info.audio_filter_infos": [
+   "null"
+  ],
+  "reels[].clips_metadata.original_sound_info.consumption_info": [
+   "object"
+  ],
+  "reels[].clips_metadata.original_sound_info.consumption_info.is_trending_in_clips": [
+   "boolean"
+  ],
+  "reels[].clips_metadata.original_sound_info.consumption_info.should_mute_audio_reason": [
+   "string"
+  ],
+  "reels[].clips_metadata.original_sound_info.ig_artist": [
+   "object"
+  ],
+  "reels[].clips_metadata.original_sound_info.ig_artist.id": [
+   "string"
+  ],
+  "reels[].clips_metadata.original_sound_info.ig_artist.username": [
+   "string"
+  ],
+  "reels[].clips_metadata.original_sound_info.is_explicit": [
+   "boolean"
+  ],
+  "reels[].clips_metadata.original_sound_info.original_audio_title": [
+   "string"
+  ],
+  "reels[].clips_metadata.original_sound_info.should_mute_audio": [
+   "boolean"
+  ],
+  "reels[].comment_count": [
+   "integer"
+  ],
+  "reels[].has_audio": [
+   "boolean"
+  ],
+  "reels[].id": [
+   "string"
+  ],
+  "reels[].ig_play_count": [
+   "null"
+  ],
+  "reels[].image_url": [
+   "string"
+  ],
+  "reels[].image_versions2": [
+   "object"
+  ],
+  "reels[].image_versions2.additional_candidates": [
+   "object"
+  ],
+  "reels[].image_versions2.additional_candidates.first_frame": [
+   "object"
+  ],
+  "reels[].image_versions2.additional_candidates.first_frame.url": [
+   "string"
+  ],
+  "reels[].image_versions2.candidates": [
+   "array"
+  ],
+  "reels[].image_versions2.candidates[]": [
+   "object"
+  ],
+  "reels[].image_versions2.candidates[].height": [
+   "integer"
+  ],
+  "reels[].image_versions2.candidates[].url": [
+   "string"
+  ],
+  "reels[].image_versions2.candidates[].width": [
+   "integer"
+  ],
+  "reels[].like_count": [
+   "integer"
+  ],
+  "reels[].media_type": [
+   "integer"
+  ],
+  "reels[].original_height": [
+   "integer"
+  ],
+  "reels[].original_width": [
+   "integer"
+  ],
+  "reels[].pk": [
+   "string"
+  ],
+  "reels[].play_count": [
+   "integer"
+  ],
+  "reels[].product_type": [
+   "string"
+  ],
+  "reels[].shortcode": [
+   "string"
+  ],
+  "reels[].taken_at": [
+   "string"
+  ],
+  "reels[].url": [
+   "string"
+  ],
+  "reels[].user": [
+   "object"
+  ],
+  "reels[].user.full_name": [
+   "string"
+  ],
+  "reels[].user.id": [
+   "string"
+  ],
+  "reels[].user.is_private": [
+   "boolean"
+  ],
+  "reels[].user.is_verified": [
+   "boolean"
+  ],
+  "reels[].user.pk": [
+   "string"
+  ],
+  "reels[].user.profile_pic_url": [
+   "string"
+  ],
+  "reels[].user.username": [
+   "string"
+  ],
+  "reels[].video_url": [
+   "string"
+  ],
+  "reels[].video_versions": [
+   "array"
+  ],
+  "reels[].video_versions[]": [
+   "object"
+  ],
+  "reels[].video_versions[].type": [
+   "integer"
+  ],
+  "reels[].video_versions[].url": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

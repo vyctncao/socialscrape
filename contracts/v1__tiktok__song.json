@@ -1,0 +1,551 @@
+{
+ "path": "/v1/tiktok/song",
+ "fields": {
+  "music_info": [
+   "object"
+  ],
+  "music_info.album": [
+   "string"
+  ],
+  "music_info.allow_offline_music_to_detail_page": [
+   "boolean"
+  ],
+  "music_info.artists": [
+   "array"
+  ],
+  "music_info.artists[]": [
+   "object"
+  ],
+  "music_info.artists[].avatar": [
+   "object"
+  ],
+  "music_info.artists[].avatar.uri": [
+   "string"
+  ],
+  "music_info.artists[].avatar.url_list": [
+   "array"
+  ],
+  "music_info.artists[].avatar.url_list[]": [
+   "string"
+  ],
+  "music_info.artists[].avatar.url_prefix": [
+   "null"
+  ],
+  "music_info.artists[].enter_type": [
+   "integer"
+  ],
+  "music_info.artists[].follow_status": [
+   "integer"
+  ],
+  "music_info.artists[].follower_status": [
+   "integer"
+  ],
+  "music_info.artists[].handle": [
+   "string"
+  ],
+  "music_info.artists[].is_block": [
+   "boolean"
+  ],
+  "music_info.artists[].is_blocked": [
+   "boolean"
+  ],
+  "music_info.artists[].is_private_account": [
+   "boolean"
+  ],
+  "music_info.artists[].is_verified": [
+   "boolean"
+  ],
+  "music_info.artists[].is_visible": [
+   "boolean"
+  ],
+  "music_info.artists[].nick_name": [
+   "string"
+  ],
+  "music_info.artists[].sec_uid": [
+   "string"
+  ],
+  "music_info.artists[].status": [
+   "integer"
+  ],
+  "music_info.artists[].uid": [
+   "string"
+  ],
+  "music_info.audition_duration": [
+   "integer"
+  ],
+  "music_info.author": [
+   "string"
+  ],
+  "music_info.author_deleted": [
+   "boolean"
+  ],
+  "music_info.author_position": [
+   "null"
+  ],
+  "music_info.avatar_medium": [
+   "object"
+  ],
+  "music_info.avatar_medium.height": [
+   "integer"
+  ],
+  "music_info.avatar_medium.uri": [
+   "string"
+  ],
+  "music_info.avatar_medium.url_list": [
+   "array"
+  ],
+  "music_info.avatar_medium.url_list[]": [
+   "string"
+  ],
+  "music_info.avatar_medium.url_prefix": [
+   "null"
+  ],
+  "music_info.avatar_medium.width": [
+   "integer"
+  ],
+  "music_info.avatar_thumb": [
+   "object"
+  ],
+  "music_info.avatar_thumb.height": [
+   "integer"
+  ],
+  "music_info.avatar_thumb.uri": [
+   "string"
+  ],
+  "music_info.avatar_thumb.url_list": [
+   "array"
+  ],
+  "music_info.avatar_thumb.url_list[]": [
+   "string"
+  ],
+  "music_info.avatar_thumb.url_prefix": [
+   "null"
+  ],
+  "music_info.avatar_thumb.width": [
+   "integer"
+  ],
+  "music_info.binded_challenge_id": [
+   "integer"
+  ],
+  "music_info.can_be_stitched": [
+   "boolean"
+  ],
+  "music_info.can_not_reuse": [
+   "boolean"
+  ],
+  "music_info.collect_stat": [
+   "integer"
+  ],
+  "music_info.commercial_right_type": [
+   "integer"
+  ],
+  "music_info.cover_large": [
+   "object"
+  ],
+  "music_info.cover_large.height": [
+   "integer"
+  ],
+  "music_info.cover_large.uri": [
+   "string"
+  ],
+  "music_info.cover_large.url_list": [
+   "array"
+  ],
+  "music_info.cover_large.url_list[]": [
+   "string"
+  ],
+  "music_info.cover_large.url_prefix": [
+   "null"
+  ],
+  "music_info.cover_large.width": [
+   "integer"
+  ],
+  "music_info.cover_medium": [
+   "object"
+  ],
+  "music_info.cover_medium.height": [
+   "integer"
+  ],
+  "music_info.cover_medium.uri": [
+   "string"
+  ],
+  "music_info.cover_medium.url_list": [
+   "array"
+  ],
+  "music_info.cover_medium.url_list[]": [
+   "string"
+  ],
+  "music_info.cover_medium.url_prefix": [
+   "null"
+  ],
+  "music_info.cover_medium.width": [
+   "integer"
+  ],
+  "music_info.cover_thumb": [
+   "object"
+  ],
+  "music_info.cover_thumb.height": [
+   "integer"
+  ],
+  "music_info.cover_thumb.uri": [
+   "string"
+  ],
+  "music_info.cover_thumb.url_list": [
+   "array"
+  ],
+  "music_info.cover_thumb.url_list[]": [
+   "string"
+  ],
+  "music_info.cover_thumb.url_prefix": [
+   "null"
+  ],
+  "music_info.cover_thumb.width": [
+   "integer"
+  ],
+  "music_info.create_time": [
+   "integer"
+  ],
+  "music_info.dmv_auto_show": [
+   "boolean"
+  ],
+  "music_info.duration": [
+   "integer"
+  ],
+  "music_info.duration_high_precision": [
+   "object"
+  ],
+  "music_info.duration_high_precision.audition_duration_precision": [
+   "integer"
+  ],
+  "music_info.duration_high_precision.duration_precision": [
+   "integer"
+  ],
+  "music_info.duration_high_precision.shoot_duration_precision": [
+   "integer"
+  ],
+  "music_info.duration_high_precision.video_duration_precision": [
+   "integer"
+  ],
+  "music_info.external_song_info": [
+   "array"
+  ],
+  "music_info.extra": [
+   "string"
+  ],
+  "music_info.full_song": [
+   "object"
+  ],
+  "music_info.full_song.full_song_duration": [
+   "integer"
+  ],
+  "music_info.full_song.full_song_duration_precision": [
+   "number"
+  ],
+  "music_info.full_song.full_song_id": [
+   "string"
+  ],
+  "music_info.full_song.full_song_play_url": [
+   "object"
+  ],
+  "music_info.full_song.full_song_play_url.uri": [
+   "string"
+  ],
+  "music_info.full_song.full_song_play_url.url_list": [
+   "array"
+  ],
+  "music_info.full_song.full_song_play_url.url_list[]": [
+   "string"
+  ],
+  "music_info.full_song.full_song_play_url.url_prefix": [
+   "null"
+  ],
+  "music_info.full_song.full_song_shoot_duration": [
+   "integer"
+  ],
+  "music_info.full_song.full_song_shoot_duration_precision": [
+   "integer"
+  ],
+  "music_info.has_commerce_right": [
+   "boolean"
+  ],
+  "music_info.id": [
+   "integer"
+  ],
+  "music_info.id_str": [
+   "string"
+  ],
+  "music_info.is_audio_url_with_cookie": [
+   "boolean"
+  ],
+  "music_info.is_author_artist": [
+   "boolean"
+  ],
+  "music_info.is_commerce_music": [
+   "boolean"
+  ],
+  "music_info.is_matched_metadata": [
+   "boolean"
+  ],
+  "music_info.is_original": [
+   "boolean"
+  ],
+  "music_info.is_original_sound": [
+   "boolean"
+  ],
+  "music_info.is_pgc": [
+   "boolean"
+  ],
+  "music_info.is_shooting_allow": [
+   "boolean"
+  ],
+  "music_info.log_extra": [
+   "string"
+  ],
+  "music_info.lyric_short_position": [
+   "null"
+  ],
+  "music_info.matched_song": [
+   "object"
+  ],
+  "music_info.matched_song.author": [
+   "string"
+  ],
+  "music_info.matched_song.chorus_info": [
+   "object"
+  ],
+  "music_info.matched_song.chorus_info.duration_ms": [
+   "integer"
+  ],
+  "music_info.matched_song.chorus_info.start_ms": [
+   "integer"
+  ],
+  "music_info.matched_song.cover_medium": [
+   "object"
+  ],
+  "music_info.matched_song.cover_medium.height": [
+   "integer"
+  ],
+  "music_info.matched_song.cover_medium.uri": [
+   "string"
+  ],
+  "music_info.matched_song.cover_medium.url_list": [
+   "array"
+  ],
+  "music_info.matched_song.cover_medium.url_list[]": [
+   "string"
+  ],
+  "music_info.matched_song.cover_medium.url_prefix": [
+   "null"
+  ],
+  "music_info.matched_song.cover_medium.width": [
+   "integer"
+  ],
+  "music_info.matched_song.full_duration": [
+   "integer"
+  ],
+  "music_info.matched_song.h5_url": [
+   "string"
+  ],
+  "music_info.matched_song.id": [
+   "string"
+  ],
+  "music_info.matched_song.performers": [
+   "null"
+  ],
+  "music_info.matched_song.title": [
+   "string"
+  ],
+  "music_info.meme_song_info": [
+   "object"
+  ],
+  "music_info.mid": [
+   "string"
+  ],
+  "music_info.music_release_info": [
+   "object"
+  ],
+  "music_info.music_release_info.group_release_date": [
+   "integer"
+  ],
+  "music_info.music_release_info.is_new_release_song": [
+   "boolean"
+  ],
+  "music_info.mute_share": [
+   "boolean"
+  ],
+  "music_info.offline_desc": [
+   "string"
+  ],
+  "music_info.owner_handle": [
+   "string"
+  ],
+  "music_info.owner_nickname": [
+   "string"
+  ],
+  "music_info.play_url": [
+   "object"
+  ],
+  "music_info.play_url.height": [
+   "integer"
+  ],
+  "music_info.play_url.uri": [
+   "string"
+  ],
+  "music_info.play_url.url_list": [
+   "array"
+  ],
+  "music_info.play_url.url_list[]": [
+   "string"
+  ],
+  "music_info.play_url.url_prefix": [
+   "null"
+  ],
+  "music_info.play_url.width": [
+   "integer"
+  ],
+  "music_info.position": [
+   "null"
+  ],
+  "music_info.prevent_download": [
+   "boolean"
+  ],
+  "music_info.preview_end_time": [
+   "integer"
+  ],
+  "music_info.preview_start_time": [
+   "integer"
+  ],
+  "music_info.recommend_status": [
+   "integer"
+  ],
+  "music_info.share_info": [
+   "object"
+  ],
+  "music_info.share_info.bool_persist": [
+   "integer"
+  ],
+  "music_info.share_info.now_invitation_card_image_urls": [
+   "null"
+  ],
+  "music_info.share_info.share_desc": [
+   "string"
+  ],
+  "music_info.share_info.share_desc_info": [
+   "string"
+  ],
+  "music_info.share_info.share_quote": [
+   "string"
+  ],
+  "music_info.share_info.share_signature_desc": [
+   "string"
+  ],
+  "music_info.share_info.share_signature_url": [
+   "string"
+  ],
+  "music_info.share_info.share_title": [
+   "string"
+  ],
+  "music_info.share_info.share_title_myself": [
+   "string"
+  ],
+  "music_info.share_info.share_title_other": [
+   "string"
+  ],
+  "music_info.share_info.share_url": [
+   "string"
+  ],
+  "music_info.shoot_duration": [
+   "integer"
+  ],
+  "music_info.source_platform": [
+   "integer"
+  ],
+  "music_info.status": [
+   "integer"
+  ],
+  "music_info.strong_beat_url": [
+   "object"
+  ],
+  "music_info.strong_beat_url.height": [
+   "integer"
+  ],
+  "music_info.strong_beat_url.uri": [
+   "string"
+  ],
+  "music_info.strong_beat_url.url_list": [
+   "array"
+  ],
+  "music_info.strong_beat_url.url_list[]": [
+   "string"
+  ],
+  "music_info.strong_beat_url.url_prefix": [
+   "null"
+  ],
+  "music_info.strong_beat_url.width": [
+   "integer"
+  ],
+  "music_info.suggest_words": [
+   "object"
+  ],
+  "music_info.suggest_words.suggest_words": [
+   "array"
+  ],
+  "music_info.suggest_words.suggest_words[]": [
+   "object"
+  ],
+  "music_info.suggest_words.suggest_words[].scene": [
+   "string"
+  ],
+  "music_info.suggest_words.suggest_words[].words": [
+   "array"
+  ],
+  "music_info.suggest_words.suggest_words[].words[]": [
+   "object"
+  ],
+  "music_info.suggest_words.suggest_words[].words[].word": [
+   "string"
+  ],
+  "music_info.suggest_words.suggest_words[].words[].word_id": [
+   "string"
+  ],
+  "music_info.tag_list": [
+   "null"
+  ],
+  "music_info.title": [
+   "string"
+  ],
+  "music_info.tt_to_dsp_song_infos": [
+   "null"
+  ],
+  "music_info.uncert_artists": [
+   "null"
+  ],
+  "music_info.user_count": [
+   "integer"
+  ],
+  "music_info.vid_volume_info": [
+   "string"
+  ],
+  "music_info.video_duration": [
+   "integer"
+  ],
+  "rec_list": [
+   "array"
+  ],
+  "similar_music": [
+   "array"
+  ],
+  "similar_music_ids": [
+   "null"
+  ],
+  "status_code": [
+   "integer"
+  ],
+  "status_msg": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

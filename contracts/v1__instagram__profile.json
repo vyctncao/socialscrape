@@ -1,0 +1,398 @@
+{
+ "path": "/v1/instagram/profile",
+ "fields": {
+  "data": [
+   "object"
+  ],
+  "data.user": [
+   "object"
+  ],
+  "data.user.bio_links": [
+   "array"
+  ],
+  "data.user.bio_links[]": [
+   "object"
+  ],
+  "data.user.bio_links[].link_type": [
+   "string"
+  ],
+  "data.user.bio_links[].lynx_url": [
+   "string"
+  ],
+  "data.user.bio_links[].title": [
+   "string"
+  ],
+  "data.user.bio_links[].url": [
+   "string"
+  ],
+  "data.user.biography": [
+   "string"
+  ],
+  "data.user.biography_with_entities": [
+   "object"
+  ],
+  "data.user.biography_with_entities.entities": [
+   "array"
+  ],
+  "data.user.biography_with_entities.raw_text": [
+   "string"
+  ],
+  "data.user.business_address_json": [
+   "object"
+  ],
+  "data.user.business_address_json.city_id": [
+   "integer"
+  ],
+  "data.user.business_address_json.city_name": [
+   "string"
+  ],
+  "data.user.business_address_json.latitude": [
+   "number"
+  ],
+  "data.user.business_address_json.longitude": [
+   "number"
+  ],
+  "data.user.business_address_json.street_address": [
+   "null"
+  ],
+  "data.user.business_address_json.zip_code": [
+   "null"
+  ],
+  "data.user.category_name": [
+   "string"
+  ],
+  "data.user.edge_felix_video_timeline": [
+   "object"
+  ],
+  "data.user.edge_felix_video_timeline.count": [
+   "integer"
+  ],
+  "data.user.edge_felix_video_timeline.edges": [
+   "array"
+  ],
+  "data.user.edge_felix_video_timeline.page_info": [
+   "object"
+  ],
+  "data.user.edge_felix_video_timeline.page_info.end_cursor": [
+   "null"
+  ],
+  "data.user.edge_felix_video_timeline.page_info.has_next_page": [
+   "boolean"
+  ],
+  "data.user.edge_follow": [
+   "object"
+  ],
+  "data.user.edge_follow.count": [
+   "integer"
+  ],
+  "data.user.edge_followed_by": [
+   "object"
+  ],
+  "data.user.edge_followed_by.count": [
+   "integer"
+  ],
+  "data.user.edge_media_collections": [
+   "object"
+  ],
+  "data.user.edge_media_collections.count": [
+   "integer"
+  ],
+  "data.user.edge_media_collections.edges": [
+   "array"
+  ],
+  "data.user.edge_media_collections.page_info": [
+   "object"
+  ],
+  "data.user.edge_media_collections.page_info.end_cursor": [
+   "null"
+  ],
+  "data.user.edge_media_collections.page_info.has_next_page": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.count": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges": [
+   "array"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[]": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.__typename": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.accessibility_caption": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info.artist_name": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info.audio_id": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info.should_mute_audio": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info.should_mute_audio_reason": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info.song_name": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.clips_music_attribution_info.uses_original_audio": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.coauthor_producers": [
+   "array"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.comments_disabled": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dash_info": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dash_info.is_dash_eligible": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dash_info.number_of_qualities": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dash_info.video_dash_manifest": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dimensions": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dimensions.height": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.dimensions.width": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.display_url": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_liked_by": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_liked_by.count": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_preview_like": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_preview_like.count": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_to_caption": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_to_caption.edges": [
+   "array"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_to_comment": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_to_comment.count": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_to_tagged_user": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.edge_media_to_tagged_user.edges": [
+   "array"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.fact_check_information": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.fact_check_overall_rating": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.felix_profile_grid_crop": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.gating_info": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.has_audio": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.has_upcoming_event": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.id": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.is_video": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.like_and_view_counts_disabled": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.location": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.media_overlay_info": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.media_preview": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.nft_asset_info": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.owner": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.owner.id": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.owner.username": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.pinned_for_users": [
+   "array"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.product_type": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.profile_grid_thumbnail_fitting_style": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.sharing_friction_info": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.sharing_friction_info.bloks_app_url": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.sharing_friction_info.should_have_sharing_friction": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.shortcode": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.taken_at_timestamp": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.tall_profile_grid_crop": [
+   "null"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_resources": [
+   "array"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_resources[]": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_resources[].config_height": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_resources[].config_width": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_resources[].src": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_src": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.thumbnail_tall_src": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.tracking_token": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.video_url": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.video_view_count": [
+   "integer"
+  ],
+  "data.user.edge_owner_to_timeline_media.edges[].node.viewer_can_reshare": [
+   "boolean"
+  ],
+  "data.user.edge_owner_to_timeline_media.page_info": [
+   "object"
+  ],
+  "data.user.edge_owner_to_timeline_media.page_info.end_cursor": [
+   "string"
+  ],
+  "data.user.edge_owner_to_timeline_media.page_info.has_next_page": [
+   "boolean"
+  ],
+  "data.user.edge_related_profiles": [
+   "object"
+  ],
+  "data.user.edge_related_profiles.edges": [
+   "array"
+  ],
+  "data.user.edge_related_profiles.edges[]": [
+   "object"
+  ],
+  "data.user.edge_related_profiles.edges[].node": [
+   "object"
+  ],
+  "data.user.edge_related_profiles.edges[].node.full_name": [
+   "string"
+  ],
+  "data.user.edge_related_profiles.edges[].node.id": [
+   "string"
+  ],
+  "data.user.edge_related_profiles.edges[].node.is_private": [
+   "boolean"
+  ],
+  "data.user.edge_related_profiles.edges[].node.is_verified": [
+   "boolean"
+  ],
+  "data.user.edge_related_profiles.edges[].node.profile_pic_url": [
+   "string"
+  ],
+  "data.user.edge_related_profiles.edges[].node.username": [
+   "string"
+  ],
+  "data.user.external_url": [
+   "string"
+  ],
+  "data.user.fbid": [
+   "string"
+  ],
+  "data.user.full_name": [
+   "string"
+  ],
+  "data.user.id": [
+   "string"
+  ],
+  "data.user.is_business_account": [
+   "boolean"
+  ],
+  "data.user.is_private": [
+   "boolean"
+  ],
+  "data.user.is_professional_account": [
+   "boolean"
+  ],
+  "data.user.is_verified": [
+   "boolean"
+  ],
+  "data.user.profile_pic_url": [
+   "string"
+  ],
+  "data.user.profile_pic_url_hd": [
+   "string"
+  ],
+  "data.user.username": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}

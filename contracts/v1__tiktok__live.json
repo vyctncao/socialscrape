@@ -1,0 +1,38 @@
+{
+ "path": "/v1/tiktok/live",
+ "fields": {
+  "cover_url": [
+   "string"
+  ],
+  "like_count": [
+   "integer"
+  ],
+  "owner": [
+   "object"
+  ],
+  "owner.display_name": [
+   "string"
+  ],
+  "owner.id": [
+   "string"
+  ],
+  "owner.username": [
+   "string"
+  ],
+  "room_id": [
+   "string"
+  ],
+  "status": [
+   "string"
+  ],
+  "success": [
+   "boolean"
+  ],
+  "title": [
+   "string"
+  ],
+  "viewer_count": [
+   "integer"
+  ]
+ }
+}

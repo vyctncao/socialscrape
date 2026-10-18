@@ -1,0 +1,17 @@
+{
+ "path": "/v1/instagram/profile/post-count",
+ "fields": {
+  "handle": [
+   "string"
+  ],
+  "is_estimated": [
+   "boolean"
+  ],
+  "media_count": [
+   "integer"
+  ],
+  "success": [
+   "boolean"
+  ]
+ }
+}
