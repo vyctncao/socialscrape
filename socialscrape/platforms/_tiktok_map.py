@@ -151,16 +151,19 @@ def cla_info(cla: dict[str, Any] | None) -> dict[str, Any] | None:
 def duration_ms(item: dict[str, Any]) -> int | None:
     """The post's own length in ms; None for photo posts (web video.duration is 0).
 
-    Web `video.duration` is whole seconds. An original sound's preciseVideoDuration is the
-    same clip measured precisely, so it refines the value when the two agree; for a reused
-    sound it is the *source* video's length and must not be used.
+    Web `video.duration` is whole seconds. The poster's own original sound's preciseVideoDuration
+    is the same clip measured precisely, so it refines the value when the two agree. For a reused
+    sound it is the *source* video's length and must not be used - and music.original marks the
+    sound, not this post: reusing another creator's original sound keeps it True.
     """
     seconds = to_int((item.get("video") or {}).get("duration"))
     if not seconds or seconds <= 0:
         return None
-    m = item.get("music") or {}
+    m, au = item.get("music") or {}, item.get("author") or {}
+    own = m.get("original") is True and bool(m.get("authorName")) and m["authorName"] in (
+        au.get("nickname"), au.get("uniqueId"))
     precise = (m.get("preciseDuration") or {}).get("preciseVideoDuration")
-    if m.get("original") is True and isinstance(precise, (int, float)) and abs(precise - seconds) < 2:
+    if own and isinstance(precise, (int, float)) and abs(precise - seconds) < 2:
         return round(precise * 1000)
     return seconds * 1000
 
@@ -186,18 +189,14 @@ def video(item: dict[str, Any], *, with_captions: bool) -> dict[str, Any]:
 
 def statistics(item: dict[str, Any]) -> dict[str, Any]:
     s, s2 = item.get("stats") or {}, item.get("statsV2") or {}
-
-    def count(key: str) -> int | None:
-        return next((n for n in (to_int(s2.get(key)), to_int(s.get(key))) if n is not None), None)
-
     return compact({
         "aweme_id": str(item["id"]),
-        "collect_count": count("collectCount"),
-        "comment_count": count("commentCount"),
-        "digg_count": count("diggCount"),
-        "play_count": count("playCount"),
-        "repost_count": count("repostCount"),
-        "share_count": count("shareCount"),
+        "collect_count": exact_count(s2, s, "collectCount"),
+        "comment_count": exact_count(s2, s, "commentCount"),
+        "digg_count": exact_count(s2, s, "diggCount"),
+        "play_count": exact_count(s2, s, "playCount"),
+        "repost_count": exact_count(s2, s, "repostCount"),
+        "share_count": exact_count(s2, s, "shareCount"),
     })
 
 
@@ -311,12 +310,21 @@ def aweme(item: dict[str, Any], *, detail: bool = False) -> dict[str, Any]:
 
 
 _AUTHOR_COUNTS = ("follower_count", "following_count", "total_favorited", "aweme_count", "favoriting_count")
+# The app pins counts past int32 just below 2**31 - 1 (2.4B plays -> play_count 2147483597).
+_PINNED = 2**31 - 1000
+
+
+def uncapped(app: dict[str, Any], web: dict[str, Any]) -> dict[str, int]:
+    """The web counts that replace app counts pinned at the int32 ceiling: only where the web's is larger."""
+    return {k: n for k, n in web.items()
+            if isinstance(app.get(k), int) and app[k] >= _PINNED and isinstance(n, int) and n > app[k]}
 
 
 def app_detail(a: dict[str, Any], web: dict[str, Any] | None = None) -> dict[str, Any]:
     """App aweme (music/aweme) -> SC aweme_detail: TikTok's object as-is plus the keys SC adds.
 
-    music/aweme zeroes the author's counts; they are filled from the web item when given.
+    music/aweme zeroes the author's counts; they are filled from the web item when given. Counts
+    the app pins at the int32 ceiling take the web item's larger (rounded) count.
     """
     au = a.get("author") if isinstance(a.get("author"), dict) else {}
     created = to_int(a.get("create_time"))
@@ -326,9 +334,12 @@ def app_detail(a: dict[str, Any], web: dict[str, Any] | None = None) -> dict[str
         "is_ad": a["is_ads"] if isinstance(a.get("is_ads"), bool) else None,
     })
     out = {**a, **{k: v for k, v in extra.items() if k not in a}}
+    if web and isinstance(a.get("statistics"), dict):
+        out["statistics"] = {**a["statistics"], **uncapped(a["statistics"], statistics(web))}
     if web and au:
-        counts = {k: v for k, v in author(web).items() if k in _AUTHOR_COUNTS and not au.get(k)}
-        out["author"] = {**au, **counts}
+        web_author = {k: v for k, v in author(web).items() if k in _AUTHOR_COUNTS}
+        counts = {k: v for k, v in web_author.items() if not au.get(k)}
+        out["author"] = {**au, **counts, **uncapped(au, web_author)}
     return out
 
 

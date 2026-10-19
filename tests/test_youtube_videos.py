@@ -464,11 +464,13 @@ def test_video_payload_comment_count_in_other_ui_languages():
     assert P.video_payload(info, {"engagementPanels": [panel]}, [], ui_tab("en"))["commentCountInt"] == 1064
 
 
-def like_button_page(label: str) -> dict:
+def like_button_page(label: str, title: str = "56\u00a0M", entity: dict | None = None) -> dict:
     """A watch page's ytInitialData with just the like button, labelled as in a localized UI."""
     button = nest(("segmentedLikeDislikeButtonViewModel", "likeButtonViewModel", "likeButtonViewModel",
                    "toggleButtonViewModel", "toggleButtonViewModel", "defaultButtonViewModel", "buttonViewModel"),
-                  {"accessibilityText": label, "title": "56\u00a0M"})
+                  {"accessibilityText": label, "title": title})
+    if entity is not None:
+        button["segmentedLikeDislikeButtonViewModel"]["likeCountEntity"] = entity
     primary = {"videoPrimaryInfoRenderer": {"videoActions": {"menuRenderer": {"topLevelButtons": [button]}}}}
     return nest(("contents", "twoColumnWatchNextResults", "results", "results"), {"contents": [primary]})
 
@@ -496,6 +498,35 @@ def test_video_payload_like_count_without_a_count_in_the_label():
     assert P.video_payload({"id": "abcdefghijk", "like_count": 7}, {}, [], ui_tab("en"))["likeCountInt"] == 7
     # a non-English label we can't read: no count beats yt-dlp's English misreading
     assert P.video_payload({"id": "abcdefghijk", "like_count": 56}, {}, [], ui_tab("fr"))["likeCountInt"] is None
+
+
+def test_video_payload_zero_likes():
+    # 6n1d992ODAU: nobody likes it, so its label has no number, but the button shows 0; its like count entity
+    # says 0 too, or is unset (two fetches of the same page)
+    zero = {"likeCountIfIndifferentNumber": "0", "likeCountIfLikedNumber": "0", "likeCountIfIndifferent": {
+        "content": "0"}}
+    unset = {"key": "unset_like_count_entity_key"}
+    for entity in (zero, unset, None):
+        page = like_button_page("like this video", "0", entity)
+        body = P.video_payload({"id": "6n1d992ODAU"}, page, [], ui_tab("en"))
+        assert body["likeCountInt"] == 0 and body["likeCountText"] == "0"
+    assert P.video_payload({"id": "6n1d992ODAU"}, like_button_page("J'aime cette vidéo", "0", zero), [],
+                           ui_tab("fr"))["likeCountInt"] == 0
+    # ratings off (KDqkFCM0CQ0) or likes hidden: the button says 'Like' and the entity has no number
+    for page in (like_button_page("Like", "Like", unset), like_button_page("like this video", "Like"),
+                 like_button_page("like this video", "Like", zero)):
+        assert P.video_payload({"id": "KDqkFCM0CQ0"}, page, [], ui_tab("en"))["likeCountInt"] is None
+    # a button showing 0 next to an entity with a count is no count we can trust
+    page = like_button_page("like this video", "0", {"likeCountIfIndifferentNumber": "3"})
+    assert P.video_payload({"id": "6n1d992ODAU"}, page, [], ui_tab("en"))["likeCountInt"] is None
+
+
+def test_video_payload_live_stream_title():
+    # yt-dlp appends the extraction time to a live stream's title; fulltitle is the title as shown
+    info = {"id": "jfKfPfyJRdk", "title": "lofi hip hop radio \U0001f4da beats to relax/study to 2026-10-19 14:05",
+            "fulltitle": "lofi hip hop radio \U0001f4da beats to relax/study to", "live_status": "is_live"}
+    assert P.video_payload(info, {}, [], ui_tab("en"))["title"] == "lofi hip hop radio \U0001f4da beats to relax/study to"
+    assert P.video_payload({"id": "abcdefghijk", "title": "Old"}, {}, [], ui_tab("en"))["title"] == "Old"
 
 
 def test_watch_next_videos_in_other_ui_languages():
@@ -737,6 +768,30 @@ def test_video_route_exact_comment_count(client, monkeypatch):
     monkeypatch.setattr(M, "call_next", lambda *a: (_ for _ in ()).throw(ExtractorError("HTTP Error 500")))
     body = client.get("/v1/youtube/video", params={"url": watch(ZOO)}).json()
     assert body["success"] and body["commentCountInt"] > 1_000_000  # falls back to the rounded figure
+
+
+def test_video_route_zero_comments(client, monkeypatch):
+    # 6n1d992ODAU has comments on but none: its comments panel header has no count, the comments header '0'
+    panel = {"engagementPanelSectionListRenderer": {
+        "panelIdentifier": "engagement-panel-comments-section",
+        "header": {"engagementPanelTitleHeaderRenderer": {"title": {"runs": [{"text": "Comments"}]}}}}}
+    page = {"initial_data": {"engagementPanels": [panel]}, "player_responses": []}
+    monkeypatch.setattr(M, "extract_watch", lambda ydl, v, process=True: ({"id": v}, page))
+    calls = []
+
+    def fake_next(ie, vid, query, note):
+        calls.append(note)
+        header = {"commentsHeaderRenderer": {"countText": {"runs": [{"text": "0"}, {"text": " Comments"}]}}}
+        return {"onResponseReceivedEndpoints": [{"reloadContinuationItemsCommand": {"continuationItems": [header]}}]}
+
+    monkeypatch.setattr(M, "call_next", fake_next)
+    body = client.get("/v1/youtube/video", params={"url": watch("6n1d992ODAU")}).json()
+    assert body["commentCountInt"] == 0 and body["commentCountText"] is None and len(calls) == 1
+    # comments off (-62C9R_41Sc): no comments panel at all, no extra request, no count
+    page["initial_data"] = {"engagementPanels": [
+        {"engagementPanelSectionListRenderer": {"panelIdentifier": "engagement-panel-structured-description"}}]}
+    body = client.get("/v1/youtube/video", params={"url": watch("-62C9R_41Sc")}).json()
+    assert body["success"] and body["commentCountInt"] is None and len(calls) == 1
 
 
 @pytest.mark.parametrize("path,params", [

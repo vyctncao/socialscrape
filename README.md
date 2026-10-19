@@ -92,13 +92,13 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 
 | Endpoint | Notes |
 |---|---|
-| `/v2/tiktok/video` | When the post is on its sound's first app-feed page, you get TikTok's app `aweme_detail` with exact counts and `author.region`. Otherwise it's the web item re-keyed to the app shape, with web-rounded counts. Photo posts are supported. |
+| `/v2/tiktok/video` | When the post is on its sound's first app-feed page, you get TikTok's app `aweme_detail` with exact counts and `author.region`; a count past int32, which the app pins at 2147483597, is the web post's rounded one instead (2400000000). Otherwise it's the web item re-keyed to the app shape, with web-rounded counts. The app feed now and then fails or leaves the post out, so the same post can come back in either shape. Photo posts are supported. |
 | `/v1/tiktok/video/transcript` | Native captions as WEBVTT. `language` takes ISO 639-1 or 639-2T codes (`en`, `eng`); `zh`, `zho` and `cmn` all pick TikTok's Mandarin track. `use_ai_as_fallback` uses local Whisper when enabled: a `language` the Whisper model can't transcribe is a 400, and the text is usually null when Whisper hears no speech (best effort, see AI transcription below). |
 | `/v1/tiktok/profile` | TikTok's web `userInfo` as-is. |
 | `/v3/tiktok/profile/videos` | Native `max_cursor`, newest first. `sort_by=popular` returns 501, and `include_pinned=false` can't be honored. TikTok's intermittent statusCode 10102 refusal is a retryable `503 upstream_blocked`. |
 | `/v1/tiktok/profile/region` | Read from the app API through the creator's own original sound. Returns 404 if none of their recent posts uses one; if the app API can't be reached, it's the same retryable 502/503 as `/song`. |
 | `/v1/tiktok/user/live`, `/v1/tiktok/live` | Live room data. `user/live` passes TikTok's live-page JS challenge with yt-dlp's solver; one it can't pass is a `503 upstream_blocked`. |
-| `/v1/tiktok/song`, `/v1/tiktok/song/videos` | App API, `cursor` paging. |
+| `/v1/tiktok/song`, `/v1/tiktok/song/videos` | App API, `cursor` paging. Counts past int32 are the app's pinned 2147483597. |
 | `/v1/tiktok/collection/videos` | Public collections, 30 per page. Only TikTok's statusCode 100001 (removed or non-public) is a 404; a private one (10216/10222) is a 403, a refusal of anonymous requests a 503, an unknown code a 500. |
 
 The other 19 return 501: comments and replies, followers and following, audience, every search endpoint, trending, popular creators, Shop, showcase and the Ad Library. yt-dlp has no TikTok extractor for any of them.
@@ -114,7 +114,7 @@ Anonymous Instagram is heavily restricted. Most endpoints return **only the firs
 | `/v1/instagram/profile`, `/v1/instagram/profile/post-count` | Bio, links, follower counts, first 12 posts. `allow_estimated` works as in ScrapeCreators (422 when only an estimate exists). A profile Instagram restricts for logged-out visitors (age-gated brands such as alcohol) returns `403 restricted_profile` here and on `user/posts`, `user/reels` and `user/highlights`; `post-count` still reads the count its page shows. |
 | `/v2/instagram/user/posts`, `/v1/instagram/user/reels` | First 12. Counts only for reels. A private account with no visible reels returns 403 on `user/reels`. |
 | `/v1/instagram/user/highlights`, `/v1/instagram/user/highlight/detail` | The first 10 logged-out highlights and the full highlight reel. A private account with none returns 403. |
-| `/v1/instagram/search/popular`, `/v1/instagram/search/hashtag`, `/v2/instagram/reels/search` | Instagram's logged-out tag and Popular pages: the first page, usually 12 posts. Broad topics that Instagram serves as a category hub (e.g. basketball) return up to ~220 posts without captions or usernames. Topics are case-insensitive. Not a Google index like ScrapeCreators uses, so its `date_posted` values and later pages return 501. |
+| `/v1/instagram/search/popular`, `/v1/instagram/search/hashtag`, `/v2/instagram/reels/search` | Instagram's logged-out tag and Popular pages: the first page, usually 12 posts. Broad topics that Instagram serves as a category hub (e.g. basketball) return up to ~220 posts without captions or usernames. Topics are case-insensitive. Videos carry Instagram's play count (`play_count` on `search/popular`, `video_play_count` on the other two); there are no like/comment counts. Not a Google index like ScrapeCreators uses, so its `date_posted` values and later pages return 501. |
 | `/v2/instagram/media/transcript` | Local Whisper only; 501 unless `SOCIALSCRAPE_TRANSCRIBE` is set. One entry per carousel video; text is null for videos without audio, and usually for videos without speech (best effort). Posts without a video return 404. |
 
 The other 8 return 501: basic-profile by id, tagged posts, top search, profile search, audio reels, trending reels, comment replies and the profile embed.

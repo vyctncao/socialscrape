@@ -216,10 +216,21 @@ def test_duration_ms():
     assert M.duration_ms(_web_item()) == 14861  # own sound: precise length of this clip
     reused = _web_item(music={"id": "9", "original": False, "preciseDuration": {"preciseVideoDuration": 60.2}})
     assert M.duration_ms(reused) == 15000  # the sound's source video is 60 s: not this post's length
-    far = _web_item(music={"id": "9", "original": True, "preciseDuration": {"preciseVideoDuration": 60.2}})
+    far = _web_item(music={"id": "9", "authorName": "someone", "original": True,
+                           "preciseDuration": {"preciseVideoDuration": 60.2}})
     assert M.duration_ms(far) == 15000
     photo = _web_item(video={"duration": 0, "width": 0, "height": 0})
     assert M.duration_ms(photo) is None and "duration" not in M.aweme(photo)["video"]
+    # music.original marks the sound, not the post: miotravelapp 7656321429029555477 reuses kragord's
+    # 61.127 s original sound and is 61.6 s long (web duration 61)
+    borrowed = _web_item(video={"duration": 61}, music={"id": "7376306553648515872", "authorName": "kragord",
+                                                         "original": True,
+                                                         "preciseDuration": {"preciseVideoDuration": 61.127}})
+    assert M.duration_ms(borrowed) == 61000
+    own = _web_item()["music"]
+    assert M.duration_ms(_web_item(music={**own, "authorName": "Some One"})) == 14861  # by nickname
+    assert M.duration_ms(_web_item(music={**own, "authorName": ""})) == 15000
+    assert M.duration_ms(_web_item(music={**own, "authorName": None}, author={})) == 15000
 
 
 def test_counts_survive_int32_overflow():
@@ -241,6 +252,11 @@ def test_counts_survive_int32_overflow():
     assert M.exact_stats({"heartCount": -1894967296, "heart": 2400000000}, None)["heartCount"] == 2400000000
     assert M.exact_stats(None, None) is None
 
+    # post counts: zachking 6768504823336815877 has stats.playCount -1894967296, statsV2 "2400000000"
+    plays = M.statistics(_web_item(stats={"playCount": -1894967296}, statsV2={"playCount": "2400000000"}))
+    assert plays["play_count"] == 2400000000
+    assert "play_count" not in M.statistics(_web_item(stats={"playCount": -1894967296}, statsV2={}))
+
 
 def test_app_detail():
     app = {"aweme_id": "7300000000000000001", "create_time": 1700000000, "is_ads": True,
@@ -257,6 +273,25 @@ def test_app_detail():
     assert au["region"] == "US" and au["uid"] == "42"
     assert M.app_detail({**app, "is_ad": False, "url": "u"}, None)["is_ad"] is False
     assert M.app_detail({**app, "is_ad": False, "url": "u"})["url"] == "u"
+
+
+def test_app_detail_unpins_int32_counts():
+    # music/aweme pins counts past int32: zachking 6768504823336815877's 2.4B plays are 2147483597 there
+    app = {"aweme_id": "6768504823336815877", "author": {"unique_id": "zachking", "total_favorited": 2147483597},
+           "statistics": {"aweme_id": "6768504823336815877", "play_count": 2147483597, "digg_count": 29607718,
+                          "download_count": 569289}}
+    web = _web_item(stats={"playCount": -1894967296, "diggCount": 29600000},
+                    statsV2={"playCount": "2400000000", "diggCount": "29600000"},
+                    authorStatsV2={"heartCount": "2689148052"})
+    d = M.app_detail(app, web)
+    assert d["statistics"] == {"aweme_id": "6768504823336815877", "play_count": 2400000000,
+                               "digg_count": 29607718, "download_count": 569289}  # exact app counts are kept
+    assert d["author"]["total_favorited"] == 2689148052
+    assert app["statistics"]["play_count"] == 2147483597  # the app object isn't mutated
+    assert M.app_detail(app)["statistics"]["play_count"] == 2147483597  # no web item: as TikTok sent it
+    # near the ceiling but not beaten by the web's count: a real value
+    near = {**app, "statistics": {"play_count": 2147483600}}
+    assert M.app_detail(near, _web_item(statsV2={"playCount": "2100000000"}))["statistics"]["play_count"] == 2147483600
 
 
 def test_aweme_never_invents_values():
@@ -996,7 +1031,12 @@ def live_ok(client, path, **params):
 
 @pytest.fixture(scope="module")
 def stool_video(client):
-    return live_ok(client, "/v2/tiktok/video", url=STOOL_VIDEO, get_transcript="true")
+    """The app aweme (own sound). Now and then TikTok's app feed fails or leaves the post out and the web shape is
+    served instead, so that is retried once."""
+    body = live_ok(client, "/v2/tiktok/video", url=STOOL_VIDEO, get_transcript="true")
+    if "without_watermark" not in body["aweme_detail"]:  # an app-only field
+        body = live_ok(client, "/v2/tiktok/video", url=STOOL_VIDEO, get_transcript="true")
+    return body
 
 
 @pytest.fixture(scope="module")

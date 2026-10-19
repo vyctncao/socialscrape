@@ -15,7 +15,7 @@ from tests.contract import check
 from tests.e2e import LEAKS, app_with, skip_if_blocked, ytdlp_info
 
 ZOO = "jNQXAC9IVRw"  # "Me at the zoo": uploaded en captions, ~10.6M comments, auto chapters
-SPONSORED = "AVO0ifle-OU"  # paid-promotion badge, BetterHelp, 6 chapters, en ASR
+SPONSORED = "AVO0ifle-OU"  # paid-promotion badge, BetterHelp, 6 auto chapters, en ASR
 CHAPTERS = "rfscVS0vtbw"  # freeCodeCamp Python course: 35 description chapters, uploaded subs only
 SHORT = "AwMy11R3au0"  # a Short without captions
 SPANISH = "I1CXqUxhBj4"  # Spanish original, uploaded es/fr/pt tracks
@@ -131,6 +131,10 @@ def test_video_kinds(client):
     short = ok(client, "/v1/youtube/video", url=f"https://www.youtube.com/shorts/{SHORT}")
     assert short["type"] == "short" and short["chapters"] == [] and short["durationMs"] > 0
     sponsored = ok(client, "/v1/youtube/video", url=watch(SPONSORED))
+    if not sponsored["chapters"]:
+        # its chapters are YouTube's auto chapters (none in the description), now and then missing from a watch page
+        # (2026-10-19: none once, then 6 on five fetches in a row); yt-dlp's chapters are passed through as they are
+        sponsored = ok(client, "/v1/youtube/video", url=watch(SPONSORED))
     assert sponsored["isPaidPromotion"] is True and len(sponsored["chapters"]) >= 2
     starts = [c["startMs"] for c in sponsored["chapters"]]
     assert starts == sorted(starts) and starts[0] == 0
@@ -341,8 +345,11 @@ def test_replies_walk_and_cursors(client):
         if not token:
             break
     assert len(seen) == len(set(seen))
-    if parent["engagement"]["replies"] > len(seen):
-        assert token  # more replies remain
+    if token is None:
+        # the last page was reached: YouTube's reply count can include replies it doesn't serve (deleted or held
+        # for review; 2026-10-19 on this video: 11 counted/10 served, 25/24, 85/84), so allow a few
+        counted = parent["engagement"]["replies"]
+        assert len(seen) >= counted - max(2, counted // 10), (counted, len(seen))
 
 
 def test_replies_missing_and_bad_token(client):

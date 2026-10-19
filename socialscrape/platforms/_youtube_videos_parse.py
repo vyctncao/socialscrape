@@ -273,24 +273,47 @@ def description_links(initial_data: dict[str, Any], video_id: str) -> list[dict[
     return out
 
 
-def comment_count_text(initial_data: dict[str, Any]) -> str | None:
-    """Comment count as the watch page shows it ('358', '1.6K')."""
+def comments_panel_header(initial_data: dict[str, Any]) -> dict[str, Any] | None:
+    """The watch page's comments panel header; None when comments are off."""
     return traverse_obj(initial_data, (
         "engagementPanels", ..., "engagementPanelSectionListRenderer",
         {lambda r: r if r.get("panelIdentifier") == "engagement-panel-comments-section" else None},
-        "header", "engagementPanelTitleHeaderRenderer", "contextualInfo", {text_of}, any))
+        "header", "engagementPanelTitleHeaderRenderer", {dict}, any))
+
+
+def comment_count_text(initial_data: dict[str, Any]) -> str | None:
+    """Comment count as the watch page shows it ('358', '1.6K'); a video without comments has none."""
+    return text_of((comments_panel_header(initial_data) or {}).get("contextualInfo"))
 
 
 def publish_date_text(initial_data: dict[str, Any]) -> str | None:
     return text_of(_renderer(initial_data, "videoPrimaryInfoRenderer").get("dateText"))
 
 
+_LIKE_BUTTON = ("likeButtonViewModel", "likeButtonViewModel", "toggleButtonViewModel", "toggleButtonViewModel",
+                "defaultButtonViewModel", "buttonViewModel")
+
+
+def _like_buttons(initial_data: dict[str, Any]) -> list[dict[str, Any]]:
+    return traverse_obj(_renderer(initial_data, "videoPrimaryInfoRenderer"), (
+        "videoActions", "menuRenderer", "topLevelButtons", ..., "segmentedLikeDislikeButtonViewModel", {dict})) or []
+
+
 def like_label(initial_data: dict[str, Any]) -> str | None:
     """The like button's label, with the exact count ('like this video along with 56,758,819 other people')."""
-    return traverse_obj(_renderer(initial_data, "videoPrimaryInfoRenderer"), (
-        "videoActions", "menuRenderer", "topLevelButtons", ..., "segmentedLikeDislikeButtonViewModel",
-        "likeButtonViewModel", "likeButtonViewModel", "toggleButtonViewModel", "toggleButtonViewModel",
-        "defaultButtonViewModel", "buttonViewModel", "accessibilityText", {str}, any))
+    return traverse_obj(_like_buttons(initial_data), (..., *_LIKE_BUTTON, "accessibilityText", {str}, any))
+
+
+def zero_likes(initial_data: dict[str, Any]) -> bool:
+    """Nobody likes the video: its label has no number then ('like this video'), but the button shows 0. The like
+    count entity says 0 as well or, on some fetches of the same page, is unset. Hidden likes and ratings off show
+    'Like' instead."""
+    for button in _like_buttons(initial_data):
+        shown = traverse_obj(button, (*_LIKE_BUTTON, "title", {str})) or ""
+        number = traverse_obj(button, ("likeCountEntity", "likeCountIfIndifferentNumber", {str}))
+        if shown.strip().isdecimal() and int(shown) == 0 and number in (None, "0"):
+            return True
+    return False
 
 
 def collaborators(initial_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -504,6 +527,8 @@ def video_payload(info: dict[str, Any], initial_data: dict[str, Any], player_res
     if comment_count is None and (not lang or lang.startswith("en")):
         comment_count = info.get("comment_count")  # yt-dlp parses the label as English ('1064만' -> 1064)
     like_count = exact_count(like_label(initial_data))
+    if like_count is None and zero_likes(initial_data):
+        like_count = 0
     if like_count is None and (not lang or lang.startswith("en")):
         like_count = info.get("like_count")  # yt-dlp parses the label as English ('56 758 819' -> 56)
     duration, view_count = info.get("duration"), info.get("view_count")
@@ -514,7 +539,7 @@ def video_payload(info: dict[str, Any], initial_data: dict[str, Any], player_res
         "url": WATCH.format(vid),
         "publishDate": publish_date(player_responses, info),
         "type": video_type(info),
-        "title": info.get("title"),
+        "title": info.get("fulltitle") or info.get("title"),  # 'title' of a live stream ends with the time
         "description": info.get("description") or None,
         "descriptionLinks": description_links(initial_data, vid),
         "commentCountText": comments_text,

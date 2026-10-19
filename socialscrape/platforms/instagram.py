@@ -549,7 +549,8 @@ def map_post(product: dict[str, Any], media: dict[str, Any] | None = None, *,
         "video_url": _video_url(product) if is_video else None,
         "has_audio": product.get("has_audio") if is_video else None,
         "video_view_count": product.get("view_count") if is_video else None,
-        "video_play_count": product.get("play_count") if is_video and play_count else None,
+        # a logged-in item's play_count adds Facebook plays; ig_play_count is Instagram's alone
+        "video_play_count": traverse_obj(product, "ig_play_count", "play_count") if is_video and play_count else None,
         "product_type": product.get("product_type"),
         "video_duration": video_duration(product) if is_video else None,
         "clips_music_attribution_info": music_attribution(product.get("clips_metadata")),
@@ -684,10 +685,19 @@ _COUNT_KEYS = ("like_count", "comment_count", "play_count")
 
 
 def clip_counts(user: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Reels-tab clips by pk -> their like/comment/play counts (the posts tab has none)."""
-    return {str(node["pk"]): {k: node[k] for k in _COUNT_KEYS if isinstance(node.get(k), int)}
-            for node in traverse_obj(user, ("polaris_clips_connection", "edges", ..., "node", {dict}))
-            if node.get("pk")}
+    """Reels-tab clips by pk -> their like/comment/play counts (the posts tab has none).
+
+    The logged-out play_count is Instagram's alone, so it is also ig_play_count (as in user/reels).
+    """
+    out = {}
+    for node in traverse_obj(user, ("polaris_clips_connection", "edges", ..., "node", {dict})):
+        if not node.get("pk"):
+            continue
+        counts = {k: node[k] for k in _COUNT_KEYS if isinstance(node.get(k), int)}
+        if "play_count" in counts:
+            counts["ig_play_count"] = counts["play_count"]
+        out[str(node["pk"])] = counts
+    return out
 
 
 def map_user_posts(user: dict[str, Any], counts: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -836,6 +846,7 @@ def map_hashtag_post(node: dict[str, Any]) -> dict[str, Any]:
         "thumbnail_src": node.get("display_uri"),
         "display_url": node.get("display_uri"),
         "video_url": _video_url(node),
+        "video_play_count": node.get("play_count") if video else None,
         "is_video": video,
         "owner": compact({"id": str_or_none(user.get("pk")), "username": user.get("username"),
                           "is_verified": user.get("is_verified"), "profile_pic_url": user.get("profile_pic_url")}),
@@ -968,11 +979,11 @@ async def instagram_post_count(handle: str = Query(...), allow_estimated: str | 
 @sc_get(router, "/v2/instagram/user/posts", source="yt-dlp InstagramUserIE profile page (posts + reels tab Relay data)",
         notes="First 12 posts of the logged-out profile page only: id, code, media_type, product_type, caption "
               "text, display_uri, url and each post's own author (collaborators included). like_count, "
-              "comment_count and play_count are joined from the profile's /reels/ tab (a second page request) and "
-              "so only appear on reels among its first 12 clips; they are left out if that tab fails. No "
-              "taken_at or image/video versions. next_max_id is never returned (InstagramUserIE's timeline query "
-              "is rejected by Instagram) and passing one returns 501. A restricted (age-gated) profile returns 403 "
-              "restricted_profile. trim is ignored.")
+              "comment_count and play_count (= ig_play_count) are joined from the profile's /reels/ tab (a second "
+              "page request) and so only appear on reels among its first 12 clips; they are left out if that tab "
+              "fails. No taken_at or image/video versions. next_max_id is never returned (InstagramUserIE's "
+              "timeline query is rejected by Instagram) and passing one returns 501. A restricted (age-gated) "
+              "profile returns 403 restricted_profile. trim is ignored.")
 async def instagram_user_posts(handle: str = Query(...), next_max_id: str | None = None,
                                trim: str | None = None) -> dict[str, Any]:
     handle = clean_handle(handle)
@@ -1080,8 +1091,8 @@ def _page_number(page: str | None, name: str = "page", code: str = "bad_page") -
               "basketball) return every post of the hub's sections (up to ~220), without captions or usernames. "
               "The hashtag is matched case-insensitively and echoed lower-cased. date_posted (one of ScrapeCreators' "
               "values; others return 400) and cursor 2-11 return 501 (cursor 1 is the first page; a cursor outside "
-              "1-11 or not a number returns 400, as in ScrapeCreators); no cursor is returned. No like/comment "
-              "counts, timestamps or comments.")
+              "1-11 or not a number returns 400, as in ScrapeCreators); no cursor is returned. Videos carry "
+              "video_play_count (Instagram's play count); no like/comment counts, timestamps or comments.")
 async def instagram_search_hashtag(hashtag: str = Query(...), date_posted: str | None = None,
                                    media_type: str | None = None, cursor: str | None = None) -> dict[str, Any]:
     tag = clean_topic(hashtag, single_word=True)
@@ -1104,7 +1115,8 @@ async def instagram_search_hashtag(hashtag: str = Query(...), date_posted: str |
         notes="Not Google-indexed like ScrapeCreators: the reels on Instagram's logged-out Popular page for the "
               "query (first page, usually 12). Broad topics Instagram serves as a category hub (e.g. basketball) "
               "return every reel of the hub's sections (up to ~220), without captions or usernames. The query is "
-              "matched case-insensitively. No like/comment counts, taken_at, location or audio. page 2-11 and "
+              "matched case-insensitively. Each reel carries video_play_count (Instagram's play count); no "
+              "like/comment counts, taken_at, location or audio. page 2-11 and "
               "date_posted (last-week/last-month/last-year) return 501; page outside 1-11 or another date_posted "
               "returns 400.")
 async def instagram_reels_search(query: str = Query(...), date_posted: str | None = None,

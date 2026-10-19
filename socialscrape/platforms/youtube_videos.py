@@ -301,13 +301,15 @@ async def run(fn: Callable[[yt_dlp.YoutubeDL], dict[str, Any]], **opts: Any) -> 
 @sc_get(router, "/v1/youtube/video", source="yt-dlp YoutubeIE (info dict + its watch-page ytInitialData/player responses)",
         notes="language sets YouTube's UI language (youtube:lang extractor arg; BCP-47 tags are mapped to the closest "
               "YouTube UI language, unknown ones fall back to English). likeCountInt is exact, read from the like "
-              "button's label in any UI language (null when likes are hidden). watchNextVideos publish dates are "
-              "estimated from their relative text ('2 days ago', localized ones too) and their viewCountInt is read "
-              "from YouTube's localized short count ('46万'); lengthText uses ':' separators. commentCountInt is "
-              "exact: when the watch page rounds it ('10M') one extra comments-header request is made. captionTracks "
-              "baseUrls download without a PO token. Age-restricted videos are 403 (YouTube withholds the watch page "
-              "without an age-verified login). descriptionLinks/chapters/collaborators item shapes are our own (SC's "
-              "example lists are empty). cache_max_age handled by the server cache.")
+              "button's label in any UI language (0 when nobody likes the video, null when likes are hidden or "
+              "ratings are off). watchNextVideos publish dates are estimated from their relative text ('2 days ago', "
+              "localized ones too) and their viewCountInt is read from YouTube's localized short count ('46万'); "
+              "lengthText uses ':' separators. commentCountInt is exact: when the watch page rounds it ('10M'), or "
+              "shows no count with comments on (0 comments), one extra comments-header request is made; it is null "
+              "when comments are off. A live stream's title is the one shown, without the time yt-dlp appends. "
+              "captionTracks baseUrls download without a PO token. Age-restricted videos are 403 (YouTube withholds "
+              "the watch page without an age-verified login). descriptionLinks/chapters/collaborators item shapes are "
+              "our own (SC's example lists are empty). cache_max_age handled by the server cache.")
 async def youtube_video(url: str = Query(...), language: str | None = None):
     vid = video_id(url)
 
@@ -315,7 +317,10 @@ async def youtube_video(url: str = Query(...), language: str | None = None):
         info, raw = extract_watch(ydl, vid)
         if is_age_restricted(raw["player_responses"]):
             raise Forbidden(AGE_RESTRICTED, code="age_restricted")
-        exact = exact_comment_count(ydl, vid) if P.is_rounded(P.comment_count_text(raw["initial_data"])) else None
+        shown = P.comment_count_text(raw["initial_data"])
+        # rounded ('10M'), or no count at all on a panel that has comments on: 0 comments
+        wanted = P.is_rounded(shown) or (shown is None and P.comments_panel_header(raw["initial_data"]) is not None)
+        exact = exact_comment_count(ydl, vid) if wanted else None
         return P.video_payload(ydl.sanitize_info(info), raw["initial_data"], raw["player_responses"],
                                ydl.get_info_extractor("YoutubeTab"), comment_count=exact)
 

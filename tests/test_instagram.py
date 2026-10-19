@@ -345,6 +345,8 @@ def test_map_post_play_count_switch():
     counted = {**REEL, "play_count": 10, "view_count": 5}
     assert ig.map_post(counted)["video_play_count"] == 10
     assert "video_play_count" not in ig.map_post(counted, play_count=False)
+    # a logged-in media/info item's play_count adds Facebook plays; video_play_count is Instagram's alone
+    assert ig.map_post({**counted, "ig_play_count": 7})["video_play_count"] == 7
 
 
 def test_map_comment():
@@ -387,7 +389,8 @@ def test_map_user_posts():
     assert first["user"]["fbid_v2"] == "17841400515130334" and "caption" not in second
     assert first["user"]["full_name"] == "Jane Williamson" and first["user"]["is_verified"] is True
     assert (first["like_count"], first["comment_count"], first["play_count"]) == (1743588, 18709, 30850829)
-    assert "like_count" not in second
+    assert first["ig_play_count"] == 30850829  # the logged-out count is Instagram's alone
+    assert "like_count" not in second and "ig_play_count" not in second
     # a collab post on jane's grid is authored by the collaborator, not by the profile owner
     assert collab["id"] == "43_777" and collab["user"] == collab["owner"] == {
         "pk": "777", "pk_id": "777", "id": "777", "username": "bob", "fbid_v2": "17841400000000777"}
@@ -445,6 +448,7 @@ def test_map_popular_and_hashtag():
     posts = [ig.map_hashtag_post(n) for n in ig.topic_nodes(TOPIC)]
     assert posts[0]["id"] == "3934230212413674973" and posts[0]["__typename"] == "XDTGraphVideo"
     assert posts[0]["owner"]["id"] == "900" and posts[1]["is_video"] is False
+    assert posts[0]["video_play_count"] == 7162320 and "video_play_count" not in posts[1]
     assert_conforms(_sc({"hashtag": "funnydogs", "posts": posts}), "/v1/instagram/search/hashtag",
                     min_coverage=0.25)
 
@@ -558,6 +562,7 @@ def test_routes_offline(client, stubbed):
 
     body = client.get("/v2/instagram/reels/search", params={"query": "funny dogs", "page": "1"}).json()
     assert [r["shortcode"] for r in body["reels"]] == ["DaZMYijhtXd"] and body["reels"][0]["is_video"] is True
+    assert body["reels"][0]["video_play_count"] == 7162320
     assert stubbed[-1] == "funny dogs"
     assert_conforms(body, "/v2/instagram/reels/search", min_coverage=0.25)
 

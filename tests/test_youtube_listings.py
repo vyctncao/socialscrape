@@ -326,6 +326,21 @@ def test_lockup_video():
     assert P.lockup_video({**LOCKUP_VIDEO, "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST"}) is None
 
 
+def test_length():
+    assert P.length("57:59") == ("57:59", 3479) and P.length("  4:14 ") == ("4:14", 254)
+    # a years-long stream's hours are digit-grouped (LofiGirl's 5qap5aO4i9A: '20,772:51:34'), per UI language
+    for shown in ("20,772:51:34", "20.772:51:34", "20 772:51:34", "20\u202f772:51:34", "20\u00a0772:51:34"):
+        assert P.length(shown) == (shown, 74782294), shown
+    for junk in ("1,234", "20,77:51:34", "1,234:56", "LIVE", "", None, 5):
+        assert P.length(junk) == (None, None), junk
+    badge = {"thumbnailBadgeViewModel": {"text": "20,772:51:34"}}
+    long_stream = copy.deepcopy(LOCKUP_VIDEO)
+    long_stream["contentImage"]["thumbnailViewModel"]["overlays"] = [
+        {"thumbnailBottomOverlayViewModel": {"badges": [badge]}}]
+    v = P.lockup_video(long_stream)
+    assert (v["lengthText"], v["lengthSeconds"]) == ("20,772:51:34", 74782294) and v["badges"] == []
+
+
 def playlist_header(*parts: str) -> dict:
     return {"header": {"pageHeaderRenderer": {"content": {"pageHeaderViewModel": {"metadata": {
         "contentMetadataViewModel": {"metadataRows": [

@@ -29,6 +29,8 @@ CONTINUATION_ACTIONS = ("onResponseReceivedActions", "onResponseReceivedEndpoint
 SKIP_KEYS = frozenset({"adSlotRenderer", "searchPyvRenderer", "promotedSparklesWebRenderer", "chipBarViewModel",
                        "feedFilterChipBarRenderer", "header"})
 _DURATION = re.compile(r"^\d+(?::\d{2}){1,2}$")
+# A years-long stream's hours are digit-grouped: '20,772:51:34'.
+_GROUPED_HOURS = re.compile(r"^\d{1,3}(?:[,.\u00a0\u202f' ]\d{3})+(?=:\d{2}:\d{2}$)")
 PLAYLIST_TYPES = ("LOCKUP_CONTENT_TYPE_PLAYLIST", "LOCKUP_CONTENT_TYPE_PODCAST", "LOCKUP_CONTENT_TYPE_SHOW")
 
 
@@ -91,9 +93,13 @@ def watch_url(video_id: str) -> str:
 
 
 def length(value: Any) -> tuple[str | None, int | None]:
-    """'57:59' -> ('57:59', 3479); anything else -> (None, None)."""
-    if isinstance(value, str) and _DURATION.match(value.strip()):
-        return value.strip(), int(parse_duration(value))
+    """'57:59' -> ('57:59', 3479), '20,772:51:34' -> ('20,772:51:34', 74782294); anything else -> (None, None)."""
+    if not isinstance(value, str):
+        return None, None
+    shown = value.strip()
+    plain = _GROUPED_HOURS.sub(lambda m: re.sub(r"\D", "", m.group()), shown)
+    if _DURATION.match(plain):
+        return shown, int(parse_duration(plain))
     return None, None
 
 

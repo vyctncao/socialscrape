@@ -367,11 +367,13 @@ def _music_page(ydl: yt_dlp.YoutubeDL, clip_id: str, cursor: int) -> dict[str, A
         notes="The post is read from its web page, then looked up on the first page of its sound's app feed "
               "(TikTokSoundIE's music/aweme). When found - typical for original sounds - aweme_detail is TikTok's "
               "app object as-is (exact counts, has_watermark, download_no_watermark_addr, author.region, ...) plus "
-              "url/create_time_utc/is_ad (from is_ads); the author counts the app feed zeroes are filled from the web "
-              "post. Otherwise it is the web post re-keyed to the app shape: "
-              "app-only fields are absent, download_addr is the watermarked web URL, counts are TikTok's web "
+              "url/create_time_utc/is_ad (from is_ads); the author counts the app feed zeroes, and any count past "
+              "int32 it pins at 2147483597, are taken from the web post (rounded there: 2400000000). Otherwise it "
+              "is the web post re-keyed to the app shape: app-only fields are absent, download_addr is the "
+              "watermarked web URL, counts are TikTok's web "
               "rounding (42160618 plays -> 42200000) and is_ad is the web isAd flag, which can disagree with the "
-              "app's is_ads. Photo/slideshow posts carry image_post_info; vm./vt./t/ short links are resolved like "
+              "app's is_ads. The app feed now and then fails or leaves the post out, so the same post can come back "
+              "in either shape. Photo/slideshow posts carry image_post_info; vm./vt./t/ short links are resolved like "
               "TikTokVMIE. get_transcript returns native WEBVTT captions only. region, trim and download_media are "
               "ignored. TikTokSoundIE is marked broken in yt-dlp, so the app path may disappear without notice.")
 async def tiktok_video(url: str = Query(...), get_transcript: str | None = None, region: str | None = None,
@@ -574,8 +576,9 @@ async def tiktok_song(clipId: str = Query(...)) -> dict[str, Any]:
 
 
 @sc_get(router, "/v1/tiktok/song/videos", source="yt-dlp TikTokSoundIE (app API aweme/v1/music/aweme)",
-        notes="TikTok app response as-is (~20 per page). cursor is the offset from the previous page and is "
-              "omitted on the last page; a cursor that isn't such an offset is a 400 bad_cursor.")
+        notes="TikTok app response as-is (~20 per page), so counts past int32 are the app's pinned 2147483597. "
+              "cursor is the offset from the previous page and is omitted on the last page; a cursor that isn't "
+              "such an offset is a 400 bad_cursor.")
 async def tiktok_song_videos(clipId: str | None = None, cursor: str | None = None) -> dict[str, Any]:
     require_one(clipId=clipId)
     clip = _numeric("clipId", clipId)

@@ -77,9 +77,18 @@ def err(c, path: str, status: int, code: str, **params) -> dict:
 # --- /v2/tiktok/video --------------------------------------------------------------------------
 
 
+def app_post(c, **params) -> dict:
+    """/v2/tiktok/video for STOOL_VIDEO, a post on its sound's app feed. Now and then TikTok's app feed fails or leaves
+    the post out, and the web shape is served instead (2026-10-19: once in 47 calls), so that is retried once."""
+    body = ok(c, VIDEO, url=STOOL_VIDEO, **params)
+    if "without_watermark" not in body["aweme_detail"]:  # an app-only field
+        body = ok(c, VIDEO, url=STOOL_VIDEO, **params)
+    return body
+
+
 @pytest.fixture(scope="module")
 def stool_post(client) -> dict:
-    return ok(client, VIDEO, url=STOOL_VIDEO)
+    return app_post(client)
 
 
 @pytest.mark.live
@@ -169,7 +178,7 @@ def test_get_transcript_flag(client, stool_post):
 
 @pytest.mark.live
 def test_video_ignored_params(client, stool_post):
-    body = ok(client, VIDEO, url=STOOL_VIDEO, region="GB", trim="true", download_media="true")
+    body = app_post(client, region="GB", trim="true", download_media="true")
     assert body["aweme_detail"]["aweme_id"] == STOOL_ID
     assert set(body["aweme_detail"]) == set(stool_post["aweme_detail"])
 
