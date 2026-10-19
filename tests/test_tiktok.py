@@ -202,14 +202,17 @@ def test_aweme_mapping():
     au = a["author"]
     assert au["uid"] == "42" and au["unique_id"] == "someone" and au["secret"] == 0
     assert au["total_favorited"] == 99 and au["aweme_count"] == 5 and "room_id" not in au
-    assert "music" not in a and "image_post_info" not in a  # profile-feed shape
+    assert "music" not in a and "image_post_info" not in a  # profile-feed shape, and no images on a video
 
-    d = M.aweme(_web_item(imagePost={"images": [{"imageURL": {"urlList": ["https://img/1"]},
-                                                 "imageWidth": 1080, "imageHeight": 1440}]}), detail=True)
+    photo = _web_item(imagePost={"images": [{"imageURL": {"urlList": ["https://img/1"]},
+                                             "imageWidth": 1080, "imageHeight": 1440}]})
+    images = {"images": [{"display_image": {"url_list": ["https://img/1"], "width": 1080, "height": 1440}}]}
+    p = M.aweme(photo)  # a photo post in the profile feed keeps its images (wapo 7697300746554838302: 10)
+    assert p["image_post_info"] == images and "music" not in p
+    d = M.aweme(photo, detail=True)
     assert "cla_info" not in d["video"]
     assert d["music"]["id_str"] == "555" and d["music"]["author"] == "someone" and d["music"]["is_original"] is True
-    assert d["image_post_info"] == {"images": [{"display_image": {"url_list": ["https://img/1"], "width": 1080,
-                                                                  "height": 1440}}]}
+    assert d["image_post_info"] == images
 
 
 def test_duration_ms():

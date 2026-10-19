@@ -15,6 +15,7 @@ import binascii
 import copy
 import hashlib
 import re
+import time
 import unicodedata
 import urllib.parse
 from collections.abc import Callable
@@ -46,6 +47,7 @@ _SHORT_KEYS = ("shortsLockupViewModel", "reelItemRenderer")
 _SHELF_KEYS = ("gridShelfViewModel", "shelfRenderer", "reelShelfRenderer")
 _MWEB_FEED = "FEhashtag"  # cursor 't' meaning: start the hashtag feed on the mweb client
 _READ_ON_PAGES = 3  # most pages fetched past one that only repeats items already served (see _read_on)
+_EMPTY_PAGE_WAITS = (1.0, 1.0)  # s before each re-ask for a hashtag Shorts page that came back empty (see _continue)
 _SRC = "yt-dlp YoutubeTabIE"
 _APPROX = ("Counts are YouTube's display values (abbreviated ones like '251M' are approximate); "
            "publishedTime is derived from relative text ('3 weeks ago') and is approximate.")
@@ -315,6 +317,20 @@ def _visitor(resp: dict[str, Any]) -> str | None:
     return traverse_obj(resp, ("responseContext", "visitorData", {str}))
 
 
+def _continue(ie: Any, token: str, ep: str = "browse", *, again: bool = False, **kw: Any) -> dict[str, Any]:
+    """_api on a continuation token (kw are _api's). With `again`, a page with no items and no token is asked for
+    again after each of _EMPTY_PAGE_WAITS in turn, until one has either: for a second or so after serving a page,
+    a hashtag's Shorts tab answers a request for the next one with such a page, and a script paging through asks
+    for it straight away."""
+    resp = _api(ie, {"continuation": token}, ep, **kw)
+    for wait in _EMPTY_PAGE_WAITS if again else ():
+        if any(p.walk(p.continuation_items(resp))):
+            break
+        time.sleep(wait)
+        resp = _api(ie, {"continuation": token}, ep, **kw)
+    return resp
+
+
 def _read_on(ie: Any, resp: dict[str, Any], payload: Any, seen: _Seen,
              serve: Callable[[list[tuple[str, dict]]], dict[str, list]], ep: str = "browse",
              **kw: Any) -> tuple[dict[str, list], list[tuple[str, dict]], list[str], dict[str, Any]]:
@@ -323,8 +339,8 @@ def _read_on(ie: Any, resp: dict[str, Any], payload: Any, seen: _Seen,
     A page that only repeats items `seen` already served (YouTube's Shorts and search feeds now and then re-send
     a whole batch) is replaced by the page after it, up to _READ_ON_PAGES times; past that the feed is taken to
     have come round again and ends. Only such pages are read past: one that serves nothing without repeating
-    anything (it held only items `serve` doesn't map) is returned with its tokens. kw are _api's client / region /
-    visitor."""
+    anything (it held only items `serve` doesn't map) is returned with its tokens. kw are _continue's again and
+    _api's client / region / visitor."""
     items, tokens = p.walk(payload)
     for fetched in range(_READ_ON_PAGES + 1):
         repeats = seen.repeats
@@ -335,7 +351,7 @@ def _read_on(ie: Any, resp: dict[str, Any], payload: Any, seen: _Seen,
             tokens = []  # page after page of repeats: the feed has come round again
             break
         kw["visitor"] = _visitor(resp) or kw.get("visitor")
-        resp = _api(ie, {"continuation": tokens[0]}, ep, **kw)
+        resp = _continue(ie, tokens[0], ep, **kw)
         items, tokens = p.walk(p.continuation_items(resp))
     return out, items, tokens, resp
 
@@ -667,7 +683,9 @@ async def youtube_search(query: str = Query(...),
               "When the web client offers no further page (the usual case for anonymous visitors), later pages "
               "come from the same FEhashtag feed on yt-dlp's mweb client, whose items have abbreviated view "
               "counts. type=shorts (or a …/hashtag/<tag>/shorts URL) pages through the hashtag's Shorts tab; "
-              f"those items carry only id/title/thumbnail/views. Items among the last {_Seen.keep} served are "
+              "those items carry only id/title/thumbnail/views. YouTube sends a Shorts page empty for a second or so "
+              "after the page before it, so an empty one is asked for again, twice at most, a second apart. "
+              f"Items among the last {_Seen.keep} served are "
               "skipped; a page of nothing but those (the Shorts tab re-sends whole batches) is replaced by the next "
               "one, and four such pages in a row end the feed. A page can still be empty before the end (e.g. it "
               "held only items this endpoint doesn't map, such as playlists): follow continuationToken until it is "
@@ -682,16 +700,17 @@ async def youtube_search_hashtag(hashtag: str = Query(...), continuationToken: s
         if state.get("p") != tag:
             raise _bad_cursor("continuationToken belongs to a different hashtag")
         client, visitor = state.get("x") or "web", state.get("v")  # feed tokens only work for their visitor
+        again = client == "web"  # the Shorts tab is paged on web (see _continue)
 
         def page(ie: Any) -> tuple[dict[str, list], list, list, dict[str, Any]]:
             if client == "mweb" and state["t"] == _MWEB_FEED:
                 resp = _api(ie, {"browseId": "FEhashtag", "params": p.hashtag_params(tag, False)}, client="mweb")
                 payload = resp.get("contents")
             else:
-                resp = _api(ie, {"continuation": state["t"]}, client=client, visitor=visitor, cursor=True)
+                resp = _continue(ie, state["t"], client=client, visitor=visitor, cursor=True, again=again)
                 payload = p.continuation_items(resp)
             return _read_on(ie, resp, payload, seen, lambda x: _hashtag_videos(x, seen), client=client,
-                            visitor=visitor)
+                            visitor=visitor, again=again)
 
         out, items, tokens, resp = await _run(page)
     else:

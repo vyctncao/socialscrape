@@ -14,7 +14,7 @@ from __future__ import annotations
 import concurrent.futures as cf
 import re
 
-import httpx
+import httpx2
 import pytest
 
 from tests.e2e import LEAKS, app_with, free_port, skip_if_blocked, ytdlp_info
@@ -130,7 +130,7 @@ def test_caption_tracks_match_ytdlp_languages(rick, rick_ytdlp):
 
 
 def _fetch(url: str) -> bytes:
-    r = httpx.get(url, timeout=30, follow_redirects=True)
+    r = httpx2.get(url, timeout=30, follow_redirects=True)
     skip_if_blocked(r)
     assert r.status_code == 200
     return r.content

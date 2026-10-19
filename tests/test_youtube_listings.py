@@ -885,7 +885,7 @@ def test_hashtag_cursor_is_bound_to_its_tag(client, upstream):
     assert "different hashtag" in client.get("/v1/youtube/search/hashtag", params={
         "hashtag": "cooking", "continuationToken": token}).json()["message"]
     assert upstream.calls == []
-    upstream.answers = [appended([])]
+    upstream.answers = [appended([cont("NEXT")])]
     body = client.get("/v1/youtube/search/hashtag", params={"hashtag": "#FUNNY", "continuationToken": token}).json()
     assert body["videos"] == [] and upstream.calls[0][1]["query"] == {"continuation": "TOKEN"}
 
@@ -973,6 +973,32 @@ def test_hashtag_read_on_is_bounded(client, upstream):
     # nothing mapped but no repeats either: not read past, so an empty page keeps its token (as the notes say)
     assert len(upstream.calls) == 1 and body["videos"] == []
     assert M._state(body["continuationToken"], "hashtag")["t"] == "T1"
+
+
+def test_hashtag_asks_again_for_a_shorts_page_that_comes_back_empty(client, upstream, monkeypatch):
+    """Asked for straight after the page before it, a Shorts page often comes back with no items and no token for
+    a second or so. Served as it was, that ended the feed after one page."""
+    monkeypatch.setattr(M, "_EMPTY_PAGE_WAITS", (0, 0))
+    cursor = M._cursor("hashtag", "T1", p="funny", v="VISITOR1")
+    call = ("browse", {"query": {"continuation": "T1"}, "client": "web", "visitor": "VISITOR1", "cursor": True})
+    upstream.answers = [appended([]), appended([short("fresh000001"), cont("T2")])]
+    body = client.get("/v1/youtube/search/hashtag", params={"hashtag": "funny", "continuationToken": cursor}).json()
+    assert upstream.calls == [call, call]
+    assert [v["id"] for v in body["videos"]] == ["fresh000001"]
+    assert M._state(body["continuationToken"], "hashtag")["t"] == "T2"
+    upstream.answers, upstream.calls = [appended([])] * 3, []  # still empty after both waits: the feed's end
+    body = client.get("/v1/youtube/search/hashtag", params={"hashtag": "funny", "continuationToken": cursor}).json()
+    assert upstream.calls == [call] * 3 and body["videos"] == [] and body["continuationToken"] is None
+    cursor = served_cursor("hashtag", "T1", p="funny", v="VISITOR1")  # and on a page read past
+    upstream.answers = [appended(SERVED + [cont("T2")]), appended([]), appended([short("fresh000002"), cont("T3")])]
+    upstream.calls = []
+    body = client.get("/v1/youtube/search/hashtag", params={"hashtag": "funny", "continuationToken": cursor}).json()
+    assert [c[1]["query"]["continuation"] for c in upstream.calls] == ["T1", "T2", "T2"]
+    assert [v["id"] for v in body["videos"]] == ["fresh000002"]
+    cursor = M._cursor("hashtag", "M1", p="funny", v="VISITOR1", x="mweb")  # mweb feed pages are taken as they come
+    upstream.answers, upstream.calls = [appended([])], []
+    body = client.get("/v1/youtube/search/hashtag", params={"hashtag": "funny", "continuationToken": cursor}).json()
+    assert [c[1]["client"] for c in upstream.calls] == ["mweb"] and body["continuationToken"] is None
 
 
 def test_search_reads_past_a_page_of_repeats(client, upstream):

@@ -153,6 +153,16 @@ def test_mixed_carousel_children_and_collab_owner(client):
     kids = [e["node"] for e in m["edge_sidecar_to_children"]["edges"]]
     assert [k["is_video"] for k in kids] == [False, False, True, True, False, False, False]
     assert len({k["id"] for k in kids}) == len(kids)
+    # a video child has its own audio flag and length; an image child has neither
+    assert all(isinstance(k["has_audio"], bool) and k["video_duration"] > 0 for k in kids if k["is_video"])
+    assert not any("has_audio" in k or "video_duration" in k for k in kids if not k["is_video"])
+
+
+@pytest.mark.live
+def test_video_carousel_children_keep_their_own_audio_flag(client):
+    kids = [e["node"] for e in media(client, VIDEO_CAROUSEL)["edge_sidecar_to_children"]["edges"]]
+    assert [k["has_audio"] for k in kids] == [True] + [False] * 6
+    assert all(k["is_video"] and k["video_duration"] > 0 for k in kids)
 
 
 @pytest.mark.live

@@ -286,8 +286,9 @@ def image_post_info(item: dict[str, Any]) -> dict[str, Any] | None:
 def aweme(item: dict[str, Any], *, detail: bool = False) -> dict[str, Any]:
     """Web itemStruct / item_list entry -> SC aweme object.
 
-    detail=True adds what /v2/tiktok/video promises (music, image_post_info);
+    detail=True adds what /v2/tiktok/video promises (music);
     otherwise video.cla_info is included, as in the /v3 profile feed.
+    A photo post carries its images (image_post_info) either way.
     """
     aweme_id = str(item["id"])
     created = to_int(item.get("createTime"))
@@ -305,7 +306,7 @@ def aweme(item: dict[str, Any], *, detail: bool = False) -> dict[str, Any]:
         "video": video(item, with_captions=not detail),
         "author": author(item),
         "music": music(item) if detail else None,
-        "image_post_info": image_post_info(item) if detail else None,
+        "image_post_info": image_post_info(item),
     })
 
 

@@ -27,6 +27,9 @@ SCOUT_ID = "6718335390845095173"
 SCOUT_VIDEO = f"https://www.tiktok.com/@scout2015/video/{SCOUT_ID}"  # not on its sound's page -> web; no captions
 PHOTO_ID = "7240568259186019630"
 PHOTO_POST = f"https://www.tiktok.com/@chillezy/photo/{PHOTO_ID}"
+WAPO = "washingtonpost"
+WAPO_PHOTO_ID = "7697300746554838302"  # a 10-image photo post in its profile feed
+WAPO_PHOTO_TIME = 1792170000  # its create_time: scheduled, 2513 s after the time in its id's top 32 bits
 MISSING_VIDEO = f"https://www.tiktok.com/@{STOOL}/video/7499229683859426001"
 LONG_TT = f"https://www.tiktok.com/@{STOOL}/video/7691685734738119950"  # 124 s, English captions only
 SHORT_LINKS = {
@@ -428,6 +431,16 @@ def test_profile_videos_cursor_edges(client, stool_walk):
     assert page2["aweme_list"][0]["aweme_id"] == stool_walk[1]["aweme_list"][0]["aweme_id"]
     floor = ok(client, VIDEOS, handle=STOOL, max_cursor=str(_FEED_START_MS))
     assert floor["aweme_list"] == [] and floor["has_more"] is False and "max_cursor" not in floor
+
+
+@pytest.mark.live
+def test_profile_videos_photo_post_carries_its_images(client):
+    items = ok(client, VIDEOS, handle=WAPO, max_cursor=str((WAPO_PHOTO_TIME + 1) * 1000))["aweme_list"]
+    photos = {a["aweme_id"]: a for a in items if "image_post_info" in a}
+    assert WAPO_PHOTO_ID in photos, [a["aweme_id"] for a in items]
+    images = photos[WAPO_PHOTO_ID]["image_post_info"]["images"]
+    assert len(images) == 10 and all(i["display_image"]["url_list"] for i in images)
+    assert not any("music" in a for a in items)
 
 
 @pytest.mark.parametrize("cursor", ["abc", "-5", "1.5e12", "1" * 26, "1746050510", "1000", str(_FEED_START_MS - 1)])

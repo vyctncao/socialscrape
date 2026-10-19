@@ -548,6 +548,15 @@ def test_watch_next_videos_in_other_ui_languages():
     assert amharic["viewCountInt"] == 6000000000 and amharic["publishedTime"]
 
 
+def test_watch_next_video_years_long_stream():
+    # a years-long stream's hours are digit-grouped (LofiGirl's 5qap5aO4i9A), and Danish puts '.' between the units
+    for lang, badge, shown in (("en", "20,772:51:34", "20,772:51:34"), ("da", "20.772.51.34", "20.772:51:34")):
+        video = P.watch_next_video(ui_tab(lang), lockup("5", "5 views", "", badge))
+        assert (video["lengthText"], video["lengthInSeconds"]) == (shown, 74782294), lang
+    for junk in ("1,234", "20,77:51:34", "1,234:56", "12.345", "1:02:03:04", "LIVE", "", None):
+        assert P.badge_length(junk) == (None, None), junk
+
+
 def test_relative_time_words_of_more_ui_languages():
     now, day = P.relative_ts("now 0 seconds"), 86400
     for lang, text, seconds in (

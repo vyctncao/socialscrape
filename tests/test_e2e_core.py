@@ -15,7 +15,7 @@ import tempfile
 import threading
 import time
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 import yt_dlp
@@ -282,7 +282,7 @@ def test_max_workers_one_serialises_without_blocking_health(tmp_path):
     handles = ["stoolpresidente", "tiktok", "khaby.lame"]
 
     async def go(app):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t", timeout=120) as c:
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://t", timeout=120) as c:
             tasks = [asyncio.create_task(c.get("/v1/tiktok/profile", params={"handle": h})) for h in handles]
             await asyncio.sleep(0.3)
             t0 = time.monotonic()

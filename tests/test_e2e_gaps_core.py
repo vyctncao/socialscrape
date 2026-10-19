@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from importlib.util import find_spec
 from pathlib import Path
 
-import httpx
+import httpx2
 import pytest
 
 from socialscrape import transcribe as tr
@@ -279,7 +279,7 @@ def serve(tmp_path: Path, env: dict[str, str] | None = None, args=(), *, wait: b
 def _tt_profile(client_or_base, **params):
     params = {"handle": TT_HANDLE, **params}
     if isinstance(client_or_base, str):
-        return httpx.get(f"{client_or_base}/v1/tiktok/profile", params=params, timeout=60)
+        return httpx2.get(f"{client_or_base}/v1/tiktok/profile", params=params, timeout=60)
     return client_or_base.get("/v1/tiktok/profile", params=params)
 
 
@@ -429,12 +429,12 @@ def test_env_example_starts_as_shipped(tmp_path):
     env.pop("SOCIALSCRAPE_COOKIES_FROM_BROWSER", None)  # never set, not even blank (anonymous-only QA rule)
     env.pop("PORT")  # serve() picks a free one
     with serve(tmp_path, env) as srv:
-        h = httpx.get(f"{srv.base}/health", timeout=10)
+        h = httpx2.get(f"{srv.base}/health", timeout=10)
         assert h.status_code == 200
         body = h.json()
         assert body["ok"] is True and body["auth"] is False and body["cache"] is True
         assert body["transcription"] is None and body["cookies"] == []
-        r = httpx.get(f"{srv.base}/v1/tiktok/shop/search", params={"query": "x"}, timeout=10)
+        r = httpx2.get(f"{srv.base}/v1/tiktok/shop/search", params={"query": "x"}, timeout=10)
         assert r.status_code == 501 and is_envelope(r)
     assert (tmp_path / env["SOCIALSCRAPE_CACHE_PATH"]).is_file(), "cache file not created under the working directory"
 
@@ -449,7 +449,7 @@ def test_cli_flags_do_not_start_the_server(tmp_path, arg):
 
 def test_bracketed_ipv6_host_listens(tmp_path):
     with serve(tmp_path, {"HOST": "[::1]"}) as srv:
-        assert httpx.get(f"http://[::1]:{srv.port}/health", timeout=10).status_code == 200
+        assert httpx2.get(f"http://[::1]:{srv.port}/health", timeout=10).status_code == 200
 
 
 @pytest.mark.live
@@ -463,14 +463,14 @@ def test_host_that_does_not_resolve_stops_the_server(tmp_path):
 def test_log_level_warning_silences_info_lines(tmp_path):
     with serve(tmp_path, {"SOCIALSCRAPE_LOG_LEVEL": "WARNING"}) as srv:
         for path in ("/health", "/meta/coverage"):
-            assert httpx.get(srv.base + path, timeout=10).status_code == 200
+            assert httpx2.get(srv.base + path, timeout=10).status_code == 200
         srv.proc.send_signal(signal.SIGTERM)
         srv.exit_within(10)
     info = [ln for ln in srv.output().splitlines() if ln.startswith("INFO")]
     assert not info, f"{len(info)} INFO lines at SOCIALSCRAPE_LOG_LEVEL=WARNING, e.g. {info[:3]}"
 
 
-def _timed_out_request(srv: Server) -> httpx.Response:
+def _timed_out_request(srv: Server) -> httpx2.Response:
     r = _tt_profile(srv.base)
     assert r.status_code == 500 and r.json()["error"] == "timeout", r.text[:200]
     return r
@@ -490,7 +490,7 @@ def test_sigterm_answers_the_in_flight_request_and_exits(tmp_path):
             took = srv.exit_within(15)
             worker.join(20)
     r = box.get("r")
-    assert isinstance(r, httpx.Response) and r.status_code == 500 and r.json()["error"] == "timeout", r
+    assert isinstance(r, httpx2.Response) and r.status_code == 500 and r.json()["error"] == "timeout", r
     assert took is not None and took < 10, f"SIGTERM exit took {took}s"
 
 
@@ -574,8 +574,8 @@ def test_mlx_model_name_maps_to_an_existing_repo(model):
     if os.path.isdir(repo):
         return
     try:
-        r = httpx.get(f"https://huggingface.co/api/models/{repo}", timeout=20)
-    except httpx.HTTPError as exc:
+        r = httpx2.get(f"https://huggingface.co/api/models/{repo}", timeout=20)
+    except httpx2.HTTPError as exc:
         pytest.skip(f"Hugging Face unreachable: {exc}")
     if r.status_code == 429:
         pytest.skip("Hugging Face throttled this IP")

@@ -63,7 +63,7 @@ CAROUSEL = {
         {"pk": "1", "code": "AAAAA", "media_type": 1, "original_width": 1080, "original_height": 1350,
          "display_uri": "https://cdn.example/c1.jpg", "accessibility_caption": "Photo"},
         {"pk": "2", "media_type": 2, "display_uri": "https://cdn.example/c2.jpg",
-         "video_versions": [{"url": "https://cdn.example/c2.mp4"}], "video_duration": 7.5},
+         "video_versions": [{"url": "https://cdn.example/c2.mp4"}], "video_duration": 7.5, "has_audio": True},
     ],
 }
 PROFILE = {
@@ -330,6 +330,9 @@ def test_map_post_carousel_and_video_items():
     first, second = (e["node"] for e in post["edge_sidecar_to_children"]["edges"])
     assert first["__typename"] == "XDTGraphImage" and first["dimensions"] == {"height": 1350, "width": 1080}
     assert second["__typename"] == "XDTGraphVideo" and second["video_url"] == "https://cdn.example/c2.mp4"
+    # each video child has its own audio flag and length, as a video post does at the top level
+    assert second["has_audio"] is True and second["video_duration"] == 7.5
+    assert "has_audio" not in first and "video_duration" not in first
     assert "edges" not in post["edge_media_to_parent_comment"]  # logged-in item: no comments embedded
     assert post["edge_media_preview_comment"] == {"count": 2}
     assert [i for i, _ in ig.video_items(CAROUSEL)] == [2]

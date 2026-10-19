@@ -444,7 +444,8 @@ async def tiktok_profile(handle: str | None = None, user_id: str | None = None) 
               "doesn't mark pinned posts (isPinnedItem is never set), so they stay in date order and are not "
               "removed. user_id and trim are ignored. Posts are web data re-keyed to the app shape (app-only "
               "fields absent; counts use TikTok's web rounding, e.g. 42160618 -> 42200000; is_ad is the web isAd "
-              "flag, which can disagree with the app's is_ads). The handle's secUid is cached for 10 minutes, so "
+              "flag, which can disagree with the app's is_ads). Photo posts carry their images (image_post_info, "
+              "as on /v2/tiktok/video); no post carries music. The handle's secUid is cached for 10 minutes, so "
               "pages after the first make one TikTok request. TikTok sometimes refuses a public feed to anonymous "
               "requests (statusCode 10102); that is a 503 upstream_blocked, and a retry soon after works.")
 async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = None, sort_by: str | None = None,

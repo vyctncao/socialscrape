@@ -403,6 +403,9 @@ def publish_date(player_responses: list[dict[str, Any]], info: dict[str, Any]) -
 
 
 _TAP = ("rendererContext", "commandContext", "onTap", "innertubeCommand")
+# A length badge: '18:32', '1:02:03', or '18.32' in Indonesian, Danish, Finnish... A years-long stream's hours are
+# digit-grouped: '20,772:51:34', or '20.772.51.34' in Danish.
+_LENGTH_BADGE = re.compile(r"(\d{1,3}(?:[,.\u00a0\u202f' ]\d{3})+(?=(?:[:.]\d\d){2}$)|\d+)((?:[:.]\d\d){1,2})")
 
 
 def lockup_channel(meta: dict[str, Any], row_title: str | None) -> dict[str, Any]:
@@ -427,6 +430,16 @@ def lockup_channel(meta: dict[str, Any], row_title: str | None) -> dict[str, Any
     return {"title": block["title"], "url": block["url"], "handle": block["handle"], "id": block["id"]}
 
 
+def badge_length(badge: str | None) -> tuple[str | None, int | None]:
+    """A length badge -> (lengthText, seconds) with ':' between the units: '18.32' -> ('18:32', 1112),
+    '20.772.51.34' -> ('20.772:51:34', 74782294). Anything else -> (None, None)."""
+    m = _LENGTH_BADGE.fullmatch(badge or "")
+    if not m:
+        return None, None
+    hours, rest = m.group(1), m.group(2).replace(".", ":")
+    return hours + rest, int(parse_duration(re.sub(r"\D", "", hours) + rest))
+
+
 def watch_next_video(tab_ie: Any, lockup: dict[str, Any]) -> dict[str, Any] | None:
     """One related video from the watch page's lockupViewModel."""
     if lockup.get("contentType") != "LOCKUP_CONTENT_TYPE_VIDEO":
@@ -440,10 +453,9 @@ def watch_next_video(tab_ie: Any, lockup: dict[str, Any]) -> dict[str, Any] | No
     views_text = traverse_obj(stats, (0, "text", "content", {str}))
     views_label = traverse_obj(stats, (0, "accessibilityLabel", {str}))
     time_text = traverse_obj(stats, (1, ("accessibilityLabel", ("text", "content")), {str}, any))
-    length_text = traverse_obj(lockup, (
+    length_text, seconds = badge_length(traverse_obj(lockup, (
         "contentImage", "thumbnailViewModel", "overlays", ..., "thumbnailBottomOverlayViewModel", "badges", ...,
-        "thumbnailBadgeViewModel", "text", {lambda s: s if re.fullmatch(r"\d+(?:[:.]\d\d)+", s) else None}, any))
-    length_text = length_text and length_text.replace(".", ":")  # Indonesian, Danish, Finnish... '18.32'
+        "thumbnailBadgeViewModel", "text", {lambda s: s if _LENGTH_BADGE.fullmatch(s) else None}, any)))
     published = approx_iso(tab_ie, time_text)
     lang = ui_lang(tab_ie)
     views = compact_count(views_text, lang)
@@ -464,7 +476,7 @@ def watch_next_video(tab_ie: Any, lockup: dict[str, Any]) -> dict[str, Any] | No
                           and (views_label or "").endswith(" views") else views_label or views_text),
         "viewCountInt": views,
         "lengthText": length_text,
-        "lengthInSeconds": int(d) if (d := parse_duration(length_text)) is not None else None,
+        "lengthInSeconds": seconds,
         "videoUrl": WATCH.format(vid),
     }
 

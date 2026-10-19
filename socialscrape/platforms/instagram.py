@@ -504,7 +504,9 @@ def _sidecar_child(media: dict[str, Any]) -> dict[str, Any]:
         "dimensions": compact({"height": media.get("original_height"), "width": media.get("original_width")}) or None,
         "display_url": _best_image(media),
         "is_video": is_video,
+        "has_audio": media.get("has_audio") if is_video else None,
         "video_url": _video_url(media) if is_video else None,
+        "video_duration": video_duration(media) if is_video else None,
         "accessibility_caption": media.get("accessibility_caption"),
         "edge_media_to_tagged_user": {"edges": _tagged_users(media)},
     })
@@ -874,8 +876,9 @@ def _no_pagination(value: str | None, name: str) -> None:
         notes="Mapped from the media InstagramIE parses (logged-out GraphQL, else the /p/ page). Anonymous "
               "responses have no video_play_count/video_view_count (only the logged-in media/info item has them: "
               f"{COOKIE_NOTE}); edge_media_to_parent_comment.edges holds the ~15 comments the logged-out query "
-              "returns. created_at, edge_media_to_tagged_user and edge_sidecar_to_children (carousels) included. "
-              "region and trim are ignored; download_media=true returns 501. A bare shortcode is accepted.")
+              "returns. created_at, edge_media_to_tagged_user and edge_sidecar_to_children (carousels) included; "
+              "a video child has its own has_audio and video_duration. region and trim are ignored; "
+              "download_media=true returns 501. A bare shortcode is accepted.")
 async def instagram_post(url: str = Query(...), region: str | None = None, trim: str | None = None,
                          download_media: str | None = None, include_play_count: str | None = None
                          ) -> dict[str, Any]:
@@ -939,12 +942,13 @@ async def instagram_transcript(url: str = Query(...), allow_long_transcription: 
 
 @sc_get(router, "/v1/instagram/profile", source="yt-dlp InstagramUserIE profile page (logged-out Relay data)",
         notes="From the logged-out profile page: bio, bio_links, follower/following counts, verified/private, "
-              "fbid, the first 12 posts (slim nodes: no counts/timestamps/video URLs) with Instagram's own "
-              "page_info. edge_owner_to_timeline_media.count comes from the page's 'N Posts' text and is omitted "
-              "when Instagram abbreviates it. Not on the page: business/category fields, external_url, "
-              "profile_pic_url_hd, reels/collections/related-profile edges. A profile Instagram restricts for "
-              "logged-out visitors (age-gated brands: 'Restricted profile') returns 403 restricted_profile here and "
-              "on user/posts, user/reels and user/highlights. trim is ignored.")
+              "fbid, the first 12 posts (slim nodes: no counts/timestamps/video URLs, has_audio or "
+              "comments_disabled) with Instagram's own page_info. edge_owner_to_timeline_media.count comes from "
+              "the page's 'N Posts' text and is omitted when Instagram abbreviates it. Not on the page: "
+              "business/category fields, external_url, profile_pic_url_hd, reels/collections/related-profile "
+              "edges. A profile Instagram restricts for logged-out visitors (age-gated brands: 'Restricted "
+              "profile') returns 403 restricted_profile here and on user/posts, user/reels and user/highlights. "
+              "trim is ignored.")
 async def instagram_profile(handle: str = Query(...), trim: str | None = None) -> dict[str, Any]:
     user, html = await fetch_profile(clean_handle(handle))
     return {"data": {"user": map_profile(user, post_count_from_meta(html))}}
