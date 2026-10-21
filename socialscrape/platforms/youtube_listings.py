@@ -40,6 +40,7 @@ T = TypeVar("T")
 YT = p.YT
 _CHANNEL_ID = re.compile(r"UC[\w-]{22}")
 _PLAYLIST_ID = re.compile(r"[\w-]{10,64}")
+_ALBUM_ID = re.compile(r"MPREb_[A-Za-z0-9_-]+")  # a YouTube Music album's browse id
 # youtubekids.com (channel, watch?…&list= URLs) and youtube-nocookie.com (the privacy-enhanced embeds of YouTube's
 # share dialog, /embed/videoseries?list=…) name the same channels and playlists; yt-dlp takes them too.
 _YT_HOST = re.compile(r"(?:www\.|m\.|music\.)?youtube\.com|(?:www\.)?youtube(?:kids|-nocookie)\.com|youtu\.be")
@@ -92,8 +93,8 @@ def _base_from_url(value: str) -> str:
     parts = [urllib.parse.unquote(x) for x in parsed.path.split("/") if x]
     if parts and parts[0].startswith("@") and _is_handle(parts[0][1:]):
         return "@" + urllib.parse.quote(parts[0][1:])
-    if len(parts) >= 2 and parts[0] == "channel" and _CHANNEL_ID.fullmatch(parts[1]):
-        return f"channel/{parts[1]}"
+    if len(parts) >= 2 and parts[0] in ("channel", "browse") and _CHANNEL_ID.fullmatch(parts[1]):
+        return f"channel/{parts[1]}"  # music.youtube.com/browse/UC… is the same channel page
     if len(parts) >= 2 and parts[0] in ("c", "user") and _is_handle(parts[1]):
         return f"{parts[0]}/{urllib.parse.quote(parts[1])}"
     if parsed.hostname != "youtu.be" and parts and _is_handle(parts[0]) and not _RESERVED.match(parts[0]):
@@ -134,9 +135,16 @@ def channel_base(channel_id: str | None, handle: str | None, url: str | None = N
 
 
 def playlist_id_of(value: str) -> str:
+    """A playlist id, a URL with list= (an embed code's '…&amp;list=…' too) or a YouTube Music /browse/ URL: of a
+    playlist (VL<id>) or of an album (MPREb_…, which the playlist route resolves to the playlist of its tracks)."""
     value = value.strip()
     if parsed := _yt_url(value):
-        value = (urllib.parse.parse_qs(parsed.query).get("list") or [""])[0]
+        parts = [x for x in parsed.path.split("/") if x]
+        if len(parts) == 2 and parts[0] in ("browse", "channel") and parts[1].startswith(("VL", "MPREb_")):
+            value = parts[1].removeprefix("VL")
+        else:
+            query = re.sub(r"&(?:amp;)+", "&", parsed.query)  # copied from an <iframe src="…">, HTML-escaped
+            value = (urllib.parse.parse_qs(query).get("list") or [""])[0]
     if not _PLAYLIST_ID.fullmatch(value):
         raise BadRequest("playlist_id must be a YouTube playlist id or a URL with list=")
     return value
@@ -557,12 +565,25 @@ def _playlist_video(key: str, node: dict[str, Any], uploader: dict[str, Any] | N
             "channel": {"title": owner.get("title"), "url": owner.get("url")} if owner else None}
 
 
+def _album_playlist(ie: Any, album_id: str) -> str:
+    """A YouTube Music album -> the OLAK5uy_… playlist of its tracks, which its YouTube Music page names as the
+    canonical URL (as yt-dlp resolves albums)."""
+    resp = _api(ie, {"browseId": album_id}, client="web_music")
+    url = traverse_obj(resp, ("microformat", "microformatDataRenderer", "urlCanonical"), expected_type=str)
+    pl = (urllib.parse.parse_qs(urllib.parse.urlparse(url or "").query).get("list") or [""])[0]
+    if not _PLAYLIST_ID.fullmatch(pl):
+        raise NotFound("YouTube Music album not found")
+    return pl
+
+
 @sc_get(router, "/v1/youtube/playlist", source=f"{_SRC} (/playlist page + browse continuations)",
         notes="About 100 videos per page. Unavailable/private entries YouTube hides are skipped, so a page can "
               "hold fewer videos than totalVideos implies. Shorts playlists (UUSH…) are one page of up to about "
               "100 Shorts with no continuation (YouTube offers none), and their items have no length. Mixes "
               "(RD<video id>, RDAMVM…: radio playlists YouTube only builds inside a watch page) return 400 "
-              "unviewable_playlist; YouTube Music's curated RDCLAK5uy_… playlists list like any other.")
+              "unviewable_playlist; YouTube Music's curated RDCLAK5uy_… playlists list like any other. A YouTube "
+              "Music album (music.youtube.com/browse/MPREb_…) lists its tracks: one more request resolves it to "
+              "the OLAK5uy_… playlist that holds them.")
 async def youtube_playlist(playlist_id: str = Query(...), continuationToken: str | None = None):
     pid = playlist_id_of(playlist_id)
     if state := _state(continuationToken, "playlist"):
@@ -573,7 +594,8 @@ async def youtube_playlist(playlist_id: str = Query(...), continuationToken: str
         items, tokens = await _run(lambda ie: p.walk(p.continuation_items(_api(ie, query, cursor=True))))
     else:
         def first(ie: Any) -> tuple[dict, list, list]:
-            data, _ = _page(ie, f"{YT}/playlist?list={pid}", pid)
+            pl = _album_playlist(ie, pid) if _ALBUM_ID.fullmatch(pid) else pid
+            data, _ = _page(ie, f"{YT}/playlist?list={pl}", pl)
             return p.playlist_meta(data), *p.walk(p.tab_content(data))
 
         meta, items, tokens = await _run(first)

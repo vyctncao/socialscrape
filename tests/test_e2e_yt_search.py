@@ -24,6 +24,8 @@ MRBEAST_LONG = "UULFX6OQ3DkcsbYNE6H8uQQuVA"  # MrBeast long-form uploads, 800+ v
 MRBEAST_SHORTS = "UUSHX6OQ3DkcsbYNE6H8uQQuVA"
 PODCAST = "PLgM0gYv7Sm1M6IwGaKNETyQLC7IO644py"  # 99% Invisible x BBC podcast, ~21 episodes, collab lockups
 HIT_LIST = "RDCLAK5uy_kmPRjHDECIcuVwnKsx2Ng7fyNgFKWNJFs"  # YouTube Music's curated "The Hit List", ~50 videos
+ALBUM = "MPREb_gTAcphH99wE"  # YouTube Music album "Royalty Free Music Library V2 (50 Songs)"
+ALBUM_PLAYLIST = "OLAK5uy_l1m0thk3g31NmIIz_vMIbWtyv7eZixlH0"  # the playlist of its tracks
 
 _memo: dict[tuple, tuple[int, dict]] = {}
 
@@ -345,8 +347,9 @@ def test_playlist_single_page(client):
 @pytest.mark.parametrize("value", [
     f"https://www.youtube.com/watch?v=dQw4w9WgXcQ&list={TF2}", f"https://youtu.be/dQw4w9WgXcQ?list={TF2}",
     f"music.youtube.com/playlist?list={TF2}&index=3&si=abc", f"https://www.youtube.com/embed/videoseries?list={TF2}",
-    f"  {TF2}  ",
-], ids=["watch", "youtu.be", "music_noscheme_extra", "embed", "padded"])
+    f"  {TF2}  ", f"https://www.youtube.com/embed/videoseries?si=x&amp;list={TF2}",
+    f"https://music.youtube.com/browse/VL{TF2}",
+], ids=["watch", "youtu.be", "music_noscheme_extra", "embed", "padded", "embed_src_escaped", "music_browse"])
 def test_playlist_url_forms(client, value):
     assert ok(client, PLAYLIST, playlist_id=value)["title"] == "Team Fortress 2 [2010 Version]"
 
@@ -388,6 +391,17 @@ def test_playlist_music_curated_lists(client):
     said every RD… playlist was a 400)."""
     body = ok(client, PLAYLIST, playlist_id=HIT_LIST)
     assert body["title"] and body["videos"] and body["totalVideos"] >= len(body["videos"])
+
+
+@pytest.mark.live
+def test_playlist_music_album(client):
+    """A YouTube Music album page (/browse/MPREb_…; it was a 400) lists the playlist of the album's tracks."""
+    body = ok(client, PLAYLIST, playlist_id=f"https://music.youtube.com/browse/{ALBUM}")
+    assert "Royalty Free Music Library V2" in body["title"] and len(body["videos"]) >= 40
+    tracks = ok(client, PLAYLIST, playlist_id=ALBUM_PLAYLIST)["videos"]
+    assert [v["id"] for v in body["videos"]] == [v["id"] for v in tracks]
+    status, body = err(client, PLAYLIST, playlist_id="MPREb_zzzzzzzzzzz")
+    assert status == 404 and body["error"] == "not_found"
 
 
 @pytest.mark.live

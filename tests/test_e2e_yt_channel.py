@@ -111,7 +111,7 @@ def iso(value: str) -> datetime:
     {"handle": "MRBEAST"}, {"url": f"{YT}/@MrBeast"}, {"url": f"{YT}/@MrBeast/videos?view=0#x"},
     {"url": f"{YT}/channel/{MRBEAST}"}, {"url": f"{YT}/user/MrBeast6000"}, {"url": f"{YT}/MrBeast6000"},
     {"url": "m.youtube.com/@MrBeast"}, {"url": "@MrBeast"}, {"url": MRBEAST}, {"channelId": "@MrBeast"},
-    {"handle": f"{YT}/@MrBeast/about"},
+    {"handle": f"{YT}/@MrBeast/about"}, {"url": f"https://music.youtube.com/browse/{MRBEAST}"},
 ])
 def test_channel_identifier_forms(client, params):
     body = ok(client, "/v1/youtube/channel", **params)

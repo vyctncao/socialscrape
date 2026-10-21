@@ -184,6 +184,8 @@ ABOUT_PAGE = about_page(
     ((None, None, "https://www.youtube.com/c/தமிழ்"), "c/" + quote("தமிழ்")),
     # a YouTube Kids channel URL was 400 "Not a YouTube URL"
     ((None, None, "https://www.youtubekids.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA"), "channel/UCX6OQ3DkcsbYNE6H8uQQuVA"),
+    # YouTube Music's /browse/UC… form of a channel page was a 400
+    ((None, None, "https://music.youtube.com/browse/UC9ALqqC4aIeG5iDs7i90Bfw"), "channel/UC9ALqqC4aIeG5iDs7i90Bfw"),
     # the full-width '@' of Japanese and Chinese keyboards (and the small one) was a 400
     ((None, "＠MrBeast", None), "@MrBeast"),
     (("＠MrBeast", None, None), "@MrBeast"),
@@ -201,6 +203,7 @@ def test_channel_base_accepts(args, base):
     (None, None, "https://www.youtube.com/shorts/aNI2jv7lBPQ"),
     (None, None, "https://youtu.be/plN7JMbadRg"),
     (None, None, "https://youtube.com.evil.example/@MrBeast"),
+    (None, None, "https://music.youtube.com/browse/MPREb_gTAcphH99wE"),  # an album
     ("UC123", None, None),
     ("MrBeast", None, None),
     ("@bad handle!", None, None),
@@ -228,6 +231,11 @@ def test_playlist_and_hashtag_inputs():
     assert M.playlist_id_of(f"https://www.youtube-nocookie.com/embed/videoseries?si=x&list={TF2}") == TF2
     assert M.playlist_id_of(f"https://www.youtube-nocookie.com/embed/RlJy2Kt8Be0?list={TF2}") == TF2
     assert M.playlist_id_of(f"https://www.youtubekids.com/watch?v=RlJy2Kt8Be0&list={TF2}") == TF2
+    # 400s: the src of an embed code (HTML-escaped), YouTube Music's /browse/ pages of a playlist and of an album
+    assert M.playlist_id_of(f"https://www.youtube.com/embed/videoseries?si=x&amp;list={TF2}") == TF2
+    assert M.playlist_id_of(f"https://www.youtube-nocookie.com/embed/videoseries?si=x&amp;amp;list={TF2}") == TF2
+    assert M.playlist_id_of(f"https://music.youtube.com/browse/VL{TF2}") == TF2
+    assert M.playlist_id_of("https://music.youtube.com/browse/MPREb_gTAcphH99wE?si=x") == "MPREb_gTAcphH99wE"
     assert M.hashtag_of("#Funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny/shorts") == ("funny", True)
@@ -248,7 +256,9 @@ def test_playlist_and_hashtag_inputs():
     for bad in ("https://www.tiktok.com/tag/funny", "https://www.youtube.com/watch?v=x", "short",
                 f"https://www.youtube.com]/playlist?list={TF2}", f"youtube.com／playlist?list={TF2}",
                 f"https://www.youtube-nocookie.com.example/embed/videoseries?list={TF2}",
-                f"https://music.youtubekids.com/watch?v=RlJy2Kt8Be0&list={TF2}"):
+                f"https://music.youtubekids.com/watch?v=RlJy2Kt8Be0&list={TF2}",
+                "https://music.youtube.com/browse/VLWL", f"https://music.youtube.com/browse/{MRBEAST}",
+                f"https://www.youtube.com/embed/videoseries?si=x&amplist={TF2}"):
         with pytest.raises(BadRequest):
             M.playlist_id_of(bad)
     for bad in ("##", "two words", "https://www.tiktok.com/tag/funny", "https://www.youtube.com/@MrBeast", "#\u200d",
@@ -841,6 +851,44 @@ def test_unviewable_playlist_is_400(client, monkeypatch):
     monkeypatch.setattr(M, "_page", page)
     r = client.get("/v1/youtube/playlist", params={"playlist_id": "RDdQw4w9WgXcQ"})
     assert r.status_code == 400 and r.json()["error"] == "unviewable_playlist"
+
+
+OLAK = "OLAK5uy_l1m0thk3g31NmIIz_vMIbWtyv7eZixlH0"  # the playlist of YouTube Music album MPREb_gTAcphH99wE
+
+
+def playlist_page(*video_ids: str) -> dict:
+    """A /playlist?list= webpage holding playlistVideoRenderer entries for these ids and a next-page token."""
+    entries = [{"playlistVideoRenderer": {"videoId": v, "title": {"runs": [{"text": v}]}}} for v in video_ids]
+    tab = {"tabRenderer": {"selected": True, "content": {"sectionListRenderer": {"contents": [{"itemSectionRenderer": {
+        "contents": [{"playlistVideoListRenderer": {"contents": [*entries, cont("NEXT")]}}]}}]}}}}
+    return {"contents": {"twoColumnBrowseResultsRenderer": {"tabs": [tab]}}, **playlist_header("3 videos")}
+
+
+def test_playlist_route_lists_a_youtube_music_album(client, upstream):
+    """A YouTube Music album (music.youtube.com/browse/MPREb_…) was a 400. Its YouTube Music page names the
+    OLAK5uy_… playlist of its tracks as the canonical URL; that is the playlist listed. The cursor stays bound to
+    the album, so later pages need no second lookup."""
+    album = "MPREb_gTAcphH99wE"
+    canonical = {"microformatDataRenderer": {"urlCanonical": f"https://music.youtube.com/playlist?list={OLAK}"}}
+    upstream.answers = [{"microformat": canonical}, (playlist_page("aaaaaaaaaaa", "bbbbbbbbbbb"), {})]
+    r = client.get("/v1/youtube/playlist", params={"playlist_id": f"https://music.youtube.com/browse/{album}"})
+    body = r.json()
+    assert r.status_code == 200, body
+    assert upstream.calls == [("browse", {"query": {"browseId": album}, "client": "web_music"}),
+                              ("page", {"url": f"https://www.youtube.com/playlist?list={OLAK}"})]
+    assert [v["id"] for v in body["videos"]] == ["aaaaaaaaaaa", "bbbbbbbbbbb"] and body["totalVideos"] == 3
+    upstream.answers = [appended([{"playlistVideoRenderer": {"videoId": "ccccccccccc"}}])]
+    page2 = client.get("/v1/youtube/playlist", params={"playlist_id": album,
+                                                        "continuationToken": body["continuationToken"]}).json()
+    assert [v["id"] for v in page2["videos"]] == ["ccccccccccc"] and page2["continuationToken"] is None
+    assert upstream.calls[2:] == [("browse", {"query": {"continuation": "NEXT"}, "cursor": True})]
+
+
+def test_playlist_route_album_not_found(client, upstream):
+    """YouTube Music answers a nonexistent album with a page that names no canonical URL."""
+    upstream.answers = [{"microformat": {"microformatDataRenderer": {"noindex": True}}}]
+    r = client.get("/v1/youtube/playlist", params={"playlist_id": "MPREb_zzzzzzzzzzz"})
+    assert r.status_code == 404 and r.json()["error"] == "not_found" and len(upstream.calls) == 1
 
 
 @pytest.mark.parametrize("fixture, channel", [
