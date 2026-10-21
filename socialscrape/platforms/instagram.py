@@ -62,8 +62,9 @@ _SHORTCODE_CHARS = re.compile(r"[A-Za-z0-9_-]+")  # _id_to_pk's alphabet
 _SHARE_URL = re.compile(r"https://www\.instagram\.com/share/(?:[a-z]+/)?[A-Za-z0-9_-]{5,64}/?(?:[?#].*)?")
 # No leading/trailing '.' and no '..', as on Instagram (and so '.'/'..' can't collapse /<handle>/ to the homepage).
 _HANDLE = re.compile(r"(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)")
-_PROFILE_URL = re.compile(
-    r"https://www\.instagram\.com/([A-Za-z0-9._]{1,30})(?:/(?:reels|tagged|saved|guides|featured))?/?(?:[?#].*)?")
+# The address of a profile, one of its tabs, or its follower or following list (a modal over the profile page)
+_PROFILE_URL = re.compile(r"https://www\.instagram\.com/([A-Za-z0-9._]{1,30})"
+                          r"(?:/(?:reels|tagged|saved|guides|featured|followers|following))?/?(?:[?#].*)?")
 # Instagram routes that look like handles: /challenge/ is the checkpoint page, /graphql/ answers 400, and the
 # login-only app routes always redirect to the login page (which would read as a rate limit). Other app pages
 # are told apart by their pageID (missing_profile_error).
@@ -126,8 +127,8 @@ def post_url(url: str | None) -> tuple[str, str]:
 
 
 def clean_handle(handle: str | None) -> str:
-    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it) -> 'jane'. 400 for anything else. The
-    '@' may be the full-width '＠' of Japanese and Chinese keyboards."""
+    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it, or its /followers/ or /following/
+    list) -> 'jane'. 400 for anything else. The '@' may be the full-width '＠' of Japanese and Chinese keyboards."""
     value = (handle or "").strip()
     if re.search(r"instagram\.com", value, re.I):
         m = _PROFILE_URL.fullmatch(canonical_url(value))
