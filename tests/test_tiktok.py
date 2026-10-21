@@ -995,25 +995,41 @@ _CHALLENGE = "<title>Please wait...</title>"  # SlardarWAF's JS challenge page: 
 
 
 class _FakeJar:
+    """Cookie names: yt-dlp's solver sets its two on .tiktok.com, TikTok its _waftokenid (for page `token`) on www."""
+
     def __init__(self):
-        self.cookies = set()
+        self.cookies, self.token = set(), None
+
+    def __iter__(self):
+        return iter([SimpleNamespace(name=n, domain=self._domain(n), path="/") for n in self.cookies])
+
+    @staticmethod
+    def _domain(name):
+        return "www.tiktok.com" if name == "_waftokenid" else ".tiktok.com"
 
     def clear(self, domain, path, name):
-        assert (domain, path) == (".tiktok.com", "/")
+        assert (domain, path) == (self._domain(name), "/")
         self.cookies.remove(name)
 
 
 class _FakeWaf:
     """yt-dlp's challenge solver on a TikTok IE stand-in: the first `waf` fetches get the challenge page, as does
-    every fetch after one when `stays`; solving sets the two challenge cookies."""
+    every fetch after one when `stays`; solving sets the two challenge cookies, and the page they get sets TikTok's
+    token for it, which another page answers with a 403."""
 
     def __init__(self, waf=0, stays=False):
         self.waf, self.stays, self.solved, self.cookiejar = waf, stays, 0, _FakeJar()
 
-    def _page(self, name):
+    def _page(self, url, name):
+        jar = self.cookiejar
+        if "_waftokenid" in jar.cookies and jar.token != url:
+            raise ExtractorError("Unable to download webpage: HTTP Error 403: Forbidden", video_id=name)
         if self.waf or (self.stays and self.solved):
             self.waf = max(self.waf - 1, 0)
             return _CHALLENGE
+        if "_wafchallengeid" in jar.cookies:
+            jar.cookies.add("_waftokenid")
+            jar.token = url
         return name
 
     def _solve_challenge_and_set_cookies(self, page):
@@ -1033,7 +1049,7 @@ class _FakeLive(_FakeWaf):
 
     def _download_webpage(self, url, name, note, fatal=True):
         self.fetched.append(url)
-        return self._page(name)
+        return self._page(url, name)
 
     def _get_sigi_state(self, page, name):
         return self.pages.get(page) or {}
@@ -1093,7 +1109,7 @@ def test_user_live_route_solves_the_live_pages_js_challenge(client, fake_ydl, mo
     body = ok(client, "/v1/tiktok/user/live", handle="weathernewslive")
     assert body["is_live"] is True and body["liveRoom"]["status"] == 2
     assert ie.fetched == ["https://www.tiktok.com/@weathernewslive/live"] * 2
-    assert ie.solved == 1 and ie.cookiejar.cookies == set()  # the challenge cookies don't outlive the request
+    assert ie.solved == 1 and ie.cookiejar.cookies == {"_waftokenid"}  # the challenge cookies don't outlive it
 
     ydl.ies["TikTokLive"] = live = _FakeLive({"weathernewslive": _live_state("weathernewslive", 2)}, waf=1,
                                              stays=True)
@@ -1117,6 +1133,27 @@ def test_user_live_route_solves_the_live_pages_js_challenge(client, fake_ydl, mo
     assert (r.status_code, r.json()["error"]) == (404, "not_found"), r.text
 
 
+def test_user_live_route_drops_the_live_pages_waf_token(client, fake_ydl):
+    # tiktok-waf-token: past the live page's challenge, TikTok's token for it got the profile page a 403 (and the
+    # other way round), so /v1/tiktok/user/live was a 403 for anyone not live
+    ydl, _ = fake_ydl
+    user = {"id": "42", "uniqueId": "someone", "secUid": "sec", "roomId": "77"}
+    ydl.ies["TikTokLive"] = live = _FakeLive({"someone": {"CurrentRoom": {}}}, room={"data": {"status": 4}}, waf=1)
+    ydl.ies["TikTokUser"] = page = _FakeUserPage({"someone": _user_detail(0, user=user, stats={})}, waf=1)
+    page.cookiejar = live.cookiejar  # one yt-dlp session's
+    body = ok(client, "/v1/tiktok/user/live", handle="someone")
+    assert body["is_live"] is False and body["liveRoomUserInfo"]["id"] == "42"
+    assert live.solved == page.solved == 1 and live.cookiejar.token == "https://www.tiktok.com/@someone"
+    assert page.fetched == ["https://www.tiktok.com/@someone"] * 2
+
+    ydl.ies["TikTokUser"] = page = _FakeUserPage({"Someone": _user_detail(0, user=user, stats={})}, waf=1)
+    ydl.ies["TikTokLive"] = live = _FakeLive({"someone": _live_state("someone", 2)})
+    page.cookiejar = live.cookiejar  # the live page for the real uniqueId comes after the profile page's challenge
+    body = ok(client, "/v1/tiktok/user/live", handle="Someone")
+    assert body["is_live"] is True and body["liveRoom"]["status"] == 2 and page.solved == 1
+    assert live.fetched == ["https://www.tiktok.com/@Someone/live", "https://www.tiktok.com/@someone/live"]
+
+
 class _FakeUserPage(_FakeWaf):
     """TikTokUserIE stand-in for _user_page: the user page's universal data keyed by handle."""
 
@@ -1132,7 +1169,7 @@ class _FakeUserPage(_FakeWaf):
     def _download_webpage(self, url, name, note, impersonate=False, headers=None):
         assert impersonate and headers
         self.fetched.append(url)
-        return self._page(name)
+        return self._page(url, name)
 
     def _get_universal_data(self, page, name):
         return self.pages.get(page) or {}
@@ -1147,7 +1184,7 @@ def test_user_page_challenge_and_status_codes(fake_ydl):
     user = {"id": "1", "uniqueId": "someone", "secUid": "sec"}
     ydl.ies["TikTokUser"] = ie = _FakeUserPage({"someone": _user_detail(0, user=user, stats={})}, waf=1)
     assert tiktok._user_page(ydl, "someone")["user"] == user  # tiktok-live-waf: the user page gets solved too
-    assert ie.solved == 1 and ie.cookiejar.cookies == set() and len(ie.fetched) == 2
+    assert ie.solved == 1 and ie.cookiejar.cookies == {"_waftokenid"} and len(ie.fetched) == 2
     ydl.ies["TikTokUser"] = _FakeUserPage({"someone": _user_detail(0, user=user)}, waf=1, stays=True)
     with pytest.raises(UpstreamBlocked):
         tiktok._user_page(ydl, "someone")

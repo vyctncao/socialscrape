@@ -68,6 +68,7 @@ _REFUSED = {10000, 10102}  # VERIFY_CODE (captcha); USER_NOT_LOGIN, also sent fo
 _GONE = {10202, 10221}  # USER_NOT_EXIST; USER_BAN, also what a handle nobody has gets
 # What _extract_web_data_and_status raises for a page it got no data from: a JS challenge it couldn't pass
 _UNSOLVED = re.compile(r"challenge|universal data|unexpected response from webpage", re.I)
+_WAF_TOKEN = "_waftokenid"  # what TikTok's WAF sets once its challenge is passed, for that page only
 _profiles: dict[str, tuple[float, dict[str, Any]]] = {}
 _profiles_lock = threading.Lock()
 
@@ -154,7 +155,11 @@ def _web_page(ie: Any, url: str, name: str, note: str, **kwargs: Any) -> str:
 
     As in TikTokBaseIE._extract_web_data_and_status: a page without universal data is the challenge. It goes
     through yt-dlp's solver and is fetched again with the challenge cookies, which are then dropped. Still none: 503.
+    The token TikTok sets once a page's challenge is passed is dropped before the next page: that page would get
+    a 403 for it (as /@name/live, then /@name for one not live, did).
     """
+    for cookie in [c for c in ie.cookiejar if c.name == _WAF_TOKEN]:
+        ie.cookiejar.clear(cookie.domain, cookie.path, cookie.name)
     page = ie._download_webpage(url, name, note, **kwargs)
     if ie._get_universal_data(page, name):
         return page
