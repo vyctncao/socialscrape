@@ -284,8 +284,8 @@ async def _run(fn: Callable[[Any], T]) -> T:
             if "does the playlist exist" in str(exc):
                 raise NotFound("Playlist or channel not found") from exc
             if "playlist type is unviewable" in str(exc):
-                raise BadRequest("YouTube does not list this playlist type (mixes / radio playlists such as RD… "
-                                 "only exist inside a watch page)", code="unviewable_playlist") from exc
+                raise BadRequest("YouTube does not list this playlist type (mixes / radio playlists such as "
+                                 "RD<video id> only exist inside a watch page)", code="unviewable_playlist") from exc
             raise
 
     return await with_ydl("youtube", go)
@@ -561,7 +561,8 @@ def _playlist_video(key: str, node: dict[str, Any], uploader: dict[str, Any] | N
         notes="About 100 videos per page. Unavailable/private entries YouTube hides are skipped, so a page can "
               "hold fewer videos than totalVideos implies. Shorts playlists (UUSH…) are one page of up to about "
               "100 Shorts with no continuation (YouTube offers none), and their items have no length. Mixes "
-              "(RD…) are not listable as playlists and return 400.")
+              "(RD<video id>, RDAMVM…: radio playlists YouTube only builds inside a watch page) return 400 "
+              "unviewable_playlist; YouTube Music's curated RDCLAK5uy_… playlists list like any other.")
 async def youtube_playlist(playlist_id: str = Query(...), continuationToken: str | None = None):
     pid = playlist_id_of(playlist_id)
     if state := _state(continuationToken, "playlist"):

@@ -23,6 +23,7 @@ SCIENCECASTS = "PL8A2171FA17D43A35"  # NASA, ~220 listed videos, 3 pages
 MRBEAST_LONG = "UULFX6OQ3DkcsbYNE6H8uQQuVA"  # MrBeast long-form uploads, 800+ videos
 MRBEAST_SHORTS = "UUSHX6OQ3DkcsbYNE6H8uQQuVA"
 PODCAST = "PLgM0gYv7Sm1M6IwGaKNETyQLC7IO644py"  # 99% Invisible x BBC podcast, ~21 episodes, collab lockups
+HIT_LIST = "RDCLAK5uy_kmPRjHDECIcuVwnKsx2Ng7fyNgFKWNJFs"  # YouTube Music's curated "The Hit List", ~50 videos
 
 _memo: dict[tuple, tuple[int, dict]] = {}
 
@@ -379,6 +380,14 @@ def test_playlist_missing_or_private_is_404(client, value):
 def test_playlist_mix_is_unviewable(client, value):
     status, body = err(client, PLAYLIST, playlist_id=value)
     assert status == 400 and body["error"] == "unviewable_playlist"
+
+
+@pytest.mark.live
+def test_playlist_music_curated_lists(client):
+    """YouTube Music's curated RDCLAK5uy_… playlists start with 'RD' but are no mixes: they list (the route notes
+    said every RD… playlist was a 400)."""
+    body = ok(client, PLAYLIST, playlist_id=HIT_LIST)
+    assert body["title"] and body["videos"] and body["totalVideos"] >= len(body["videos"])
 
 
 @pytest.mark.live
