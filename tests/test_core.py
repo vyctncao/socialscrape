@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from socialscrape import cursor, subtitles, util
 from socialscrape.catalog import CATALOG
-from socialscrape.errors import BadRequest
+from socialscrape.errors import BadRequest, NotFound
 from socialscrape.ytdlp import translate_error
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor.common import InfoExtractor
@@ -104,6 +104,82 @@ def test_util():
     assert util.iso_utc(0) == "1970-01-01T00:00:00.000Z"
     assert util.clock(75) == "1:15" and util.clock(3675) == "1:01:15"
     assert util.clock(348, always_hours=True) == "00:05:48"
+
+
+def test_clean_param_drops_what_a_copied_value_carries_along():
+    link = "https://youtu.be/jNQXAC9IVRw"
+    for pasted in (f"\ufeff{link}", f"\u200b{link}\u200b", f"\u200e {link} \u200f", f"\u2068{link}\u2069",
+                   f"\u202a{link}\u202c", f"\u00ad{link}\u2060", f"<{link}>", f" <{link}>\n", f"<\u200b{link}>"):
+        assert util.clean_param(pasted) == link, ascii(pasted)
+    for kept in ("<3", "<b>", "<br/>", f"a <{link}>", f"<{link} b>", f"<<{link}>>", "a\u200db", "", "jane"):
+        assert util.clean_param(kept) == kept, kept
+    england = "\U0001f3f4\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f"  # tag characters end it
+    assert util.clean_param(f"\u200b{england}") == england
+    started = time.perf_counter()  # scans, not backtracking regexes
+    for long in (" " * 100_000 + "x", "x" + " " * 100_000 + "x", "<" + "a" * 100_000, "<" * 50_000):
+        util.clean_param(long)
+    assert time.perf_counter() - started < 1
+
+
+def test_sc_get_cleans_every_string_param(monkeypatch):
+    from fastapi import APIRouter, FastAPI
+
+    from socialscrape import registry
+
+    monkeypatch.setattr(registry, "IMPLEMENTED", dict(registry.IMPLEMENTED))
+    router = APIRouter()
+
+    @registry.sc_get(router, "/v9/test/echo", source="test")
+    async def echo(url: str, handle: str | None = None, cursor: str | None = None):
+        return {"url": url, "handle": handle, "cursor": cursor}
+
+    app = FastAPI()
+    app.include_router(router)
+    body = TestClient(app).get("/v9/test/echo", params={"url": "<https://youtu.be/x>", "handle": "\u200b@jane\u200e"})
+    assert body.json() == {"success": True, "credits_charged": 0, "url": "https://youtu.be/x", "handle": "@jane",
+                           "cursor": None}  # a param left out stays None
+
+
+@pytest.mark.parametrize("path,key", [
+    ("/v1/instagram/user/reels", "handle"), ("/v1/instagram/user/highlight/detail", "id"),
+    ("/v1/youtube/channel-videos", "continuationToken"), ("/v1/youtube/search", "query"),
+    ("/v1/tiktok/song", "clipId"), ("/v1/tiktok/profile", "handle"),
+])
+def test_blank_value_answers_like_an_empty_one(client, path, key):
+    empty = client.get(path, params={key: ""})
+    assert empty.status_code == 400  # answered without a request upstream
+    for blank in (" ", "\t\u200b ", "\ufeff"):
+        r = client.get(path, params={key: blank})
+        assert (r.status_code, r.json()) == (400, empty.json()), (ascii(blank), r.text)
+
+
+def test_pasted_link_or_handle_reaches_each_platform_clean(client, monkeypatch):
+    from socialscrape.platforms import instagram, tiktok, youtube_videos
+
+    seen = []
+
+    def record(value, *rest, **opts):
+        seen.append(value)
+        raise NotFound("stubbed")
+
+    async def record_async(value, *rest, **opts):
+        record(value)
+
+    monkeypatch.setattr(youtube_videos, "extract_watch", lambda ydl, vid, process=True: record(vid))
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, ident: record(ident))
+    monkeypatch.setattr(instagram, "fetch_profile", record_async)
+    for path, key, value in (
+            ("/v1/youtube/video", "url", "\ufeffhttps://www.youtube.com/watch?v=jNQXAC9IVRw"),
+            ("/v1/youtube/video", "url", "<https://youtu.be/jNQXAC9IVRw>"),
+            ("/v1/youtube/video", "url", "\u2068https://youtu.be/jNQXAC9IVRw\u2069"),
+            ("/v1/youtube/video", "url", "\u200bjNQXAC9IVRw"),
+            ("/v1/tiktok/profile", "handle", "\ufeff@stoolpresidente"),
+            ("/v1/tiktok/profile", "handle", "<https://www.tiktok.com/@stoolpresidente>"),
+            ("/v1/instagram/profile", "handle", "\u200bjane"),
+            ("/v1/instagram/profile", "handle", "<https://www.instagram.com/jane/>")):
+        r = client.get(path, params={key: value})
+        assert r.status_code == 404, (ascii(value), r.text)
+    assert seen == ["jNQXAC9IVRw"] * 4 + ["stoolpresidente"] * 2 + ["jane"] * 2
 
 
 def test_error_translation():

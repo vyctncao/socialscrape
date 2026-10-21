@@ -279,7 +279,7 @@ def test_song_videos_past_the_end_is_empty(client):
     assert body["aweme_list"] == [] and not body["has_more"] and "cursor" not in body
 
 
-@pytest.mark.parametrize("cursor", ["abc", "-1", "36.0", "1" * 10, " 36 ", "²", "ss1.abc"])
+@pytest.mark.parametrize("cursor", ["abc", "-1", "36.0", "1" * 10, "3 6", "²", "ss1.abc"])
 def test_song_videos_bad_cursor_is_400(client, cursor):
     err(client, SONG_VIDEOS, 400, "bad_cursor", clipId=SMALL_SOUND, cursor=cursor)
 
@@ -334,7 +334,7 @@ def test_collection_cursor_offsets(client, collection):
     assert not end.get("videos") and end["has_more"] is False
 
 
-@pytest.mark.parametrize("cursor", ["abc", "-1", "2.0", " 2 ", "1" * 10])
+@pytest.mark.parametrize("cursor", ["abc", "-1", "2.0", "2 0", "1" * 10])
 def test_collection_bad_cursor_is_400(client, cursor):
     err(client, COLLECTION_VIDEOS, 400, "bad_cursor", url=COLLECTION, cursor=cursor)
 

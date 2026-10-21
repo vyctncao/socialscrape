@@ -149,8 +149,9 @@ def test_profile_rejects_bad_handles(client, handle):
 
 @pytest.mark.parametrize("path", [POST_COUNT, POSTS, REELS, HIGHLIGHTS])
 def test_other_endpoints_reject_bad_handles(client, path):
-    for handle in (" ", "jane.", f"{IG}/p/DLDXI0fylTC/", "x" * 10_000):
+    for handle in ("jane.", f"{IG}/p/DLDXI0fylTC/", "x" * 10_000):
         err(client, path, 400, "bad_handle", handle=handle)
+    assert call(client, path, handle=" ") == call(client, path, handle="")  # a blank handle is left out
 
 
 @pytest.mark.parametrize("path", [PROFILE, POST_COUNT, POSTS])
@@ -362,7 +363,7 @@ def test_highlight_detail_id_forms(client, value):
 
 
 @pytest.mark.parametrize("value", [
-    " ", "abc", "-1", "1234", "1" * 20, "highlight:", "highlight:abc", f"HIGHLIGHT:{HIGHLIGHT}", f"{HIGHLIGHT}.0",
+    "abc", "-1", "1234", "1" * 20, "highlight:", "highlight:abc", f"HIGHLIGHT:{HIGHLIGHT}", f"{HIGHLIGHT}.0",
     "1.8382085791177637e16", "https://www.tiktok.com/@scout2015/video/6718335390845095173",
     f"{IG}/s/aGlnaGxpZ2h0OmFiYw",  # a share link holding 'highlight:abc'
 ])

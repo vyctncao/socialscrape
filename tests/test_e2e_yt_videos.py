@@ -315,7 +315,7 @@ def test_comments_order_is_case_insensitive(client):
     assert ok(client, "/v1/youtube/video/comments", url=watch(ZOO), order=" NEWEST ")["comments"]
 
 
-@pytest.mark.parametrize("token", ["garbage", " ", "A" * 4000, "Eg0SC0FWTzBpZmxlLU9V"])
+@pytest.mark.parametrize("token", ["garbage", "A" * 4000, "Eg0SC0FWTzBpZmxlLU9V"])
 def test_comments_bad_cursor(client, token):
     err(client, "/v1/youtube/video/comments", 400, "bad_cursor", url=watch(ZOO), continuationToken=token)
 

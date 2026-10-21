@@ -84,6 +84,33 @@ def compact(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
+# Invisible characters a copied value can start or end with, which str.strip() keeps: a byte order mark, zero-width
+# spaces and joiners, bidi marks and isolates (a link copied out of right-to-left text) and the soft hyphen.
+_INVISIBLE = frozenset("\u00ad\u200b\u200c\u200d\u200e\u200f\u2060\ufeff"  # soft hyphen, zero-width ones, BOM
+                       "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")  # bidi embeddings, isolates
+
+
+def _strip(value: str) -> str:
+    """str.strip() that also takes _INVISIBLE (a scan, not a regex: one would backtrack over long runs of spaces)."""
+    start, end = 0, len(value)
+    while start < end and (value[start].isspace() or value[start] in _INVISIBLE):
+        start += 1
+    while end > start and (value[end - 1].isspace() or value[end - 1] in _INVISIBLE):
+        end -= 1
+    return value[start:end]
+
+
+_BRACKETED = re.compile(r"<([^<>\s]*)>")
+
+
+def clean_param(value: str) -> str:
+    """A query-string value without the whitespace and invisible characters a copy can carry along at either end,
+    or the angle brackets plain text puts around a link ('<https://youtu.be/x>', RFC 3986 appendix C)."""
+    value = _strip(value)
+    m = _BRACKETED.fullmatch(value)
+    return _strip(m[1]) if m and "/" in m[1] and "." in m[1] else value  # a link, not '<b>' or '<br/>'
+
+
 def truthy(value: str | bool | None) -> bool:
     """Query-string booleans: 'true'/'1'/'yes' -> True."""
     if isinstance(value, bool):

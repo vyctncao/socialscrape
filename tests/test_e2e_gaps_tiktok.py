@@ -392,7 +392,7 @@ def test_song_videos_cursor_edges(client):
     assert [a["aweme_id"] for a in padded["aweme_list"]] == [a["aweme_id"] for a in first["aweme_list"]]
     beyond = ok(client, "/v1/tiktok/song/videos", clipId=SMALL_SOUND, cursor="999999999")
     assert beyond["aweme_list"] == [] and not beyond.get("has_more") and "cursor" not in beyond
-    for bad in ("1000000000", "-1", "1.5", " 20", "abc"):
+    for bad in ("1000000000", "-1", "1.5", "2 0", "abc"):
         err(client, "/v1/tiktok/song/videos", 400, "bad_cursor", clipId=SMALL_SOUND, cursor=bad)
 
 

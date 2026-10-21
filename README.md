@@ -56,6 +56,7 @@ Configuration is through environment variables (the `socialscrape` command takes
 
 - **Caching.** `cache_max_age` (`1d`, `3d`, `7d`, `14d`, `30d`, or hours like `12h`) works on every implemented GET, and the OpenAPI spec lists it on each one. Cache hits add `cached: true` and `cached_at`. Any other value is a `400`.
 - **Pagination.** Pagination uses each endpoint's ScrapeCreators parameter name (`continuationToken`, `cursor`, `max_cursor`, ...). The tokens are the platform's own where yt-dlp's machinery exposes them, otherwise opaque `ss1.` tokens.
+- **Params.** A value is read without the whitespace and invisible characters (a byte order mark, zero-width spaces, bidi marks) a copy carries along at either end, and a link without the angle brackets plain text puts around it (`<https://youtu.be/...>`). A value of only those counts as left out, like an empty one.
 - **Response fidelity.** Every implemented endpoint is contract-tested against the key paths and JSON types of ScrapeCreators' example responses. Fields the source can't provide truthfully are left out or null; they are never invented.
 
 ## What "powered by yt-dlp" means here

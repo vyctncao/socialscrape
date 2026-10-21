@@ -228,7 +228,7 @@ def test_transcript_missing_language_is_null(client):
     assert body["transcript"] is None and body["id"] == SCOUT_ID
 
 
-@pytest.mark.parametrize("language", ["english!", "e", "pt-BR", "engl", " en"])
+@pytest.mark.parametrize("language", ["english!", "e", "pt-BR", "engl", "e n"])
 def test_transcript_bad_language_is_400(client, language):
     err(client, TRANSCRIPT, 400, "bad_request", url=STOOL_VIDEO, language=language)
 

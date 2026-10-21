@@ -470,5 +470,5 @@ def test_conflicting_and_repeated_params(client):
     assert ok(client, f"{YT}/channel-videos", channelId="", handle="NASA")["videos"]
     err(client, f"{YT}/channel-videos", 400, "bad_request", channelId="  ")
     err(client, f"{YT}/channel-videos", 400, "bad_request", continuationToken="")
-    err(client, f"{YT}/channel-videos", 400, "bad_cursor", continuationToken=" ")
+    err(client, f"{YT}/channel-videos", 400, "bad_request", continuationToken=" ")  # blank: left out, as ""
     err(client, f"{YT}/channel", 400, "bad_request", url="https://youtu.be/MrBeast")
