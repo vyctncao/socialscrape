@@ -971,6 +971,20 @@ def test_playlist_route_reads_an_alert_of_another_shape_as_none(client, monkeypa
     assert (r.status_code, r.json()["error"]) == (404, "not_found"), r.text
 
 
+@pytest.mark.parametrize("depth", [3000, 100_000], ids=["walked", "parsed"])
+def test_playlist_route_reads_a_page_nested_too_deeply_as_an_upstream_error(client, monkeypatch, depth):
+    """yt-deep-500: an answer nested deeper than Python reads JSON (about 10000 levels) failed yt-dlp's reader with
+    a RecursionError, which it lets through (it only takes a body that isn't JSON for an error), and one nested
+    past 1000 levels failed our walk of it the same way: either was a 500 "Internal server error", as for a bug."""
+    raw = ('{"onResponseReceivedActions": [{"appendContinuationItemsAction": {"continuationItems": '
+           + "[" * depth + "]" * depth + "}}]}")
+    monkeypatch.setattr(YoutubeTabIE, "_download_webpage_handle", lambda self, *a, **kw: (raw, None))
+    params = {"playlist_id": TF2, "continuationToken": M._cursor("playlist", "NEXT", p=TF2, n=100)}
+    r = client.get("/v1/youtube/playlist", params=params)
+    assert (r.status_code, r.json()["error"]) == (500, "upstream_error"), r.text
+    assert r.json()["message"] == "The platform's response is nested too deeply to read"
+
+
 def test_unviewable_playlist_is_400(client, monkeypatch):
     class IE:
         def initialize(self) -> None:

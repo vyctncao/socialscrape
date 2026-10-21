@@ -340,6 +340,10 @@ def test_clean_topic():
 def test_page_relay_reads_prefetched_results():
     html = _sjs({"data": {"xig_user_by_username": {"pk": "1"}}}) + "<script data-sjs>{broken</script>"
     assert ig.page_relay(html) == [{"data": {"xig_user_by_username": {"pk": "1"}}}]
+    # ig-deep-500: a blob nested deeper than Python reads JSON (a RecursionError, not a ValueError) was a 500 on the
+    # profile and topic routes; it is skipped like a broken one
+    deep = "<script data-sjs>" + '{"a":' * 100_000 + "1" + "}" * 100_000 + "</script>"
+    assert ig.page_relay(deep + html) == ig.page_relay(html)
 
 
 def test_page_relay_accepts_hashed_module_name():
@@ -887,6 +891,9 @@ def test_restricted_profile_is_403(client, pages):
         client.get("/v1/instagram/profile", params={"handle": "heineken"}), 403)["message"]
     assert ig.profile_restriction(PROFILE_HTML) is None
     assert ig.profile_restriction('{"gating":null}') is None
+    deep = '{"gating":{"title":' + "[" * 100_000 + "]" * 100_000 + "}}"  # ig-deep-500: was a 500, read as no gating
+    assert ig.profile_restriction(deep) is None
+    assert ig.profile_restriction(deep + RESTRICTED_ICON_HTML) == "Restricted profile"
 
 
 def test_restricted_profile_post_count_reads_the_page(client, pages):

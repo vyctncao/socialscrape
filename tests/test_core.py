@@ -401,9 +401,10 @@ def test_parse_timed_text():
 
 def test_parse_json3_skips_what_isnt_a_caption():
     """JSON that isn't an object, null events or segments, and times that aren't numbers were a 500 (or lost the
-    whole transcript)."""
-    for raw in ("[1, 2]", "null", '"x"', '{"events": 5}', '{"events": [null, 1, {"segs": null}, {"segs": {}}]}'):
-        assert subtitles.parse(raw, "json3") == [], raw
+    whole transcript). So was JSON nested deeper than Python reads it (a RecursionError, not a ValueError)."""
+    for raw in ("[1, 2]", "null", '"x"', '{"events": 5}', '{"events": [null, 1, {"segs": null}, {"segs": {}}]}',
+                '{"events": ' + "[" * 100_000 + "]" * 100_000 + "}"):
+        assert subtitles.parse(raw, "json3") == [], raw[:40]
     raw = json.dumps({"events": [{"segs": [None, {"utf8": None}, {"utf8": 5}, {"utf8": "a"}], "tStartMs": "x"},
                                  {"segs": [{"utf8": "b"}], "tStartMs": 1500, "dDurationMs": True},
                                  {"segs": [{"utf8": "c"}], "tStartMs": float("nan"), "dDurationMs": 1e400}]})

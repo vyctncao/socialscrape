@@ -218,7 +218,7 @@ def parse(raw: str, ext: str) -> list[Segment]:
     if ext == "json3":
         try:
             return parse_json3(raw)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):  # not JSON, or nested deeper than Python reads it
             return []
     if ext in ("vtt", "srt"):
         return parse_cues(raw)

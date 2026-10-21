@@ -202,7 +202,7 @@ def page_relay(html: str) -> list[dict[str, Any]]:
     for blob in InstagramIE._SJS_RE.findall(html):
         try:
             data = json.loads(blob)
-        except ValueError:
+        except (ValueError, RecursionError):  # not JSON, or nested deeper than Python reads it
             continue
         for entry in traverse_obj(data, (
                 "require", ..., ..., ..., "__bbox", "require",
@@ -373,7 +373,7 @@ def profile_restriction(html: str) -> str | None:
     for blob in _GATING.findall(html):
         try:
             gating = json.loads(blob)
-        except ValueError:
+        except (ValueError, RecursionError):  # not JSON, or nested deeper than Python reads it
             continue
         return ": ".join(s for s in (gating.get("title"), gating.get("description"))
                          if isinstance(s, str) and s) or "Restricted profile"
