@@ -335,6 +335,38 @@ def test_watch_next_channels_and_localized_labels(ies):
     assert english["viewCountText"].endswith(" views")
 
 
+def test_mappers_read_a_field_of_another_type_as_missing(ies):
+    """yt-videos-field-type-500: a field of another type than the one YouTube sends (an object or a number for a
+    string, a string for a list or an object, a string for an image size) was a 500 (TypeError or AttributeError)
+    in the mappers of comments, community posts and watch-next videos. It reads as missing."""
+    assert P.text_of({"runs": [{"text": {"x": 1}}, {"text": "2 weeks ago"}]}) == "2 weeks ago"
+    assert P.handle_of({"x": 1}) is None and P.abs_url({"x": 1}) is None
+    assert P.iso_ts({"x": 1}) is None and P.iso_ts(5) is None
+    assert P.channel_block("UCx", "T", {"x": 1}) == {"id": "UCx", "url": "https://www.youtube.com/channel/UCx",
+                                                   "handle": None, "title": "T"}
+    assert P.largest(7) is None
+    assert P.largest([{"url": {"x": 1}, "width": 900, "height": 900}, {"url": "//x/a.jpg", "width": "9", "height": 9},
+                      {"url": "//x/b.jpg", "width": 2, "height": 2}]) == "https://x/b.jpg"
+    assert P.sort_token({"sortMenu": {"sortFilterSubMenuRenderer": {"subMenuItems": ["x", "y"]}}}, "newest") == (
+        None, False)
+    tap = ("rendererContext", "commandContext", "onTap", "innertubeCommand")
+    avatar = {"image": {"decoratedAvatarViewModel": nest(tap, {"browseEndpoint": "x"})}}
+    assert P.lockup_channel(avatar, "Someone") == {"title": "Someone", "url": None, "handle": None, "id": None}
+    item = {"title": {"content": "Sauce+"}, "subtitle": {"content": "\u2068@sauceplusofficial\u2069 \u2022 1M"},
+            **nest(tap, {"browseEndpoint": "x"})}
+    stacked = {"image": {"avatarStackViewModel": nest((
+        *tap, "showDialogCommand", "panelLoadingStrategy", "inlineContent", "dialogViewModel", "customContent",
+        "listViewModel", "listItems"), [{"listItemViewModel": item}])}}
+    assert P.lockup_channel(stacked, "Sauce+ and William Osman") == {
+        "title": "Sauce+", "url": "https://www.youtube.com/@sauceplusofficial", "handle": "sauceplusofficial",
+        "id": None}
+    view_model = ("commentThreadRenderer", "commentViewModel", "commentViewModel")
+    for item, entities in [({"commentThreadRenderer": "x"}, []), ({"commentThreadRenderer": {"comment": "x"}}, []),
+                           (nest(view_model, {"commentKey": {"x": 1}}), []),
+                           ({"commentViewModel": {"commentKey": "K"}}, [{"entityKey": {"x": 1}}])]:
+        assert P.map_comment(ies[0], item, entities, level=0, with_replies_token=True) is None, item
+
+
 def test_video_payload_empty_description_is_null(ies):
     info = {**cached(f"{ZOO}.info.json"), "description": ""}
     body = P.video_payload(info, cached(f"{ZOO}.initial.json"), cached(f"{ZOO}.players.json"), ies[1],

@@ -47,7 +47,7 @@ def text(node: Any) -> str | None:
 
 def count(value: str | None) -> int | None:
     """'251M' / '2,905,080 views' / 'No views' -> int (abbreviated inputs are approximate)."""
-    if not value:
+    if not value or not isinstance(value, str):
         return None
     if value.strip().lower().startswith("no "):
         return 0
@@ -70,22 +70,28 @@ def approx_time(value: str | None) -> str | None:
 
 
 def best_url(sources: Any) -> str | None:
-    """Largest image of a thumbnails/sources list."""
-    good = [s for s in sources or [] if isinstance(s, dict) and s.get("url")]
+    """Largest image of a thumbnails/sources list (a size that isn't a number counts as 0)."""
+    good = [s for s in sources if isinstance(s, dict) and isinstance(s.get("url"), str) and s["url"]] \
+        if isinstance(sources, list) else []
     if not good:
         return None
-    url = max(good, key=lambda s: (s.get("width") or 0) * (s.get("height") or 0))["url"]
+    url = max(good, key=lambda s: _size(s.get("width")) * _size(s.get("height")))["url"]
     return "https:" + url if url.startswith("//") else url
+
+
+def _size(value: Any) -> int | float:
+    """An image's width or height, 0 when it isn't a number."""
+    return value if isinstance(value, (int, float)) else 0
 
 
 def handle_of(path: str | None) -> str | None:
     """'/@MrBeast' or 'http://www.youtube.com/@MrBeast' -> 'MrBeast'."""
-    m = re.search(r"/@([^/?#]+)", path or "")
+    m = re.search(r"/@([^/?#]+)", path) if isinstance(path, str) else None
     return urllib.parse.unquote(m.group(1)) if m else None
 
 
 def channel_url(path: str | None) -> str | None:
-    return urllib.parse.urljoin(YT, path) if path else None
+    return urllib.parse.urljoin(YT, path) if path and isinstance(path, str) else None
 
 
 def watch_url(video_id: str) -> str:
@@ -154,8 +160,9 @@ def reloads(response: dict[str, Any]) -> bool:
 def browse_ref(run: Any) -> dict[str, str | None]:
     """A text run / commandRun / renderer with a browseEndpoint -> {id, handle, url}."""
     ep = traverse_obj(run, (("navigationEndpoint", ("onTap", "innertubeCommand")), "browseEndpoint", {dict}, any)) or {}
-    path = ep.get("canonicalBaseUrl") or (f"/channel/{ep['browseId']}" if ep.get("browseId") else None)
-    return {"id": ep.get("browseId"), "handle": handle_of(path), "url": channel_url(path)}
+    browse_id = traverse_obj(ep, ("browseId", {str}))
+    path = traverse_obj(ep, ("canonicalBaseUrl", {str})) or (f"/channel/{browse_id}" if browse_id else None)
+    return {"id": browse_id, "handle": handle_of(path), "url": channel_url(path)}
 
 
 def error_page(payload: Any) -> bool:
@@ -206,7 +213,7 @@ def sort_chip_token(content: Any, label: str) -> str | None:
     """Continuation token behind a channel tab's 'Latest' / 'Popular' / 'Oldest' chip. A videos tab that also has
     'Members only' / 'Public' chips (LinusTechTips') puts the three in the drop-down of one chip instead."""
     for chip in traverse_obj(content, (..., "header", "chipBarViewModel", "chips", ..., "chipViewModel", {dict})):
-        if (chip.get("text") or "").lower() == label.lower() and (token := traverse_obj(chip, (
+        if (traverse_obj(chip, ("text", {str})) or "").lower() == label.lower() and (token := traverse_obj(chip, (
                 "tapCommand", "innertubeCommand", "continuationCommand", "token", {str}))):
             return token
         for item in traverse_obj(chip, _SORT_SHEET):
@@ -444,7 +451,7 @@ def lockup_playlist(vm: dict[str, Any]) -> dict[str, Any] | None:
 
 def short_lockup(vm: dict[str, Any]) -> dict[str, Any] | None:
     """shortsLockupViewModel / reelItemRenderer -> normalized dict; channel and age only on mweb lockups."""
-    m = re.match(r"shorts-shelf-item-([\w-]{11})$", vm.get("entityId") or "")
+    m = re.match(r"shorts-shelf-item-([\w-]{11})$", traverse_obj(vm, ("entityId", {str})) or "")
     vid = (traverse_obj(vm, ("onTap", "innertubeCommand", "reelWatchEndpoint", "videoId", {str}))
            or vm.get("videoId") or (m.group(1) if m else None))
     if not vid:
@@ -452,7 +459,7 @@ def short_lockup(vm: dict[str, Any]) -> dict[str, Any] | None:
     views = text(traverse_obj(vm, ("overlayMetadata", "secondaryText"))) or text(vm.get("viewCountText"))
     # Slim lockups (hashtag pages) only carry the title inside the a11y text, as yt-dlp's own parser reads it.
     a11y = re.fullmatch(r"(.+), (?:[\d,.]+(?:[KMB]| million| billion| thousand)?|No) views? - play Short",
-                        vm.get("accessibilityText") or "", re.S)
+                        traverse_obj(vm, ("accessibilityText", {str})) or "", re.S)
     below = traverse_obj(vm, ("belowThumbnailMetadata", {dict})) or {}
     avatar = traverse_obj(below, ("avatar", "avatarViewModel", {dict})) or {}
     ref = browse_ref({"onTap": avatar.get("endpoint")})
@@ -563,7 +570,7 @@ def post(thread: dict[str, Any]) -> dict[str, Any] | None:
     author = traverse_obj(p, (("authorText", "displayName"), "runs", 0, {dict}, any)) or {}
     endpoint = p.get("authorEndpoint") or p.get("endpoint")
     ref = browse_ref(author if author.get("navigationEndpoint") else {"navigationEndpoint": endpoint})
-    att = p.get("backstageAttachment") or {}
+    att = traverse_obj(p, ("backstageAttachment", {dict})) or {}
     nodes = [att.get("backstageImageRenderer"),
              *traverse_obj(att, ("postMultiImageRenderer", "images", ..., "backstageImageRenderer"))]
     images = [u for n in nodes if (u := best_url(traverse_obj(n, ("image", "thumbnails"))))]

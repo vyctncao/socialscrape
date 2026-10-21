@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pytest
+from yt_dlp.extractor.youtube import YoutubeTabIE
 from yt_dlp.networking import Response
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError
@@ -706,6 +707,45 @@ def test_mweb_hashtag_lockups():
     assert any(v["lengthSeconds"] for v in videos if not v["short"])
 
 
+def test_mappers_read_a_field_of_another_type_as_missing():
+    """yt-listings-field-type-500: a field of another type than the one YouTube sends (an object or a number for a
+    string, a string for a list or an object, a string for an image size) was a 500 (TypeError or AttributeError)
+    in the mappers every listing goes through. It reads as missing."""
+    assert P.best_url(7) is None
+    assert P.best_url([{"url": "https://x/a.jpg", "width": "1080", "height": 1080},
+                       {"url": "https://x/b.jpg", "width": 10, "height": 10}]) == "https://x/b.jpg"
+    assert P.best_url([{"url": {"x": 1}, "width": 4000, "height": 4000}, {"url": "//x/b.jpg"}]) == "https://x/b.jpg"
+    assert P.count({"simpleText": "5 views"}) is None and P.count(5) is None
+    assert P.handle_of({"x": 1}) is None and P.channel_url(7) is None
+    ref = P.browse_ref({"navigationEndpoint": {"browseEndpoint": {"browseId": {"x": 1}, "canonicalBaseUrl": ["/@x"]}}})
+    assert ref == {"id": None, "handle": None, "url": None}
+    ref = P.browse_ref({"navigationEndpoint": {"browseEndpoint": {"browseId": MRBEAST, "canonicalBaseUrl": {"x": 1}}}})
+    assert ref == {"id": MRBEAST, "handle": None, "url": f"https://www.youtube.com/channel/{MRBEAST}"}
+    chips = {"richGridRenderer": {"header": {"chipBarViewModel": {"chips": [
+        sort_chip({"content": "Latest"}, "LATEST"), sort_chip("Popular", "POPULAR")]}}}}
+    assert P.sort_chip_token(chips, "Latest") is None and P.sort_chip_token(chips, "Popular") == "POPULAR"
+    play = {"onTap": {"innertubeCommand": {"reelWatchEndpoint": {"videoId": "aNI2jv7lBPQ"}}}}
+    for odd in ({"entityId": {"x": 1}}, {"accessibilityText": ["Giving $10,000, 25 million views - play Short"]}):
+        short = P.short_lockup({**play, **odd})
+        assert (short["id"], short["title"]) == ("aNI2jv7lBPQ", None), odd
+    assert P.short_lockup({"entityId": 5}) is None
+    thread = copy.deepcopy(POST)
+    thread["post"]["backstagePostRenderer"]["backstageAttachment"] = "x"
+    assert (P.post(thread)["images"], P.post(thread)["video"]) == ([], None)
+    # an mweb lockup, which links its channel from the avatar only
+    vm = copy.deepcopy(LOCKUP_VIDEO)
+    md = vm["metadata"]["lockupMetadataViewModel"]
+    md["metadata"]["contentMetadataViewModel"]["metadataRows"][0]["metadataParts"][0]["text"].pop("commandRuns")
+    command = {"onTap": {"innertubeCommand": browse(MRBEAST, "/@MrBeast")}}
+    md["image"] = {"decoratedAvatarViewModel": {"rendererContext": {"commandContext": command}, "avatar": {
+        "avatarViewModel": {"image": {"sources": [{"url": "https://yt3.ggpht.com/m=s68"}]}}}}}
+    assert P.lockup_video(vm)["owner"] == {"title": "MrBeast", "id": MRBEAST, "handle": "MrBeast",
+                                           "url": "https://www.youtube.com/@MrBeast",
+                                           "thumbnail": "https://yt3.ggpht.com/m=s68"}
+    command["onTap"]["innertubeCommand"]["browseEndpoint"]["browseId"] = {"x": 1}
+    assert P.lockup_video(vm)["owner"] is None
+
+
 # --- offline: routes ---------------------------------------------------------------------
 
 
@@ -835,6 +875,27 @@ def test_shorts_playlist_route_names_the_uploader(client, upstream):
     assert len(body["videos"]) == 100 and body["continuationToken"] is None
     assert all(v["channel"] == {"title": "MrBeast", "url": "https://www.youtube.com/@MrBeast"} and v["title"]
                for v in body["videos"])
+
+
+@pytest.mark.parametrize("alert", [
+    {"alertWithButtonRenderer": "Unavailable videos are hidden"},
+    {"alertRenderer": {"type": ["ERROR"], "text": {"simpleText": "x"}}},
+    {"alertRenderer": {"type": {"x": 1}, "text": {"simpleText": "x"}}},
+], ids=["alert_of_another_type", "type_list", "type_object"])
+def test_playlist_route_reads_an_alert_of_another_shape_as_none(client, monkeypatch, alert):
+    """yt-alert-shape-500: yt-dlp's reader of a response's alerts, which every YouTube page and API call goes
+    through, failed on an alert that isn't an object or whose type isn't a string (an AttributeError: a 500).
+    That is no alert; YouTube's own errors still fail the request."""
+    answers = []
+    monkeypatch.setattr(YoutubeTabIE, "_call_api", lambda self, *a, **kw: answers.pop(0))
+    params = {"playlist_id": TF2, "continuationToken": M._cursor("playlist", "NEXT", p=TF2, n=100)}
+    answers.append({**appended([{"lockupViewModel": LOCKUP_VIDEO}]), "alerts": ["x", alert]})
+    r = client.get("/v1/youtube/playlist", params=params)
+    assert r.status_code == 200 and [v["id"] for v in r.json()["videos"]] == ["plN7JMbadRg"], r.text
+    answers.append({**appended([]), "alerts": [alert, {"alertRenderer": {
+        "type": "ERROR", "text": {"simpleText": "The playlist does not exist."}}}]})
+    r = client.get("/v1/youtube/playlist", params=params)
+    assert (r.status_code, r.json()["error"]) == (404, "not_found"), r.text
 
 
 def test_unviewable_playlist_is_400(client, monkeypatch):

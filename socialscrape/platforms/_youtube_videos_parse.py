@@ -34,7 +34,7 @@ def text_of(obj: Any) -> str | None:
     if isinstance(obj.get("simpleText"), str):
         return obj["simpleText"]
     if isinstance(obj.get("runs"), list):
-        return "".join(r.get("text") or "" for r in obj["runs"] if isinstance(r, dict)) or None
+        return "".join(r["text"] for r in obj["runs"] if isinstance(r, dict) and isinstance(r.get("text"), str)) or None
     if isinstance(obj.get("content"), str):
         return obj["content"]
     return None
@@ -42,7 +42,7 @@ def text_of(obj: Any) -> str | None:
 
 def handle_of(path: str | None) -> str | None:
     """'/@starterstory' or 'https://www.youtube.com/@x' -> 'starterstory' / 'x'."""
-    m = re.search(r"/@([^/?#]+)", path or "")
+    m = re.search(r"/@([^/?#]+)", path) if isinstance(path, str) else None
     return unquote(m.group(1)) if m else None
 
 
@@ -53,6 +53,7 @@ _SHOWN_HANDLE = re.compile(r"@([^\s\u2068\u2069•]+)")
 
 def channel_block(channel_id: str | None, title: str | None, path: str | None) -> dict[str, Any]:
     """SC's {id, url, handle, title} channel object from a browse path."""
+    path = path if isinstance(path, str) else None
     handle = handle_of(path)
     if handle:
         url = f"{YT}/@{handle}"
@@ -64,16 +65,22 @@ def channel_block(channel_id: str | None, title: str | None, path: str | None) -
 
 
 def abs_url(url: str | None) -> str | None:
-    if not url:
+    if not url or not isinstance(url, str):
         return None
     return "https:" + url if url.startswith("//") else urljoin(YT, url)
 
 
 def largest(thumbnails: Any) -> str | None:
-    thumbs = [t for t in thumbnails or [] if isinstance(t, dict) and t.get("url")]
+    """Largest of a thumbnails list (a size that isn't a number counts as 0)."""
+    thumbs = [t for t in thumbnails if isinstance(t, dict) and isinstance(t.get("url"), str) and t["url"]] \
+        if isinstance(thumbnails, list) else []
     if not thumbs:
         return None
-    return abs_url(max(thumbs, key=lambda t: (t.get("width") or 0) * (t.get("height") or 0))["url"])
+    return abs_url(max(thumbs, key=lambda t: _size(t.get("width")) * _size(t.get("height")))["url"])
+
+
+def _size(value: Any) -> int | float:
+    return value if isinstance(value, (int, float)) else 0
 
 
 # Unit words of YouTube's localized "N <unit> ago" labels, as prefixes of the word after the number (or of one
@@ -216,9 +223,11 @@ def compact_count(text: str | None, lang: str | None = None) -> int | None:
 
 def iso_ts(text: str | None) -> float | None:
     """'2025-11-07T07:00:01.184449-08:00' -> unix seconds (sub-second precision kept)."""
+    if not isinstance(text, str):
+        return None
     try:
         parsed = datetime.fromisoformat(text)
-    except (TypeError, ValueError):
+    except ValueError:
         return parse_iso8601(text)
     return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
 
@@ -427,8 +436,8 @@ def lockup_channel(meta: dict[str, Any], row_title: str | None) -> dict[str, Any
         handle = traverse_obj(first, ("subtitle", "content", {_SHOWN_HANDLE.search}, {lambda m: m.group(1)}))
         if handle:
             command = {**command, "browseEndpoint": {
-                **(command.get("browseEndpoint") or {}), "canonicalBaseUrl": f"/@{handle}"}}
-    browse = command.get("browseEndpoint") or {}
+                **(traverse_obj(command, ("browseEndpoint", {dict})) or {}), "canonicalBaseUrl": f"/@{handle}"}}
+    browse = traverse_obj(command, ("browseEndpoint", {dict})) or {}
     path = browse.get("canonicalBaseUrl") or traverse_obj(command, ("commandMetadata", "webCommandMetadata", "url", {str}))
     block = channel_block(browse.get("browseId"), title, path)
     return {"title": block["title"], "url": block["url"], "handle": block["handle"], "id": block["id"]}
@@ -647,7 +656,8 @@ def sort_token(header: dict[str, Any], order: str) -> tuple[str | None, bool]:
     if idx >= len(items):
         return None, False
     item = items[idx]
-    return traverse_obj(item, ("serviceEndpoint", "continuationCommand", "token", {str})), bool(item.get("selected"))
+    return (traverse_obj(item, ("serviceEndpoint", "continuationCommand", "token", {str})),
+            bool(traverse_obj(item, "selected")))
 
 
 def next_token(ie: Any, items: list[dict[str, Any]]) -> str | None:
@@ -662,19 +672,21 @@ def _entities(response: dict[str, Any]) -> list[dict[str, Any]]:
 def map_comment(ie: Any, item: dict[str, Any], entities: list[dict[str, Any]], *, level: int,
                 with_replies_token: bool) -> dict[str, Any] | None:
     """A commentThreadRenderer (top level) or commentViewModel (reply) -> SC comment."""
-    thread = item.get("commentThreadRenderer") or {}
+    thread = traverse_obj(item, ("commentThreadRenderer", {dict})) or {}
     view_model = traverse_obj(thread, ("commentViewModel", "commentViewModel", {dict})) or item.get("commentViewModel")
     raw_level = None
     if isinstance(view_model, dict):
-        keys = {k for k in (view_model.get("commentKey"), view_model.get("toolbarStateKey")) if k}
-        own = [e for e in entities if e.get("entityKey") in keys]
+        keys = {k for k in (view_model.get("commentKey"), view_model.get("toolbarStateKey"))
+                if k and isinstance(k, str)}
+        own = [e for e in entities if traverse_obj(e, ("entityKey", {str})) in keys]
         comment = ie._extract_comment(own) if own else None
         payload = traverse_obj(own, (..., "payload", "commentEntityPayload", {dict}, any)) or {}
         replies = parse_count(traverse_obj(payload, ("toolbar", "replyCount", {str}))) or 0
         raw_level = traverse_obj(payload, ("properties", "replyLevel", {int}))
     else:
-        renderer = thread.get("comment", {}).get("commentRenderer") or item.get("commentRenderer")
-        comment = ie._extract_comment_old(renderer) if isinstance(renderer, dict) else None
+        renderer = (traverse_obj(thread, ("comment", "commentRenderer", {dict}))
+                    or traverse_obj(item, ("commentRenderer", {dict})))
+        comment = ie._extract_comment_old(renderer) if renderer else None
         replies = (renderer or {}).get("replyCount") or 0
     if not comment:
         return None

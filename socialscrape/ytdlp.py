@@ -23,6 +23,7 @@ from typing import Any, Callable, TypeVar
 
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError, YoutubeDLCookieJar
+from yt_dlp.extractor.youtube import YoutubeBaseInfoExtractor
 from yt_dlp.networking.exceptions import HTTPError, NoSupportingHandlers, ProxyError, RequestError, TransportError
 from yt_dlp.utils import (
     DownloadError,
@@ -31,6 +32,7 @@ from yt_dlp.utils import (
     UnsupportedError,
     UserNotLive,
     YoutubeDLError,
+    traverse_obj,
 )
 
 from .config import get_settings
@@ -125,12 +127,24 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
     if extractor_args:
         merged["extractor_args"] = extractor_args
     with yt_dlp.YoutubeDL(merged) as ydl:
+        if platform == "youtube":
+            for key in ("Youtube", "YoutubeTab"):
+                ydl.get_info_extractor(key)._extract_alerts = _youtube_alerts
         try:
             return fn(ydl)
         finally:
             # The operator's cookies.txt is input only. Without this, close() saves the session's jar over it
             # with a plain open(path, "w") from every worker thread at once, truncating it for its readers.
             ydl.params["cookiefile"] = None
+
+
+def _youtube_alerts(data: Any) -> list[tuple[str, str]]:
+    """(type, message) of a YouTube response's alerts, as YoutubeBaseInfoExtractor._extract_alerts reads them, but an
+    alert that isn't an object, or whose type isn't a string, is no alert: yt-dlp's own reader fails on one (an
+    AttributeError, so a 500 here)."""
+    return [(alert["type"], message) for alert in traverse_obj(data, ("alerts", {list}, ..., {dict}, ..., {dict}))
+            if alert.get("type") and isinstance(alert["type"], str)
+            and (message := YoutubeBaseInfoExtractor._get_text(alert, "text"))]
 
 
 def cookie_file_problem(path: str) -> str | None:
