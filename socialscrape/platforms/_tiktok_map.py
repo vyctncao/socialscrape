@@ -62,11 +62,12 @@ def collection_id(url: str) -> str | None:
 
 
 def clean_handle(handle: str) -> str | None:
-    """'@name' / 'name' / profile or /live URL -> 'name'; None if it can't be a TikTok handle."""
+    """'@name' / 'name' / profile or /live URL -> 'name'; None if it can't be a TikTok handle. The '@' may be the
+    full-width '＠' of Japanese and Chinese keyboards."""
     handle = handle.strip()
     if "/" in handle and (m := _PROFILE_URL.match(with_scheme(handle))):
         return m.group("handle")
-    handle = handle.lstrip("@")
+    handle = handle.lstrip("@＠﹫")
     return handle if _HANDLE.fullmatch(handle) else None
 
 

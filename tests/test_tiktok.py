@@ -138,6 +138,9 @@ def test_clean_handle():
     assert M.clean_handle("https://www.tiktok.com/@scout2015/video/1") is None
     assert M.clean_handle("a.b-c_1") == "a.b-c_1"
     assert M.clean_handle("no spaces") is None and M.clean_handle("") is None
+    # the full-width '@' of Japanese and Chinese keyboards (and the small one) made it no handle
+    assert M.clean_handle("＠stoolpresidente") == M.clean_handle("﹫stoolpresidente") == "stoolpresidente"
+    assert M.clean_handle("＠") is None
 
 
 def test_image_and_codec_helpers():

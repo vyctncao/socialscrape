@@ -182,6 +182,10 @@ ABOUT_PAGE = about_page(
     (("@ครัวแม่ณี", None, None), "@" + quote("ครัวแม่ณี")),
     ((None, None, f"https://www.youtube.com/@{quote('தமிழ்')}/videos"), "@" + quote("தமிழ்")),
     ((None, None, "https://www.youtube.com/c/தமிழ்"), "c/" + quote("தமிழ்")),
+    # the full-width '@' of Japanese and Chinese keyboards (and the small one) was a 400
+    ((None, "＠MrBeast", None), "@MrBeast"),
+    (("＠MrBeast", None, None), "@MrBeast"),
+    ((None, None, "﹫MrBeast"), "@MrBeast"),
 ])
 def test_channel_base_accepts(args, base):
     assert M.channel_base(*args) == base
@@ -206,6 +210,8 @@ def test_channel_base_accepts(args, base):
     ("https://[www.youtube.com]/@MrBeast", None, None),
     (None, "http://[::1", None),
     (None, None, "https://www.youtube.com／@MrBeast"),
+    (None, "＠", None),
+    (None, "＠bad handle!", None),
 ])
 def test_channel_base_rejects(args):
     with pytest.raises(BadRequest):

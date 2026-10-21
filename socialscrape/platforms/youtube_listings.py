@@ -100,10 +100,11 @@ def _base_from_url(value: str) -> str:
 
 
 def _base_of(value: str) -> str | None:
-    """A UC… id, an @handle or a channel URL -> base; None for anything else (e.g. a bare name)."""
+    """A UC… id, an @handle (the '@' may be the full-width '＠' of Japanese and Chinese keyboards) or a channel URL
+    -> base; None for anything else (e.g. a bare name)."""
     if _CHANNEL_ID.fullmatch(value):
         return f"channel/{value}"
-    if value.startswith("@") and "/" not in value:
+    if value.startswith(("@", "＠", "﹫")) and "/" not in value:
         if not _is_handle(value[1:]):
             raise BadRequest(f"Invalid YouTube handle: {value}")
         return "@" + urllib.parse.quote(value[1:])

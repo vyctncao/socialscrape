@@ -213,6 +213,7 @@ def test_post_url_takes_share_links(value, link):
     ("instagram.com/jane?hl=en", "jane"), ("jane.doe_1", "jane.doe_1"), ("jane/", "jane"),
     ("https://m.instagram.com/jane/", "jane"), ("HTTPS://WWW.INSTAGRAM.COM/jane", "jane"),
     ("https://www.instagram.com/jane/reels/", "jane"), ("https://www.instagram.com/jane/tagged/", "jane"),
+    ("＠jane", "jane"), ("﹫jane", "jane"),  # the full-width '@' of Japanese and Chinese keyboards was a 400
 ])
 def test_clean_handle(value, expected):
     assert ig.clean_handle(value) == expected
@@ -223,7 +224,7 @@ def test_clean_handle(value, expected):
                                    "ja..ne", "https://notinstagram.com/jane/", "https://www.instagram.com/jane/x/",
                                    # Instagram routes, not profiles (checkpoint page, HTTP 400, login-only)
                                    "challenge", "graphql", "qr", "nametag", "press", "your_activity", "@Challenge",
-                                   "https://www.instagram.com/qr/", "notifications", "meta_verified"])
+                                   "https://www.instagram.com/qr/", "notifications", "meta_verified", "＠"])
 def test_clean_handle_rejects(value):
     with pytest.raises(BadRequest):
         ig.clean_handle(value)

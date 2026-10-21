@@ -120,12 +120,13 @@ def post_url(url: str | None) -> tuple[str, str]:
 
 
 def clean_handle(handle: str | None) -> str:
-    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it) -> 'jane'. 400 for anything else."""
+    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it) -> 'jane'. 400 for anything else. The
+    '@' may be the full-width '＠' of Japanese and Chinese keyboards."""
     value = (handle or "").strip()
     if re.search(r"instagram\.com", value, re.I):
         m = _PROFILE_URL.fullmatch(canonical_url(value))
         value = m.group(1) if m else ""
-    value = value.lstrip("@").rstrip("/")
+    value = value.lstrip("@＠﹫").rstrip("/")
     if not _HANDLE.fullmatch(value) or value.lower() in _RESERVED_PATHS:
         raise BadRequest("Not a valid Instagram handle", code="bad_handle")
     return value
