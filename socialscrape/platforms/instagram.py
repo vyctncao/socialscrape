@@ -73,6 +73,8 @@ _RESERVED_PATHS = {"p", "reel", "reels", "tv", "explore", "stories", "accounts",
 _HIGHLIGHT_ID = re.compile(r"(?:highlight:)?([0-9]{5,19})")  # highlight ids are 64-bit integers (ASCII digits only)
 # The app's share link for a highlight: /s/<base64 of 'highlight:<id>'>?story_media_id=<item>&igsh=…
 _HIGHLIGHT_SHARE = re.compile(r"https://www\.instagram\.com/s/(aGlnaGxpZ2h0[A-Za-z0-9]*(?:=|%3[Dd])*)/?(?:[?#].*)?")
+# A tag page's address, or that of the Popular page Instagram sends logged-out visitors on to (/popular/<slug>/).
+_TOPIC_URL = re.compile(r"https://www\.instagram\.com/(?:explore/tags|popular)/([^/?#]+)/?(?:[?#].*)?")
 # instagr.am is Instagram's old short domain: instagr.am/p/<code>/ redirects to the same path on www.
 _INSTAGRAM_HOSTS = {"www.instagram.com", "instagram.com", "m.instagram.com", "instagr.am"}
 _PAGE_ID = re.compile(r'"pageID":"(\w+)"')
@@ -160,14 +162,18 @@ def clean_highlight_id(value: str | None) -> str:
 
 def clean_topic(query: str | None, *, single_word: bool = False) -> str:
     """Popular-topic query or hashtag ('#', or the full-width '＃' Japanese and Chinese keyboards type, optional),
-    lower-cased. 400 if it can't be a /explore/tags/ path.
+    lower-cased. The address of its /explore/tags/<tag>/ or /popular/<slug>/ page gives that tag or slug. 400 if
+    it can't be a /explore/tags/ path.
 
     Tags are case-insensitive, but only the lower-case /explore/tags/ and /popular/ paths exist
     (/explore/tags/FunnyDogs/ redirects to login, /popular/FunnyDogs/ is a 404 page). 'İ' becomes 'i':
     str.lower() makes it 'i' + U+0307, a path that doesn't exist. Words may hold combining marks (Devanagari
     vowel signs, Tamil virama), which \\w doesn't match. Decomposed (NFD) spellings are composed first: only
     /explore/tags/espa%C3%B1a/ exists, not /explore/tags/espan%CC%83a/."""
-    value = unicodedata.normalize("NFC", re.sub(r"\s+", " ", (query or "").strip().lstrip("#＃﹟")).strip())
+    value = (query or "").strip()
+    if re.search(r"instagram\.com", value, re.I) and (m := _TOPIC_URL.fullmatch(canonical_url(value))):
+        value = urllib.parse.unquote(m.group(1)).strip()
+    value = unicodedata.normalize("NFC", re.sub(r"\s+", " ", value.lstrip("#＃﹟")).strip())
     value = value.replace("İ", "i").lower()
     if not value or len(value) > 100 or re.search(r"[/?#&%\\]", value):
         raise BadRequest("Not a valid Instagram topic/hashtag", code="bad_query")
@@ -1098,9 +1104,10 @@ async def instagram_highlight_detail(id: str | None = None) -> dict[str, Any]:
         notes="First page of Instagram's logged-out Popular page for the topic (usually 12 posts), title, "
               "total_media_count (when shown, abbreviated -> scaled), description and suggested_terms. Broad topics "
               "Instagram serves as a category hub (e.g. basketball) return every post of the hub's sections (up to "
-              "~220), without captions or usernames, and the section keywords as suggested_terms. The query is "
-              "matched case-insensitively and echoed lower-cased. Next pages need a query yt-dlp never makes: no "
-              "cursor/has_more is returned and passing a cursor returns 501.")
+              "~220), without captions or usernames, and the section keywords as suggested_terms. The query (or the "
+              "address of its /explore/tags/ or /popular/ page) is matched case-insensitively and echoed "
+              "lower-cased. Next pages need a query yt-dlp never makes: no cursor/has_more is returned and passing "
+              "a cursor returns 501.")
 async def instagram_search_popular(query: str = Query(...), cursor: str | None = None) -> dict[str, Any]:
     topic = clean_topic(query)
     _no_pagination(cursor, "Popular search")
@@ -1133,10 +1140,11 @@ def _page_number(page: str | None, name: str = "page", code: str = "bad_page") -
         notes="Not Google-indexed like ScrapeCreators: the posts Instagram's logged-out tag page shows (usually 12, "
               "mostly reels), filtered by media_type=reels. Broad tags Instagram serves as a category hub (e.g. "
               "basketball) return every post of the hub's sections (up to ~220), without captions or usernames. "
-              "The hashtag is matched case-insensitively and echoed lower-cased. date_posted (one of ScrapeCreators' "
-              "values; others return 400) and cursor 2-11 return 501 (cursor 1 is the first page; a cursor outside "
-              "1-11 or not a number returns 400, as in ScrapeCreators); no cursor is returned. Videos carry "
-              "video_play_count (Instagram's play count); no like/comment counts, timestamps or comments.")
+              "The hashtag (or the address of its /explore/tags/ page) is matched case-insensitively and echoed "
+              "lower-cased. date_posted (one of ScrapeCreators' values; others return 400) and cursor 2-11 return "
+              "501 (cursor 1 is the first page; a cursor outside 1-11 or not a number returns 400, as in "
+              "ScrapeCreators); no cursor is returned. Videos carry video_play_count (Instagram's play count); no "
+              "like/comment counts, timestamps or comments.")
 async def instagram_search_hashtag(hashtag: str = Query(...), date_posted: str | None = None,
                                    media_type: str | None = None, cursor: str | None = None) -> dict[str, Any]:
     tag = clean_topic(hashtag, single_word=True)
@@ -1158,11 +1166,11 @@ async def instagram_search_hashtag(hashtag: str = Query(...), date_posted: str |
 @sc_get(router, "/v2/instagram/reels/search", source="yt-dlp InstagramTagIE page (/explore/tags/ -> /popular/)",
         notes="Not Google-indexed like ScrapeCreators: the reels on Instagram's logged-out Popular page for the "
               "query (first page, usually 12). Broad topics Instagram serves as a category hub (e.g. basketball) "
-              "return every reel of the hub's sections (up to ~220), without captions or usernames. The query is "
-              "matched case-insensitively. Each reel carries video_play_count (Instagram's play count); no "
-              "like/comment counts, taken_at, location or audio. page 2-11 and "
-              "date_posted (last-week/last-month/last-year) return 501; page outside 1-11 or another date_posted "
-              "returns 400.")
+              "return every reel of the hub's sections (up to ~220), without captions or usernames. The query (or "
+              "the address of its /explore/tags/ or /popular/ page) is matched case-insensitively. Each reel "
+              "carries video_play_count (Instagram's play count); no like/comment counts, taken_at, location or "
+              "audio. page 2-11 and date_posted (last-week/last-month/last-year) return 501; page outside 1-11 or "
+              "another date_posted returns 400.")
 async def instagram_reels_search(query: str = Query(...), date_posted: str | None = None,
                                  page: str | None = None) -> dict[str, Any]:
     topic = clean_topic(query)

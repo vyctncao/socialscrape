@@ -293,11 +293,20 @@ def test_clean_topic():
     nfd = unicodedata.normalize("NFD", "España")
     assert nfd != "España" and ig.clean_topic(nfd, single_word=True) == ig.clean_topic("españa") == "españa"
     assert ig.clean_topic(unicodedata.normalize("NFD", "İSTANBUL"), single_word=True) == "istanbul"
-    for bad in ("", "#", "a/b", "x?y", "a" * 101):
+    # the address of a tag page, or of the Popular page Instagram sends logged-out visitors on to, was a 400
+    assert ig.clean_topic("https://www.instagram.com/explore/tags/FunnyDogs/", single_word=True) == "funnydogs"
+    assert ig.clean_topic("instagram.com/explore/tags/funnydogs?hl=en", single_word=True) == "funnydogs"
+    assert ig.clean_topic("https://www.instagram.com/popular/basketball/?utm_source=explore_tag") == "basketball"
+    assert ig.clean_topic("https://m.instagram.com/explore/tags/%E0%A4%AD%E0%A4%BE%E0%A4%B0%E0%A4%A4/") == "भारत"
+    assert ig.clean_topic("https://www.instagram.com/popular/st-john-basketball/") == "st-john-basketball"
+    for bad in ("", "#", "a/b", "x?y", "a" * 101, "https://www.instagram.com/explore/tags/",
+                "https://www.instagram.com/explore/tags/a%2Fb/", "https://www.instagram.com/explore/tags/cats/top/",
+                "https://www.instagram.com/explore/locations/212988663/", "https://www.instagram.com/p/DaZMYijhtXd/"):
         with pytest.raises(BadRequest):
             ig.clean_topic(bad)
-    with pytest.raises(BadRequest):
-        ig.clean_topic("two words", single_word=True)
+    for bad in ("two words", "https://www.instagram.com/popular/st-john-basketball/"):
+        with pytest.raises(BadRequest):
+            ig.clean_topic(bad, single_word=True)
 
 
 # --- pure mappers ---------------------------------------------------------------------------
@@ -623,6 +632,16 @@ def test_topics_are_requested_lower_case(client, stubbed):
         "funnydogs")
     assert client.get("/v2/instagram/reels/search", params={"query": "FUNNYDOGS"}).json()["success"] is True
     assert stubbed == ["golden retriever", "funnydogs", "funnydogs"]
+
+
+def test_topic_page_urls(client, stubbed):
+    """The address of a tag page (or of the Popular page Instagram sends logged-out visitors on to) was a 400."""
+    tag = "https://www.instagram.com/explore/tags/FunnyDogs/"
+    assert client.get("/v1/instagram/search/hashtag", params={"hashtag": tag}).json()["hashtag"] == "funnydogs"
+    popular = "https://www.instagram.com/popular/basketball/?utm_source=explore_tag"
+    assert client.get("/v1/instagram/search/popular", params={"query": popular}).json()["query"] == "basketball"
+    assert client.get("/v2/instagram/reels/search", params={"query": tag}).json()["success"] is True
+    assert stubbed == ["funnydogs", "basketball", "funnydogs"]
 
 
 def test_topic_turkish_dotted_capital_i(client, stubbed):
