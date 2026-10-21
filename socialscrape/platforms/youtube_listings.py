@@ -40,7 +40,9 @@ T = TypeVar("T")
 YT = p.YT
 _CHANNEL_ID = re.compile(r"UC[\w-]{22}")
 _PLAYLIST_ID = re.compile(r"[\w-]{10,64}")
-_YT_HOST = re.compile(r"(?:www\.|m\.|music\.)?youtube\.com|youtu\.be")
+# youtubekids.com (channel, watch?…&list= URLs) and youtube-nocookie.com (the privacy-enhanced embeds of YouTube's
+# share dialog, /embed/videoseries?list=…) name the same channels and playlists; yt-dlp takes them too.
+_YT_HOST = re.compile(r"(?:www\.|m\.|music\.)?youtube\.com|(?:www\.)?youtube(?:kids|-nocookie)\.com|youtu\.be")
 # First path segments that are YouTube pages, not legacy channel names (YoutubeTabIE's own list).
 _RESERVED = re.compile(rf"(?:{YoutubeBaseInfoExtractor._RESERVED_NAMES})\b")
 _SHORT_KEYS = ("shortsLockupViewModel", "reelItemRenderer")

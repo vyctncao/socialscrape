@@ -182,6 +182,8 @@ ABOUT_PAGE = about_page(
     (("@ครัวแม่ณี", None, None), "@" + quote("ครัวแม่ณี")),
     ((None, None, f"https://www.youtube.com/@{quote('தமிழ்')}/videos"), "@" + quote("தமிழ்")),
     ((None, None, "https://www.youtube.com/c/தமிழ்"), "c/" + quote("தமிழ்")),
+    # a YouTube Kids channel URL was 400 "Not a YouTube URL"
+    ((None, None, "https://www.youtubekids.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA"), "channel/UCX6OQ3DkcsbYNE6H8uQQuVA"),
     # the full-width '@' of Japanese and Chinese keyboards (and the small one) was a 400
     ((None, "＠MrBeast", None), "@MrBeast"),
     (("＠MrBeast", None, None), "@MrBeast"),
@@ -222,6 +224,10 @@ def test_playlist_and_hashtag_inputs():
     assert M.playlist_id_of(TF2) == TF2
     assert M.playlist_id_of(f"https://www.youtube.com/playlist?list={TF2}") == TF2
     assert M.playlist_id_of(f"https://youtu.be/RlJy2Kt8Be0?list={TF2}") == TF2
+    # a privacy-enhanced embed (YouTube's share dialog) and a YouTube Kids watch URL were 400 "Not a YouTube URL"
+    assert M.playlist_id_of(f"https://www.youtube-nocookie.com/embed/videoseries?si=x&list={TF2}") == TF2
+    assert M.playlist_id_of(f"https://www.youtube-nocookie.com/embed/RlJy2Kt8Be0?list={TF2}") == TF2
+    assert M.playlist_id_of(f"https://www.youtubekids.com/watch?v=RlJy2Kt8Be0&list={TF2}") == TF2
     assert M.hashtag_of("#Funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny/shorts") == ("funny", True)
@@ -240,7 +246,9 @@ def test_playlist_and_hashtag_inputs():
         assert M.hashtag_of(given) == (canonical, False), given
         assert unicodedata.is_normalized("NFC", M.hashtag_of(given)[0]), given
     for bad in ("https://www.tiktok.com/tag/funny", "https://www.youtube.com/watch?v=x", "short",
-                f"https://www.youtube.com]/playlist?list={TF2}", f"youtube.com／playlist?list={TF2}"):
+                f"https://www.youtube.com]/playlist?list={TF2}", f"youtube.com／playlist?list={TF2}",
+                f"https://www.youtube-nocookie.com.example/embed/videoseries?list={TF2}",
+                f"https://music.youtubekids.com/watch?v=RlJy2Kt8Be0&list={TF2}"):
         with pytest.raises(BadRequest):
             M.playlist_id_of(bad)
     for bad in ("##", "two words", "https://www.tiktok.com/tag/funny", "https://www.youtube.com/@MrBeast", "#\u200d",
