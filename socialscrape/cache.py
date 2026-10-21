@@ -24,6 +24,7 @@ from starlette.responses import JSONResponse, Response
 
 from .config import ConfigError
 from .errors import BadRequest
+from .util import clean_param
 
 log = logging.getLogger("socialscrape.cache")
 
@@ -103,7 +104,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
         if request.method != "GET" or not request.url.path.startswith("/v"):
             return await call_next(request)
         try:  # checked with the cache off too: a bad value is a 400 on every route
-            max_age = parse_max_age(raw_age) if (raw_age := request.query_params.get(CACHE_PARAM)) else None
+            raw_age = clean_param(request.query_params.get(CACHE_PARAM) or "")  # as the routes read their params
+            max_age = parse_max_age(raw_age) if raw_age else None
         except BadRequest as exc:
             return JSONResponse(exc.body(), status_code=exc.status)
         if self.cache is None:

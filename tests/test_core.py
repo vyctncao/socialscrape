@@ -83,6 +83,9 @@ def test_cache_middleware(tmp_path):
     assert c.get("/v9/test/thing?x=1").json()["n"] == 2  # no cache_max_age -> live
     hit = c.get("/v9/test/thing?x=1&cache_max_age=1d").json()
     assert hit["n"] == 2 and hit["cached"] is True and hit["cached_at"].endswith("Z")
+    for pasted in ("1d\u200b", "\ufeff24h"):  # a copy's invisible ends, which every other param loses
+        again = c.get("/v9/test/thing", params={"x": "1", "cache_max_age": pasted}).json()
+        assert again["n"] == 2 and again["cached"] is True, pasted
     assert c.get("/v9/test/thing?x=2&cache_max_age=1d").json()["n"] == 3  # different key
     assert c.get("/v9/test/thing?x=1&cache_max_age=bogus").status_code == 400
 
@@ -735,7 +738,8 @@ def test_bad_cache_max_age_is_400_with_or_without_the_cache(env, cache_path, tmp
         # gap-instagram-5: with the cache off the 501 routes ignored it (CacheMiddleware rejects it when on)
         r = c.get("/v1/instagram/basic-profile", params={"cache_max_age": value})
         assert r.status_code == 400 and "cache_max_age" in r.json()["message"], (value[:20], r.json())
-    for value in ("7d", "12h", "", "999999h"):  # a valid (or blank) value reaches the handler
+    # a valid (or blank) value reaches the handler, once the invisible ends a copy carries are cut
+    for value in ("7d", "12h", "", "999999h", "7d\u200b", "\u200b"):
         r = c.get("/v1/youtube/video", params={**wrong_platform, "cache_max_age": value})
         assert r.status_code == 400 and "cache_max_age" not in r.json()["message"], (value[:20], r.json())
         assert c.get("/v1/instagram/basic-profile", params={"cache_max_age": value}).status_code == 501
