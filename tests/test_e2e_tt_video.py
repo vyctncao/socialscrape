@@ -34,7 +34,9 @@ MISSING_VIDEO = f"https://www.tiktok.com/@{STOOL}/video/7499229683859426001"
 LONG_TT = f"https://www.tiktok.com/@{STOOL}/video/7691685734738119950"  # 124 s, English captions only
 SHORT_LINKS = {
     "https://vm.tiktok.com/ZMkyTWLpV/": "7179163174057364742",
-    "https://www.tiktok.com/t/ZP89Khv9t": "7607174901778107662",
+    # vm.tiktok.com, vt.tiktok.com and tiktok.com/t/ share one set of codes. (/t/ZP89Khv9t, the earlier link here,
+    # now leads to the homepage although its post is still up.)
+    "https://www.tiktok.com/t/ZMkyTWLpV": "7179163174057364742",
 }
 DEAD_SHORT_LINK = "https://vm.tiktok.com/ZTR45GpSF/"  # yt-dlp's TikTokVMIE test link; now redirects to the homepage
 PRIVATE_USER = "private"  # privateAccount=True
