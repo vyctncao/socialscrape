@@ -66,13 +66,17 @@ def cached(name: str) -> dict:
                                  f"https://m.youtube.com/watch?v={ZOO}&list=PL123", ZOO,
                                  f"youtube.com/watch?v={ZOO}", f"youtu.be/{ZOO}", f"www.youtube.com/shorts/{ZOO}",
                                  f"HTTPS://WWW.YOUTUBE.COM/watch?v={ZOO}", f"Https://youtu.be/{ZOO}", f"Youtu.be/{ZOO}",
-                                 f"M.YouTube.com/shorts/{ZOO}"])
+                                 f"M.YouTube.com/shorts/{ZOO}",
+                                 # protocol-relative, as old embed codes give the iframe src (and YoutubeIE's tests)
+                                 f"//www.youtube.com/embed/{ZOO}", f"//www.YouTube.com/watch?v={ZOO}",
+                                 f"//www.youtube.com/v/{ZOO}?version=3&amp;hl=en_US"])
 def test_video_id_accepts_youtube_urls(url):
     assert M.video_id(url) == ZOO
 
 
 @pytest.mark.parametrize("url", ["https://www.tiktok.com/@x/video/1", "https://www.youtube.com/@jawed",
-                                 "https://www.youtube.com/watch?v=short", "", "not a url"])
+                                 "https://www.youtube.com/watch?v=short", "", "not a url",
+                                 f"//www.example.com/embed/{ZOO}", f"///www.youtube.com/embed/{ZOO}"])
 def test_video_id_rejects_other_urls(url):
     with pytest.raises(BadRequest):
         M.video_id(url)
@@ -81,7 +85,8 @@ def test_video_id_rejects_other_urls(url):
 @pytest.mark.parametrize("url", [f"https://www.youtube.com/post/{POST}", f"youtube.com/post/{POST}",
                                  f"https://www.youtube.com/channel/UChhw6DlKKTQ9mYSpTfXUYqA/community?lb={POST}",
                                  f"https://m.youtube.com/@starterstory/community?lb={POST}",
-                                 f"https://www.youtube.com/@starterstory/posts?lb={POST}"])
+                                 f"https://www.youtube.com/@starterstory/posts?lb={POST}",
+                                 f"//www.youtube.com/post/{POST}"])
 def test_post_id(url):
     assert M.post_id(url) == POST
 

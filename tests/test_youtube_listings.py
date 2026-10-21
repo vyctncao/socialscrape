@@ -184,6 +184,7 @@ ABOUT_PAGE = about_page(
     ((None, None, "https://www.youtube.com/c/தமிழ்"), "c/" + quote("தமிழ்")),
     # a YouTube Kids channel URL was 400 "Not a YouTube URL"
     ((None, None, "https://www.youtubekids.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA"), "channel/UCX6OQ3DkcsbYNE6H8uQQuVA"),
+    ((None, None, "//www.youtube.com/@MrBeast"), "@MrBeast"),  # protocol-relative, as in an old embed code
     # YouTube Music's /browse/UC… form of a channel page was a 400
     ((None, None, "https://music.youtube.com/browse/UC9ALqqC4aIeG5iDs7i90Bfw"), "channel/UC9ALqqC4aIeG5iDs7i90Bfw"),
     # the full-width '@' of Japanese and Chinese keyboards (and the small one) was a 400
@@ -210,6 +211,7 @@ def test_channel_base_accepts(args, base):
     (None, "bad handle!", None),
     (None, "गाना!", None),
     (None, None, "MrBeast"),
+    (None, None, "//www.example.com/@MrBeast"),
     # hosts urllib raises ValueError on: a stray bracket, a full-width '／' (a CJK keyboard's '/'); 400, not 500
     (None, None, "https://www.youtube.com]/@MrBeast"),
     ("https://[www.youtube.com]/@MrBeast", None, None),
@@ -236,6 +238,9 @@ def test_playlist_and_hashtag_inputs():
     assert M.playlist_id_of(f"https://www.youtube-nocookie.com/embed/videoseries?si=x&amp;amp;list={TF2}") == TF2
     assert M.playlist_id_of(f"https://music.youtube.com/browse/VL{TF2}") == TF2
     assert M.playlist_id_of("https://music.youtube.com/browse/MPREb_gTAcphH99wE?si=x") == "MPREb_gTAcphH99wE"
+    # protocol-relative, as old embed codes give the iframe src
+    assert M.playlist_id_of(f"//www.youtube.com/embed/videoseries?list={TF2}") == TF2
+    assert M.hashtag_of("//www.youtube.com/hashtag/funny") == ("funny", False)
     assert M.hashtag_of("#Funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny/shorts") == ("funny", True)

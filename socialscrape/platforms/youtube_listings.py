@@ -77,7 +77,7 @@ def _yt_url(value: str) -> urllib.parse.ParseResult | None:
     if "/" not in value:
         return None
     try:
-        parsed = urllib.parse.urlparse(value if "://" in value else f"https://{value}")
+        parsed = urllib.parse.urlparse(value if "://" in value else "https://" + value.removeprefix("//"))
         host = parsed.hostname or ""
     except ValueError:  # a stray bracket ('youtube.com]/@x') or a full-width '／', '：'... in the host (NFKC'd)
         host = ""

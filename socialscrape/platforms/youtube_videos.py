@@ -50,7 +50,7 @@ _BOOL = {"true": True, "1": True, "yes": True, "false": False, "0": False, "no":
 def video_id(url: str) -> str:
     url = (url or "").strip()
     if "://" not in url and not re.fullmatch(r"[\w-]{11}", url):
-        url = "https://" + url  # 'youtube.com/watch?v=..', 'youtu.be/..'
+        url = "https://" + url.removeprefix("//")  # 'youtu.be/..', an old embed code's '//www.youtube.com/embed/..'
     # YoutubeIE's patterns are case-sensitive but scheme and host aren't ('Youtu.be/..' from a phone keyboard)
     url = re.sub(r"^[a-z][a-z\d+.-]*://[^/?#]*", lambda m: m.group().lower(), url, flags=re.I)
     m = YoutubeIE._match_valid_url(url)
@@ -63,7 +63,7 @@ def post_id(url: str) -> str:
     """Post id from youtube.com/post/<id> or a channel's community?lb=<id> / posts?lb=<id> URL."""
     url = (url or "").strip()
     try:
-        parsed = urlparse(url if "://" in url else "https://" + url)
+        parsed = urlparse(url if "://" in url else "https://" + url.removeprefix("//"))
         host = parsed.hostname or ""
     except ValueError:  # a stray bracket ('youtube.com]/post/..') or a full-width '／', '：'... in the host
         host = ""

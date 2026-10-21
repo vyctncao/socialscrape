@@ -172,6 +172,7 @@ def _sjs(result: dict[str, Any], module: str = "RelayPrefetchedStreamCache") -> 
     f"https://www.instagram.com/jane/reel/{REEL_CODE}/", f"  {REEL_CODE}  ",
     # fix3: Instagram's old short domain, which redirects to the same path on www
     f"https://instagr.am/p/{REEL_CODE}/", f"HTTP://INSTAGR.AM/p/{REEL_CODE}",
+    f"//www.instagram.com/reel/{REEL_CODE}/",  # protocol-relative, like the src of an embed code's script
 ])
 def test_post_url_accepts_post_urls_and_shortcodes(value):
     assert ig.post_url(value) == (REEL_CODE, f"https://www.instagram.com/p/{REEL_CODE}/")
@@ -180,7 +181,7 @@ def test_post_url_accepts_post_urls_and_shortcodes(value):
 @pytest.mark.parametrize("value", [
     "", "https://www.tiktok.com/@jane/video/7300000000000000000", "https://www.instagram.com/jane/",
     "https://www.instagram.com/stories/highlights/18382085791177637/", "not a url",
-    f"https://notinstagram.com/p/{REEL_CODE}/",
+    f"https://notinstagram.com/p/{REEL_CODE}/", f"//notinstagram.com/p/{REEL_CODE}/",
     # ids outside the shortcode alphabet (yt-dlp's _id_to_pk raised KeyError -> 500)
     "https://www.instagram.com/p/a.b.c/", "https://www.instagram.com/p/../", "https://www.instagram.com/p/%2E%2E/",
     "https://www.instagram.com/p/%3Cscript%3E/", "https://www.instagram.com/p/abc!def/",

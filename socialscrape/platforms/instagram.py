@@ -92,9 +92,10 @@ _PREVIEW_COMMENTS = 3
 
 
 def canonical_url(value: str) -> str:
-    """Add https://, lower-case scheme and host, and map instagram.com, m.instagram.com and instagr.am to www."""
+    """Add https:// (also to a protocol-relative '//www.instagram.com/…'), lower-case scheme and host, and map
+    instagram.com, m.instagram.com and instagr.am to www."""
     if not re.match(r"https?://", value, re.I):
-        value = f"https://{value}"
+        value = "https://" + value.removeprefix("//")
     try:
         parts = urllib.parse.urlsplit(value)
     except ValueError:
