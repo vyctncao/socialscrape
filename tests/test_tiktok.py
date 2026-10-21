@@ -638,6 +638,37 @@ def test_song_routes_take_a_sound_page_url(client, fake_ydl, monkeypatch):
     assert len(asked) == 2
 
 
+class _FakeVM:
+    """TikTokVMIE stand-in: answers a short link's HEAD request with the address it leads to."""
+
+    def __init__(self, leads_to):
+        self.leads_to, self.asked = leads_to, []
+
+    def _request_webpage(self, req, *args, **kwargs):
+        self.asked.append(req.url)
+        return SimpleNamespace(url=self.leads_to[req.url])
+
+
+def test_song_routes_resolve_a_short_link(client, fake_ydl, monkeypatch):
+    ydl, _ = fake_ydl
+    sound, post, home = "https://vm.tiktok.com/ZMsound1/", "https://www.tiktok.com/t/ZTpost1/", "vt.tiktok.com/ZShome1"
+    ydl.ies["TikTokVM"] = vm = _FakeVM({sound: f"https://www.tiktok.com/music/Build-a-Btch-{CLIP_ID}?_r=1&u_code=x",
+                                        post: f"{STOOL_VIDEO}?_r=1", f"https://{home}": "https://www.tiktok.com/?_r=1"})
+    asked = []
+
+    def music_page(ydl, mid, cursor):
+        asked.append((mid, cursor))
+        return {"aweme_list": [{"aweme_id": "1", "music": {"id_str": mid}}], "has_more": False}
+
+    monkeypatch.setattr(tiktok, "_music_page", music_page)
+    assert ok(client, "/v1/tiktok/song", clipId=sound)["music_info"] == {"id_str": CLIP_ID}
+    assert ok(client, "/v1/tiktok/song/videos", clipId=f" {sound} ", cursor="20")["aweme_list"]
+    for clip in (post, home):  # a post's short link, or one that TikTok sends to its homepage
+        r = client.get("/v1/tiktok/song", params={"clipId": clip})
+        assert (r.status_code, r.json()["message"]) == (404, "This short link does not lead to a TikTok sound")
+    assert asked == [(CLIP_ID, 0), (CLIP_ID, 20)] and vm.asked == [sound, sound, post, f"https://{home}"]
+
+
 def test_app_aweme_lookup(monkeypatch):
     item = _web_item()
     app = {"aweme_id": item["id"], "video": {"duration": 14861}}

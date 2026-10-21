@@ -82,13 +82,25 @@ def _numeric(name: str, value: str | None) -> str:
 
 
 def _clip(value: str | None) -> str:
-    """clipId: a sound's id, or the address of its page (https://www.tiktok.com/music/<title>-<id>)."""
+    """clipId: a sound's id, the address of its page (https://www.tiktok.com/music/<title>-<id>), or a short link to
+    it as the app shares one (vm.tiktok.com/<code>, kept for _sound_id to resolve)."""
     value = (value or "").strip()
+    if "/" in value and M.is_short_url(value):
+        return M.with_scheme(value)
     clip = (M.music_id(value) or "") if "/" in value else value
     if not _ID.fullmatch(clip):
-        raise BadRequest("clipId must be a TikTok sound id or the URL of its page "
-                         "(https://www.tiktok.com/music/<title>-<id>)")
+        raise BadRequest("clipId must be a TikTok sound id, the URL of its page "
+                         "(https://www.tiktok.com/music/<title>-<id>) or a short link to it")
     return clip
+
+
+def _sound_id(ydl: yt_dlp.YoutubeDL, clip: str) -> str:
+    """_clip()'s sound id, or that of the sound page its short link leads to."""
+    if _ID.fullmatch(clip):
+        return clip
+    if mid := M.music_id(_resolve_short_link(ydl, clip)):
+        return mid
+    raise NotFound("This short link does not lead to a TikTok sound")
 
 
 def _offset(name: str, value: str | None) -> int:
@@ -159,15 +171,19 @@ def _web_page(ie: Any, url: str, name: str, note: str, **kwargs: Any) -> str:
     raise UpstreamBlocked("TikTok kept answering with its JS challenge (a bot check); retry later")
 
 
+def _resolve_short_link(ydl: yt_dlp.YoutubeDL, url: str) -> str:
+    """Where a vm./vt.tiktok.com or tiktok.com/t/ short link leads, resolved like TikTokVMIE resolves it."""
+    vm = ydl.get_info_extractor("TikTokVM")
+    return vm._request_webpage(HEADRequest(url), "short-link", "Resolving short link",
+                               headers={"User-Agent": "facebookexternalhit/1.1"}).url
+
+
 def _load_post(ydl: yt_dlp.YoutubeDL, url: str) -> tuple[Any, dict[str, Any]]:
     """URL -> (TikTokIE instance, web itemStruct), as TikTokIE._real_extract fetches it."""
     url = M.with_scheme(url)
     ref = M.post_url(url)
-    if ref is None:  # vm./vt.tiktok.com or tiktok.com/t/ short link, resolved like TikTokVMIE
-        vm = ydl.get_info_extractor("TikTokVM")
-        final = vm._request_webpage(HEADRequest(url), "short-link", "Resolving short link",
-                                    headers={"User-Agent": "facebookexternalhit/1.1"}).url
-        ref = M.post_url(final)
+    if ref is None:  # a short link
+        ref = M.post_url(_resolve_short_link(ydl, url))
         if ref is None:
             raise NotFound("This short link does not lead to a TikTok post")
     handle, aweme_id = ref
@@ -572,12 +588,18 @@ async def tiktok_live(room_id: str = Query(...), user_id: str = Query(...)) -> d
 
 
 @sc_get(router, "/v1/tiktok/song", source="yt-dlp TikTokSoundIE (app API aweme/v1/music/aweme)",
-        notes="clipId is the sound's id or the address of its page (https://www.tiktok.com/music/<title>-<id>). "
+        notes="clipId is the sound's id, the address of its page (https://www.tiktok.com/music/<title>-<id>) "
+              "or a short link to it (vm.tiktok.com/<code>; one that leads elsewhere is a 404). "
               "music_info is the app's music object embedded in the sound's first video (there is no music "
               "detail call in yt-dlp); user_count is omitted when the embed reports 0.")
 async def tiktok_song(clipId: str = Query(...)) -> dict[str, Any]:
     clip = _clip(clipId)
-    resp = await with_ydl(P, lambda ydl: _music_page(ydl, clip, 0), extractor_args=_APP_API)
+
+    def go(ydl: yt_dlp.YoutubeDL) -> tuple[str, dict[str, Any]]:
+        mid = _sound_id(ydl, clip)
+        return mid, _music_page(ydl, mid, 0)
+
+    clip, resp = await with_ydl(P, go, extractor_args=_APP_API)
     music = next((a["music"] for a in resp.get("aweme_list") or []
                   if str((a.get("music") or {}).get("id_str")) == clip), None)
     if not music:
@@ -588,7 +610,8 @@ async def tiktok_song(clipId: str = Query(...)) -> dict[str, Any]:
 
 
 @sc_get(router, "/v1/tiktok/song/videos", source="yt-dlp TikTokSoundIE (app API aweme/v1/music/aweme)",
-        notes="clipId is the sound's id or the address of its page (https://www.tiktok.com/music/<title>-<id>). "
+        notes="clipId is the sound's id, the address of its page (https://www.tiktok.com/music/<title>-<id>) "
+              "or a short link to it (vm.tiktok.com/<code>; one that leads elsewhere is a 404). "
               "TikTok app response as-is (~20 per page), so counts past int32 are the app's pinned 2147483597. "
               "cursor is the offset from the previous page and is omitted on the last page; a cursor that isn't "
               "such an offset is a 400 bad_cursor.")
@@ -596,7 +619,7 @@ async def tiktok_song_videos(clipId: str | None = None, cursor: str | None = Non
     require_one(clipId=clipId)
     clip = _clip(clipId)
     offset = _offset("cursor", cursor)
-    resp = await with_ydl(P, lambda ydl: _music_page(ydl, clip, offset), extractor_args=_APP_API)
+    resp = await with_ydl(P, lambda ydl: _music_page(ydl, _sound_id(ydl, clip), offset), extractor_args=_APP_API)
     if not resp.get("aweme_list") and not offset:
         raise NotFound("TikTok sound not found or has no videos")
     body = {k: v for k, v in resp.items() if not (k == "cursor" and not resp.get("has_more"))}
