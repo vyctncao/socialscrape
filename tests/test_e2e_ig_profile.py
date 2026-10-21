@@ -354,6 +354,8 @@ def test_highlight_detail_conforms_and_matches_ytdlp(client):
 @pytest.mark.parametrize("value", [
     f"highlight:{HIGHLIGHT}",
     f"  https://instagram.com/stories/highlights/{HIGHLIGHT}?igsh=abc  ",
+    # the app's share link: /s/<base64 of 'highlight:<id>'> (was a 400 bad_id)
+    f"{IG}/s/aGlnaGxpZ2h0OjE4MzgyMDg1NzkxMTc3NjM3/?story_media_id=3815154085155445315_{JANE_PK}&igsh=abc",
 ])
 def test_highlight_detail_id_forms(client, value):
     assert ok(client, DETAIL, id=value)["id"] == f"highlight:{HIGHLIGHT}"
@@ -362,7 +364,7 @@ def test_highlight_detail_id_forms(client, value):
 @pytest.mark.parametrize("value", [
     " ", "abc", "-1", "1234", "1" * 20, "highlight:", "highlight:abc", f"HIGHLIGHT:{HIGHLIGHT}", f"{HIGHLIGHT}.0",
     "1.8382085791177637e16", "https://www.tiktok.com/@scout2015/video/6718335390845095173",
-    f"{IG}/s/aGlnaGxpZ2h0OjE4MzgyMDg1NzkxMTc3NjM3/",
+    f"{IG}/s/aGlnaGxpZ2h0OmFiYw",  # a share link holding 'highlight:abc'
 ])
 def test_highlight_detail_bad_ids(client, value):
     err(client, DETAIL, 400, "bad_id", id=value)

@@ -12,6 +12,7 @@ Instagram embeds for logged-out visitors.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
@@ -70,6 +71,8 @@ _RESERVED_PATHS = {"p", "reel", "reels", "tv", "explore", "stories", "accounts",
                    "challenge", "graphql", "qr", "nametag", "press", "your_activity", "notifications",
                    "meta_verified"}
 _HIGHLIGHT_ID = re.compile(r"(?:highlight:)?([0-9]{5,19})")  # highlight ids are 64-bit integers (ASCII digits only)
+# The app's share link for a highlight: /s/<base64 of 'highlight:<id>'>?story_media_id=<item>&igsh=…
+_HIGHLIGHT_SHARE = re.compile(r"https://www\.instagram\.com/s/(aGlnaGxpZ2h0[A-Za-z0-9]*(?:=|%3[Dd])*)/?(?:[?#].*)?")
 # instagr.am is Instagram's old short domain: instagr.am/p/<code>/ redirects to the same path on www.
 _INSTAGRAM_HOSTS = {"www.instagram.com", "instagram.com", "m.instagram.com", "instagr.am"}
 _PAGE_ID = re.compile(r'"pageID":"(\w+)"')
@@ -133,10 +136,17 @@ def clean_handle(handle: str | None) -> str:
 
 
 def clean_highlight_id(value: str | None) -> str:
-    """'18382085791177637', 'highlight:1838...' or a /stories/highlights/<id>/ URL -> the numeric id."""
+    """'18382085791177637', 'highlight:1838...', a /stories/highlights/<id>/ URL or the app's share link
+    (/s/<base64 of 'highlight:<id>'>) -> the numeric id."""
     value = (value or "").strip()
     if re.search(r"instagram\.com", value, re.I):
         value = canonical_url(value)
+    if m := _HIGHLIGHT_SHARE.fullmatch(value):
+        code = urllib.parse.unquote(m.group(1)).rstrip("=")
+        try:
+            value = base64.b64decode(code + "=" * (-len(code) % 4), validate=True).decode("latin-1")
+        except ValueError:  # binascii.Error: a cut-off link
+            raise BadRequest("Not a valid Instagram highlight share link", code="bad_id") from None
     if m := InstagramStoryIE._match_valid_url(value):
         if m.group("id") and not _HIGHLIGHT_ID.fullmatch(m.group("id")):
             raise BadRequest("Not a valid Instagram highlight id", code="bad_id")
@@ -1072,7 +1082,8 @@ async def instagram_highlights(user_id: str | None = None, handle: str | None = 
 @sc_get(router, "/v1/instagram/user/highlight/detail", source="yt-dlp InstagramStoryIE (feed/reels_media API)",
         notes="Reel object from the reels_media call InstagramStoryIE makes for highlight:<id> (works "
               "anonymously), trimmed to ScrapeCreators' keys. cover_media.crop_rect holds fractions (SC's example "
-              "shows integers). Accepts the numeric id, 'highlight:<id>' or a /stories/highlights/<id>/ URL.")
+              "shows integers). Accepts the numeric id, 'highlight:<id>', a /stories/highlights/<id>/ URL or the "
+              "app's share link (/s/<base64 of 'highlight:<id>'>).")
 async def instagram_highlight_detail(id: str | None = None) -> dict[str, Any]:
     require_one(id=id)
     highlight_id = clean_highlight_id(id)

@@ -6,6 +6,7 @@ because Instagram rate-limits logged-out clients per IP quickly.
 
 from __future__ import annotations
 
+import base64
 import copy
 import dataclasses
 import time
@@ -230,12 +231,27 @@ def test_clean_handle_rejects(value):
         ig.clean_handle(value)
 
 
+def share_code(text: str) -> str:
+    return base64.b64encode(text.encode()).decode()
+
+
 @pytest.mark.parametrize("value", [HIGHLIGHT_ID, f"highlight:{HIGHLIGHT_ID}",
                                    f"https://www.instagram.com/stories/highlights/{HIGHLIGHT_ID}/",
-                                   f"https://m.instagram.com/stories/highlights/{HIGHLIGHT_ID}/"])
+                                   f"https://m.instagram.com/stories/highlights/{HIGHLIGHT_ID}/",
+                                   # the app's share link (was a 400): /s/<base64 of 'highlight:<id>'>
+                                   f"https://www.instagram.com/s/{share_code(f'highlight:{HIGHLIGHT_ID}')}"
+                                   "?story_media_id=3815154085155445315_8663171404&igsh=MWQ1ZGUxMzBkMA==",
+                                   f"instagram.com/s/{share_code(f'highlight:{HIGHLIGHT_ID}')}/"])
 def test_clean_highlight_id(value):
     assert ig.clean_highlight_id(value) == HIGHLIGHT_ID
     assert ig.clean_highlight_id("9" * 19) == "9" * 19
+
+
+def test_clean_highlight_id_share_link_padding():
+    code = share_code("highlight:" + "9" * 18)  # 'aGln…OQ==': the '=' may be there, missing or percent-encoded
+    assert code.endswith("==")
+    for link in (code, code.rstrip("="), code.replace("=", "%3D")):
+        assert ig.clean_highlight_id(f"https://www.instagram.com/s/{link}") == "9" * 18
 
 
 FULLWIDTH_ID = HIGHLIGHT_ID.translate({ord(d): 0xFF10 + int(d) for d in "0123456789"})  # \d matches these
@@ -245,7 +261,13 @@ FULLWIDTH_ID = HIGHLIGHT_ID.translate({ord(d): 0xFF10 + int(d) for d in "0123456
                                    "https://www.youtube.com/watch?v=x", "1" * 20, f"highlight:{'1' * 25}",
                                    f"https://www.instagram.com/stories/highlights/{'1' * 20}/", FULLWIDTH_ID,
                                    f"highlight:{FULLWIDTH_ID}", HIGHLIGHT_ID.translate({ord("1"): "\u0661"}),
-                                   f"https://www.instagram.com/stories/highlights/{FULLWIDTH_ID}/"])
+                                   f"https://www.instagram.com/stories/highlights/{FULLWIDTH_ID}/",
+                                   # share links that don't hold 'highlight:<id>', or are cut off
+                                   f"https://www.instagram.com/s/{share_code('highlight')}",
+                                   f"https://www.instagram.com/s/{share_code('highlight:abc')}",
+                                   f"https://www.instagram.com/s/{share_code(f'highlight:{HIGHLIGHT_ID}')[:-3]}",
+                                   f"https://www.instagram.com/s/{share_code(f'highlights:{HIGHLIGHT_ID}')}",
+                                   f"https://www.instagram.com/s/{share_code(f'story:{HIGHLIGHT_ID}')}"])
 def test_clean_highlight_id_rejects(value):
     with pytest.raises(BadRequest):
         ig.clean_highlight_id(value)
