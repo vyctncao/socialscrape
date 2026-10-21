@@ -145,7 +145,10 @@ def relative_ts(text: str, lang: str | None = None) -> int | None:
         return None
     if not unit:
         return None
-    return int(datetime_from_str(f"now-{int(n)}{unit}").replace(tzinfo=timezone.utc).timestamp())
+    try:
+        return int(datetime_from_str(f"now-{int(n)}{unit}").replace(tzinfo=timezone.utc).timestamp())
+    except (ValueError, OverflowError):  # an age before the year 1 ('9999 years ago'), or past what int() reads
+        return None
 
 
 def ui_lang(ie: Any) -> str | None:
@@ -157,7 +160,10 @@ def approx_iso(ie: Any, time_text: str | None) -> str | None:
     """'2 days ago' -> ISO timestamp, estimated from now (to the unit of the text)."""
     if not time_text:
         return None
-    ts = ie._parse_time_text(time_text, report_failure=False)
+    try:
+        ts = ie._parse_time_text(time_text, report_failure=False)
+    except OverflowError:  # yt-dlp's reading of an age past what a date holds ('999…9 days ago')
+        return None
     return iso_utc(ts if ts is not None else relative_ts(time_text, ui_lang(ie)))
 
 
@@ -238,7 +244,10 @@ def iso_ts(text: str | None) -> float | None:
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
-        return parse_iso8601(text)
+        try:
+            return parse_iso8601(text)
+        except OverflowError:  # a date before the year 1 or after 9999 once in UTC
+            return None
     return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
 
 

@@ -66,8 +66,11 @@ def approx_time(value: str | None) -> str | None:
     """'3 weeks ago' / 'Streamed 2 days ago' / 'Feb 20, 2024' -> ISO (relative ones are approximate)."""
     if not value or re.match(r"(scheduled|premieres)", value, re.I):
         return None
-    when = YoutubeTabIE.extract_relative_time(value.lower())
-    return iso_utc(calendar.timegm(when.timetuple()) if when else unified_timestamp(value))
+    try:
+        when = YoutubeTabIE.extract_relative_time(value.lower())
+        return iso_utc(calendar.timegm(when.timetuple()) if when else unified_timestamp(value))
+    except OverflowError:  # an age or a year past what a date holds ('999…9 days ago', '20 Nov 999…9')
+        return None
 
 
 def best_url(sources: Any) -> str | None:

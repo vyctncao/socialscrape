@@ -787,6 +787,20 @@ def test_lengths_too_big_to_hold_read_as_missing(ies):
                                                                                    ("far", None, None)]
 
 
+def test_ages_and_dates_past_what_a_date_holds_read_as_missing(ies):
+    """An age reaching back before the year 1 ('9999 years ago', '999…9 days ago') or past the 4300 digits int()
+    reads, and a date before the year 1 once in UTC, was a 500 (ValueError, OverflowError) in a related video's
+    and a community post's time. It reads as missing."""
+    for age in ("9999 years ago", "999999999999 days ago", "9" * 400 + " years ago", "9" * 5000 + " years ago",
+                "hace 99999999999 años", "vor " + "9" * 5000 + " Tagen"):
+        assert P.relative_ts(age) is None and P.approx_iso(ies[1], age) is None, age[:20]
+    for age in ("9999 years ago", "999999999999 days ago"):
+        video = P.watch_next_video(ui_tab("en"), lockup("5", "5 views", age, "4:05"))
+        assert (video["publishedTimeText"], video["publishedTime"], video["lengthInSeconds"]) == (age, None, 245)
+    assert P.iso_ts("0001-01-01T00:00:00.5.5+01:00") is None
+    assert P.iso_ts("2024-02-20T10:00:00.5.5+01:00") == 1708419600 and P.relative_ts("2 years ago") is not None
+
+
 def test_relative_time_words_of_more_ui_languages():
     now, day = P.relative_ts("now 0 seconds"), 86400
     for lang, text, seconds in (
