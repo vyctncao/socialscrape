@@ -169,6 +169,8 @@ def _sjs(result: dict[str, Any], module: str = "RelayPrefetchedStreamCache") -> 
     f"https://www.instagram.com/p/{REEL_CODE}/?img_index=2", f"https://www.instagram.com/p/{REEL_CODE}/embed/",
     f"https://www.instagram.com/p/{REEL_CODE}/c/18151267093500821/", f"http://m.instagram.com/tv/{REEL_CODE}",
     f"https://www.instagram.com/jane/reel/{REEL_CODE}/", f"  {REEL_CODE}  ",
+    # fix3: Instagram's old short domain, which redirects to the same path on www
+    f"https://instagr.am/p/{REEL_CODE}/", f"HTTP://INSTAGR.AM/p/{REEL_CODE}",
 ])
 def test_post_url_accepts_post_urls_and_shortcodes(value):
     assert ig.post_url(value) == (REEL_CODE, f"https://www.instagram.com/p/{REEL_CODE}/")
@@ -182,10 +184,28 @@ def test_post_url_accepts_post_urls_and_shortcodes(value):
     "https://www.instagram.com/p/a.b.c/", "https://www.instagram.com/p/../", "https://www.instagram.com/p/%2E%2E/",
     "https://www.instagram.com/p/%3Cscript%3E/", "https://www.instagram.com/p/abc!def/",
     "https://www.instagram.com/reel/abc+def/", "https://www.instagram.com/p/\u00e9t\u00e9xyz/",
+    # share links without an id, with one outside the shortcode alphabet or a path after it, or off Instagram
+    "https://www.instagram.com/share/", "https://www.instagram.com/share/reel/", "https://www.instagram.com/share/p/",
+    "https://www.instagram.com/share/reel/a.b.c.d/", "https://notinstagram.com/share/reel/_shAre-12/",
+    "https://www.instagram.com/share/reel/_shAre-12/extra/",
 ])
 def test_post_url_rejects(value):
     with pytest.raises(BadRequest):
         ig.post_url(value)
+
+
+SHARE = "https://www.instagram.com/share/reel/_shAre-12"
+
+
+@pytest.mark.parametrize("value,link", [
+    (SHARE, SHARE), (f" {SHARE}/?igsh=ZGUz ", f"{SHARE}/?igsh=ZGUz"), ("instagram.com/share/reel/_shAre-12", SHARE),
+    ("HTTPS://M.INSTAGRAM.COM/share/p/_shAre-12/", "https://www.instagram.com/share/p/_shAre-12/"),
+    ("https://www.instagram.com/share/_shAre-12", "https://www.instagram.com/share/_shAre-12"),
+])
+def test_post_url_takes_share_links(value, link):
+    """fix3: a link from the app's share sheet (/share/reel/<id>) was a 400. Its id isn't the post's shortcode, so
+    the post is only known once fetch_post follows the link."""
+    assert ig.post_url(value) == ("", link)
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -844,6 +864,69 @@ def test_rejected_session_is_a_cookie_error(monkeypatch):
             flow()(_ydl(_session_ie(False)))
         with pytest.raises(ExtractorError):  # logged in, but a real parse failure (no login redirect)
             flow()(_ydl(_session_ie(True, f"{ig.WEB}/api/v1/media/1/info/")))
+
+
+def _share_ie(final_url: str, logged_in: bool = False) -> SimpleNamespace:
+    """An extractor stand-in whose share-link request ends on `final_url` and that extracts REEL from any URL."""
+    ie = SimpleNamespace(_is_logged_in=logged_in, _can_impersonate=True, _download_webpage_handle=None,
+                         _extract_product=lambda info, *args, **kwargs: info, requests=[], extracted=[])
+
+    def request_webpage(req, video_id, note=None, **kwargs):
+        ie.requests.append((req.method, req.url, kwargs.get("impersonate")))
+        return SimpleNamespace(url=final_url)
+
+    def extract(url):
+        ie.extracted.append(url)
+        ie._extract_product(copy.deepcopy(REEL))
+
+    ie._request_webpage, ie.extract = request_webpage, extract
+    return ie
+
+
+def test_share_link_is_followed_to_its_post(monkeypatch):
+    """fix3: yt-dlp leaves share links to its generic extractor, which follows their redirect, and the service runs
+    Instagram's extractors only. A share link redirects (anonymously) to the post's /reel/ URL."""
+    ie = _share_ie(f"{ig.WEB}/reel/{REEL_CODE}/?igsh=ZGUz")
+    assert ig._post_flow(SHARE)(_ydl(ie))[0]["code"] == REEL_CODE
+    assert ie.requests == [("HEAD", SHARE, True)] and ie.extracted == [f"{ig.WEB}/p/{REEL_CODE}/"]
+
+    ie = _share_ie(f"{ig.WEB}/reel/{REEL_CODE}/")
+    ig._post_flow(f"{ig.WEB}/p/{REEL_CODE}/")(_ydl(ie))  # any other URL goes straight to InstagramIE
+    assert ie.requests == [] and ie.extracted == [f"{ig.WEB}/p/{REEL_CODE}/"]
+
+    # an unknown share id answers 200 without a redirect; a link can also lead somewhere that isn't a post
+    for final in (SHARE, f"{ig.WEB}/jane/", f"{ig.WEB}/stories/jane/3700000000000000000/", "https://example.com/"):
+        ie = _share_ie(final)
+        with pytest.raises(NotFound, match="does not lead to an Instagram post"):
+            ig._post_flow(SHARE)(_ydl(ie))
+        assert ie.extracted == []
+
+    for final in (_LOGIN, f"{ig.WEB}/"):  # yt-dlp's login redirects: the logged-out rate limit, or a dead session
+        with pytest.raises(UpstreamBlocked, match="login page"):
+            ig._post_flow(SHARE)(_ydl(_share_ie(final)))
+        monkeypatch.setattr(ig, "get_settings", lambda: SimpleNamespace(cookie_file=lambda platform: "/x/ig.txt"))
+        with pytest.raises(ig.SessionRejected):
+            ig._post_flow(SHARE)(_ydl(_share_ie(final, logged_in=True)))
+
+
+def test_share_link_routes(client, stubbed, monkeypatch):
+    link = f"{SHARE}/?igsh=ZGUz"
+    body = client.get("/v1/instagram/post", params={"url": link}).json()
+    assert body["data"]["xdt_shortcode_media"]["shortcode"] == REEL_CODE
+    assert client.get("/v2/instagram/post/comments", params={"url": link}).json()["comments"]
+    assert stubbed == [link, link]  # fetch_post follows the link itself
+
+    seen: list[str] = []
+
+    async def fake_transcribe(url, **kwargs):
+        seen.append(url)
+        return SimpleNamespace(text="hello")
+
+    monkeypatch.setattr(transcribe, "enabled", lambda: True)
+    monkeypatch.setattr(transcribe, "transcribe", fake_transcribe)
+    body = client.get("/v2/instagram/media/transcript", params={"url": link}).json()
+    assert body["transcripts"] == [{"id": REEL_PK, "shortcode": REEL_CODE, "text": "hello"}]
+    assert seen == [f"{ig.WEB}/p/{REEL_CODE}/"]  # the post itself: yt-dlp can't open the share link
 
 
 def test_rejected_session_envelope(client, monkeypatch):

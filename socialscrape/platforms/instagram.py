@@ -23,6 +23,7 @@ from typing import Any
 import yt_dlp
 from fastapi import APIRouter, Query
 from yt_dlp.extractor.instagram import InstagramBaseIE, InstagramIE, InstagramStoryIE, _id_to_pk
+from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError, parse_duration, str_or_none, traverse_obj, unescapeHTML
 
@@ -55,6 +56,9 @@ COOKIE_NOTE = "requires SOCIALSCRAPE_COOKIES_INSTAGRAM; not verified anonymously
 
 _SHORTCODE = re.compile(r"[A-Za-z0-9_-]{5,64}")
 _SHORTCODE_CHARS = re.compile(r"[A-Za-z0-9_-]+")  # _id_to_pk's alphabet
+# A link from the app's share sheet (/share/reel/<id>, /share/<id>), whose id (as long as a shortcode, so that
+# '/share/reel/' isn't one) redirects to the post.
+_SHARE_URL = re.compile(r"https://www\.instagram\.com/share/(?:[a-z]+/)?[A-Za-z0-9_-]{5,64}/?(?:[?#].*)?")
 # No leading/trailing '.' and no '..', as on Instagram (and so '.'/'..' can't collapse /<handle>/ to the homepage).
 _HANDLE = re.compile(r"(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)")
 _PROFILE_URL = re.compile(
@@ -66,7 +70,8 @@ _RESERVED_PATHS = {"p", "reel", "reels", "tv", "explore", "stories", "accounts",
                    "challenge", "graphql", "qr", "nametag", "press", "your_activity", "notifications",
                    "meta_verified"}
 _HIGHLIGHT_ID = re.compile(r"(?:highlight:)?([0-9]{5,19})")  # highlight ids are 64-bit integers (ASCII digits only)
-_INSTAGRAM_HOSTS = {"www.instagram.com", "instagram.com", "m.instagram.com"}
+# instagr.am is Instagram's old short domain: instagr.am/p/<code>/ redirects to the same path on www.
+_INSTAGRAM_HOSTS = {"www.instagram.com", "instagram.com", "m.instagram.com", "instagr.am"}
 _PAGE_ID = re.compile(r'"pageID":"(\w+)"')
 # A profile Instagram hides from logged-out visitors (age-gated brands): its page's props carry a "gating" object,
 # or the server-rendered page shows the "Restricted profile" icon.
@@ -82,7 +87,7 @@ _PREVIEW_COMMENTS = 3
 
 
 def canonical_url(value: str) -> str:
-    """Add https://, lower-case scheme and host, and map instagram.com / m.instagram.com to www."""
+    """Add https://, lower-case scheme and host, and map instagram.com, m.instagram.com and instagr.am to www."""
     if not re.match(r"https?://", value, re.I):
         value = f"https://{value}"
     try:
@@ -96,13 +101,17 @@ def canonical_url(value: str) -> str:
 
 
 def post_url(url: str | None) -> tuple[str, str]:
-    """Post/reel URL or bare shortcode -> (shortcode, canonical /p/ URL). 400 otherwise."""
+    """Post/reel URL or bare shortcode -> (shortcode, canonical /p/ URL); a share link -> ('', the link), which
+    fetch_post follows to its post. 400 otherwise."""
     value = (url or "").strip()
     if not value:
         raise BadRequest("url is required")
     if _SHORTCODE.fullmatch(value):
         return value, f"{WEB}/p/{value}/"
-    m = InstagramIE._match_valid_url(canonical_url(value))
+    value = canonical_url(value)
+    if _SHARE_URL.fullmatch(value):
+        return "", value
+    m = InstagramIE._match_valid_url(value)
     if not m:
         raise BadRequest("Not an Instagram post or reel URL", code="unsupported_url")
     if not _SHORTCODE_CHARS.fullmatch(m.group("id")):  # InstagramIE's id group takes any [^/?#&]+
@@ -251,9 +260,28 @@ def _check_session(logged_in: bool, rec: _Recorder) -> None:
         raise SessionRejected() from None
 
 
+_LOGIN_WALL = "Instagram redirected the anonymous request to its login page (logged-out rate limit); retry later " \
+              "or configure cookies"
+
+
+def _follow_share(ie: Any, url: str) -> str:
+    """The /p/ URL of the post a share link redirects to. yt-dlp leaves these links to its generic extractor,
+    which follows the redirect, and the service runs Instagram's extractors only."""
+    logged_in = ie._is_logged_in
+    final = canonical_url(ie._request_webpage(HEADRequest(url), "share", "Following share link",
+                                              impersonate=ie._can_impersonate).url)
+    m = InstagramIE._match_valid_url(final)
+    if m and _SHORTCODE_CHARS.fullmatch(m.group("id")):
+        return f"{WEB}/p/{m.group('id')}/"
+    if final.startswith(f"{WEB}/") and InstagramBaseIE._is_login_redirect(final):  # it only looks at the path
+        raise SessionRejected() if logged_in else UpstreamBlocked(_LOGIN_WALL)
+    raise NotFound("This share link does not lead to an Instagram post or reel")  # an unknown id answers 200
+
+
 def _post_flow(url: str) -> Callable[[yt_dlp.YoutubeDL], tuple[dict[str, Any], dict[str, Any] | None]]:
     def go(ydl: yt_dlp.YoutubeDL) -> tuple[dict[str, Any], dict[str, Any] | None]:
         ie = ydl.get_info_extractor("Instagram")
+        target = _follow_share(ie, url) if _SHARE_URL.fullmatch(url) else url
         rec = _Recorder(ydl, ie)
         products: list[dict[str, Any]] = []
         extract_product = ie._extract_product
@@ -265,7 +293,7 @@ def _post_flow(url: str) -> Callable[[yt_dlp.YoutubeDL], tuple[dict[str, Any], d
         ie._extract_product = capture
         logged_in = ie._is_logged_in
         try:
-            ie.extract(url)
+            ie.extract(target)
         except ExtractorError:
             # yt-dlp reports deleted/nonexistent posts as an "empty media response";
             # the accessibility check it ran first answered 404 "Media cannot be found".
@@ -296,10 +324,6 @@ def _page_flow(ie_name: str, url: str, item_id: str) -> Callable[[yt_dlp.Youtube
         return html, urlh.url
 
     return go
-
-
-_LOGIN_WALL = "Instagram redirected the anonymous request to its login page (logged-out rate limit); retry later " \
-              "or configure cookies"
 
 
 async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[str, list[dict[str, Any]]]:
@@ -878,7 +902,8 @@ def _no_pagination(value: str | None, name: str) -> None:
               f"{COOKIE_NOTE}); edge_media_to_parent_comment.edges holds the ~15 comments the logged-out query "
               "returns. created_at, edge_media_to_tagged_user and edge_sidecar_to_children (carousels) included; "
               "a video child has its own has_audio and video_duration. region and trim are ignored; "
-              "download_media=true returns 501. A bare shortcode is accepted.")
+              "download_media=true returns 501. A bare shortcode, an instagr.am link and a share link "
+              "(/share/reel/<id>, followed to its post) are accepted.")
 async def instagram_post(url: str = Query(...), region: str | None = None, trim: str | None = None,
                          download_media: str | None = None, include_play_count: str | None = None
                          ) -> dict[str, Any]:
@@ -919,9 +944,11 @@ async def instagram_post_comments(url: str = Query(...), cursor: str | None = No
               "Media over 120 s needs allow_long_transcription=true (400 otherwise). Verified with mlx-whisper only.")
 async def instagram_transcript(url: str = Query(...), allow_long_transcription: str | None = None
                                ) -> dict[str, Any]:
-    _, canonical = post_url(url)
+    shortcode, canonical = post_url(url)
     transcribe.require_enabled()  # 501 before any Instagram request
     product, _ = await fetch_post(canonical)
+    if not shortcode:  # a share link: yt-dlp downloads the post fetch_post found behind it
+        canonical = f"{WEB}/p/{product['code']}/"
     videos = video_items(product)
     if not videos:
         raise NotFound("This post has no video to transcribe", code="no_video")

@@ -109,7 +109,7 @@ Anonymous Instagram is heavily restricted. Most endpoints return **only the firs
 
 | Endpoint | Notes |
 |---|---|
-| `/v1/instagram/post` | Reels, videos, images and carousels, plus the ~15 comments the logged-out query includes. Each video in a carousel has its own `has_audio` and `video_duration`. No play/view counts anonymously. |
+| `/v1/instagram/post` | Reels, videos, images and carousels, plus the ~15 comments the logged-out query includes. Each video in a carousel has its own `has_audio` and `video_duration`. No play/view counts anonymously. Like `post/comments` and `media/transcript`, it takes a post or reel URL, a bare shortcode, an `instagr.am` link or a share link (`/share/reel/…` from the app's share sheet), which is followed to its post. |
 | `/v2/instagram/post/comments` | First ~15 comments only. |
 | `/v1/instagram/profile`, `/v1/instagram/profile/post-count` | Bio, links, follower counts, first 12 posts. The logged-out page gives those posts as slim nodes, with no counts, timestamps, video URLs, `has_audio` or `comments_disabled`. `allow_estimated` works as in ScrapeCreators (422 when only an estimate exists). A profile Instagram restricts for logged-out visitors (age-gated brands such as alcohol) returns `403 restricted_profile` here and on `user/posts`, `user/reels` and `user/highlights`; `post-count` still reads the count its page shows. |
 | `/v2/instagram/user/posts`, `/v1/instagram/user/reels` | First 12. Counts only for reels. A private account with no visible reels returns 403 on `user/reels`. |
