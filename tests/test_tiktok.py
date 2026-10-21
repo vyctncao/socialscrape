@@ -106,6 +106,9 @@ def test_post_url_parsing():
     assert M.post_url("https://www.tiktok.com/@a.b_c/photo/7300000000000000001?lang=en") == ("a.b_c", "7300000000000000001")
     assert M.post_url("https://www.tiktok.com/embed/v2/7300000000000000001") == (None, "7300000000000000001")
     assert M.post_url("https://m.tiktok.com/v/7300000000000000001.html") == (None, "7300000000000000001")
+    # TikTok's embed player, as its developer docs give the iframe src
+    assert M.post_url("https://www.tiktok.com/player/v1/7300000000000000001?&music_info=1&description=1") == \
+        (None, "7300000000000000001")
     assert M.post_url("https://www.tiktok.com/@stoolpresidente") is None
     assert M.post_url("https://www.youtube.com/watch?v=x") is None
     assert M.is_short_url("https://vm.tiktok.com/ZMabc123/") and M.is_short_url("https://www.tiktok.com/t/ZTabc/")

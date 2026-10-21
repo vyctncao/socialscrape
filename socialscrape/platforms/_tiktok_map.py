@@ -16,9 +16,10 @@ from ..util import compact, iso_utc, short_lang
 _IMAGE_URI = re.compile(r"^https?://[^/]+/(tos-[\w-]+/[\w.-]+)~")
 _CODEC = re.compile(r"_(h264|bytevc1|bytevc2)_")
 _CODEC_FLAG = {"h264": 0, "bytevc1": 1, "bytevc2": 2}
+# Post pages, embeds (TikTok's embed player is /player/v1/<id>), share links and the old /v/<id>.html
 _POST_URL = re.compile(
     r"^https?://(?:www\.|m\.)?tiktokv?\.com/"
-    r"(?:@(?P<user>[\w.-]*)/(?:video|photo)|embed(?:/v2)?|share/video|v)/(?P<id>[0-9]+)", re.I)
+    r"(?:@(?P<user>[\w.-]*)/(?:video|photo)|embed(?:/v2)?|player/v1|share/video|v)/(?P<id>[0-9]+)", re.I)
 _SHORT_URL = re.compile(r"^https?://(?:(?:vm|vt)\.tiktok\.com|(?:www\.)?tiktok\.com/t)/\w+", re.I)
 _HANDLE = re.compile(r"[\w.-]{1,64}")
 _PROFILE_URL = re.compile(

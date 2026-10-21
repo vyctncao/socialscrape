@@ -134,6 +134,7 @@ def test_photo_post(client):
     f"tiktok.com/@{STOOL}/video/{STOOL_ID}",
     f"https://www.tiktok.com/embed/v2/{STOOL_ID}",
     f"https://www.tiktok.com/share/video/{STOOL_ID}",
+    f"https://www.tiktok.com/player/v1/{STOOL_ID}?&music_info=1&description=1",
     f"https://www.tiktok.com/@/video/{STOOL_ID}?is_from_webapp=1&lang=en#top",
     f"  HTTPS://WWW.TIKTOK.COM/@{STOOL.upper()}/VIDEO/{STOOL_ID}  ",
 ])
