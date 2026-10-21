@@ -1036,6 +1036,29 @@ def test_video_routes_read_a_playability_status_of_another_type_as_none(client, 
         assert video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
+@pytest.mark.parametrize("thumbnails", [["https://i.ytimg.com/vi/x/default.jpg"], [7, None], [["x"]]],
+                         ids=["string", "number_and_null", "list"])
+def test_video_routes_read_a_thumbnail_that_is_not_an_object_as_none(client, monkeypatch, thumbnails):
+    """yt-thumbnail-type-500: yt-dlp reads each of the player's thumbnails as an object (thumbnail.get('url')), so
+    one that was a string, a number or a list was a 500 (AttributeError) before any of our code ran. It's
+    skipped, and the others are still read."""
+    kept = {"url": f"https://i.ytimg.com/vi/{ZOO}/maxresdefault.jpg", "width": 1280, "height": 720}
+
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        return {"playabilityStatus": {"status": "OK"}, "videoDetails": {
+            "videoId": video_id, "title": "Odd", "lengthSeconds": "10", "author": "a", "channelId": "UCx",
+            "thumbnail": {"thumbnails": [*thumbnails, kept]}}}
+
+    monkeypatch.setattr(YoutubeIE, "_extract_player_response", player)
+    for name, value in (("_download_initial_webpage", None), ("_download_initial_data", {}), ("_download_ytcfg", {}),
+                        ("_download_player_url", None)):  # no watch page, no other request
+        monkeypatch.setattr(YoutubeIE, name, lambda self, *args, value=value, **kwargs: value)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd" and transcript.json()["success"]
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []

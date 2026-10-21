@@ -33,6 +33,7 @@ from yt_dlp.utils import (
     UserNotLive,
     YoutubeDLError,
     traverse_obj,
+    variadic,
 )
 
 from .config import get_settings
@@ -129,7 +130,8 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
     with yt_dlp.YoutubeDL(merged) as ydl:
         if platform == "youtube":
             for key in ("Youtube", "YoutubeTab"):
-                ydl.get_info_extractor(key)._extract_alerts = _youtube_alerts
+                ie = ydl.get_info_extractor(key)
+                ie._extract_alerts, ie._extract_thumbnails = _youtube_alerts, _youtube_thumbnails
             ydl.get_info_extractor("Youtube")._is_agegated = youtube_agegated
         try:
             return fn(ydl)
@@ -146,6 +148,14 @@ def _youtube_alerts(data: Any) -> list[tuple[str, str]]:
     return [(alert["type"], message) for alert in traverse_obj(data, ("alerts", {list}, ..., {dict}, ..., {dict}))
             if alert.get("type") and isinstance(alert["type"], str)
             and (message := YoutubeBaseInfoExtractor._get_text(alert, "text"))]
+
+
+def _youtube_thumbnails(data: Any, *path_list: Any, final_key: str = "thumbnails") -> list[dict[str, Any]]:
+    """YoutubeBaseInfoExtractor._extract_thumbnails, but a thumbnail that isn't an object is none: yt-dlp's own
+    reader fails on one (an AttributeError, so a 500 here)."""
+    kept = [thumbnail for path in path_list or [()]
+            for thumbnail in traverse_obj(data, (*variadic(path), final_key, ..., {dict}))]
+    return YoutubeBaseInfoExtractor._extract_thumbnails({final_key: kept}, final_key=final_key)
 
 
 def youtube_agegated(player_response: Any) -> bool:
