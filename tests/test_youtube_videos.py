@@ -168,6 +168,23 @@ def test_description_links_slice_utf16_and_decode_redirects():
     ]
 
 
+def test_description_links_read_past_half_an_emoji():
+    """json-render-500: a description with half an emoji (a lone UTF-16 surrogate, which Python's json reads from
+    "\\ud83d") and a link was a 500 (UnicodeEncodeError). The half is dropped from a link's text."""
+    content = json.loads('"\\ud83d Go: example.com/x \\ud83d and @someone"')
+    data = nest(("contents", "twoColumnWatchNextResults", "results", "results", "contents"), [
+        {"videoSecondaryInfoRenderer": {"attributedDescription": {"content": content, "commandRuns": [
+            {"startIndex": 6, "length": 15, "onTap": {"innertubeCommand": {"urlEndpoint": {
+                "url": "https://example.com/x"}}}},
+            {"startIndex": 26, "length": 8, "onTap": {"innertubeCommand": {
+                "browseEndpoint": {"browseId": "UCx", "canonicalBaseUrl": "/@someone"}}}},
+        ]}}}])
+    assert P.description_links(data, ZOO) == [
+        {"text": "example.com/x", "url": "https://example.com/x"},
+        {"text": "@someone", "url": "https://www.youtube.com/@someone"},
+    ]
+
+
 def test_most_replayed_and_caption_tracks():
     data = {"frameworkUpdates": {"entityBatchUpdate": {"mutations": [{"entityKey": "x"}, {"payload": {
         "macroMarkersListEntity": {"markersList": {"markerType": "MARKER_TYPE_HEATMAP", "markers": [

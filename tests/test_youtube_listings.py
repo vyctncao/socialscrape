@@ -327,6 +327,18 @@ def test_cursor_kind_and_seen_ids():
     assert again.fresh({"id": "v0"}) and not again.fresh({"id": "v1"})
 
 
+def test_seen_ids_take_half_an_emoji():
+    """json-render-500: a search or hashtag page whose item id had half an emoji (a lone UTF-16 surrogate, which
+    Python's json reads from "\\ud83d") was a 500 (UnicodeEncodeError) in the seen-ids filter."""
+    odd = json.loads('"abc\\ud83d"')
+    seen = M._Seen(None)
+    assert [seen.fresh({"id": i}) for i in (odd, "abc", odd)] == [True, True, False]
+    assert not M._Seen({"s": seen.dump()}).fresh({"id": odd})
+    video = {"videoId": odd, "title": {"runs": [{"text": "t"}]}}
+    out = M._search_payload([("videoRenderer", video), ("videoRenderer", dict(video))], None, M._Seen(None))
+    assert [v["id"] for v in out["videos"]] == [odd]
+
+
 @pytest.mark.parametrize("extra", [
     {"t": ""}, {"g": 123}, {"g": "ZZ"}, {"y": "reels"}, {"v": 5}, {"s": ["x"]}, {"x": "tv"}, {"n": -1}, {"n": True},
     {"n": "3"}, {"m": "meta"}, {"c": ["a", "b"]}, {"c": [1, 2, 3]}, {"c": "abc"},

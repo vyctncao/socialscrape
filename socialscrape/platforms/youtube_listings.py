@@ -266,7 +266,8 @@ class _Seen:
         self.repeats = 0
 
     def fresh(self, item: dict[str, Any]) -> bool:
-        key = hashlib.blake2b(str(item.get("id")).encode(), digest_size=4).digest()
+        key = hashlib.blake2b(str(item.get("id")).encode("utf-8", "surrogatepass"),  # half an emoji too
+                              digest_size=4).digest()
         if key in self.keys:
             self.repeats += 1
             return False

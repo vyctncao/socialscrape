@@ -144,6 +144,41 @@ def test_sc_get_cleans_every_string_param(monkeypatch):
                            "cursor": None}  # a param left out stays None
 
 
+def test_sc_get_writes_what_json_cannot(monkeypatch):
+    """json-render-500: upstream JSON as Python reads it can carry NaN, Infinity, a number too large for a float or
+    half an emoji, none of which a response can write (ValueError, UnicodeEncodeError): a 500 wherever a raw upstream
+    object passes through, as a TikTok video's stats or an Instagram post's play count do, or an error message
+    quotes the platform. They are null, and U+FFFD."""
+    from fastapi import APIRouter, FastAPI
+
+    from socialscrape import registry
+    from socialscrape.errors import ApiError, api_error_handler
+
+    monkeypatch.setattr(registry, "IMPLEMENTED", dict(registry.IMPLEMENTED))
+    router = APIRouter()
+    raw = json.loads('{"stats": {"diggCount": NaN, "playCount": 1e999, "shareCount": -Infinity, "ratio": 0.5}, '
+                     '"desc": "so good \\ud83d", "\\udc00": [1, 2.5], "emoji": "\\ud83d\\ude00"}')
+
+    @registry.sc_get(router, "/v9/test/raw", source="test")
+    async def raw_object():
+        return {"aweme_detail": raw, "list": [float("nan"), (float("inf"), "\ud83d\ude00")]}
+
+    @registry.sc_get(router, "/v9/test/gone", source="test")
+    async def gone():
+        raise NotFound(json.loads('"This video is unavailable \\ud83d"'))  # a player's reason, as yt-dlp quotes it
+
+    app = FastAPI()
+    app.add_exception_handler(ApiError, api_error_handler)
+    app.include_router(router)
+    client = TestClient(app)
+    r = client.get("/v9/test/raw")
+    assert r.status_code == 200 and r.json() == {"success": True, "credits_charged": 0, "aweme_detail": {
+        "stats": {"diggCount": None, "playCount": None, "shareCount": None, "ratio": 0.5},
+        "desc": "so good \ufffd", "\ufffd": [1, 2.5], "emoji": "\U0001f600"}, "list": [None, [None, "\U0001f600"]]}
+    r = client.get("/v9/test/gone")
+    assert r.status_code == 404 and r.json()["message"] == "This video is unavailable \ufffd"
+
+
 @pytest.mark.parametrize("path,key", [
     ("/v1/instagram/user/reels", "handle"), ("/v1/instagram/user/highlight/detail", "id"),
     ("/v1/youtube/channel-videos", "continuationToken"), ("/v1/youtube/search", "query"),

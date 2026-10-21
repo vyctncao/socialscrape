@@ -233,7 +233,7 @@ def iso_ts(text: str | None) -> float | None:
 
 
 def _utf16_slice(text: str, start: int, length: int) -> str:
-    raw = text.encode("utf-16-le")
+    raw = text.encode("utf-16-le", "surrogatepass")  # half an emoji too: its bytes are dropped as they decode
     return raw[2 * start: 2 * (start + length)].decode("utf-16-le", errors="ignore")
 
 

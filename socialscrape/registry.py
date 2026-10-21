@@ -29,6 +29,7 @@ from fastapi.security import APIKeyHeader
 
 from .catalog import CATALOG
 from .errors import NotSupported, error_responses
+from .responses import LenientJSONResponse
 from .util import clean_param
 
 
@@ -68,7 +69,7 @@ def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = Non
         async def handler(*args: Any, **kwargs: Any) -> JSONResponse:
             # Every param is a str or None: a pasted URL or handle loses its invisible ends and <brackets> first
             kwargs = {k: clean_param(v) if isinstance(v, str) else v for k, v in kwargs.items()}
-            return JSONResponse(envelope(await fn(*args, **kwargs)))
+            return LenientJSONResponse(envelope(await fn(*args, **kwargs)))
 
         responses = {**error_responses(400, 401, 403, 404, 500, 501, 502, 503, "default"),
                      **route_kwargs.pop("responses", {})}

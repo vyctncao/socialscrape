@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .responses import LenientJSONResponse
+
 
 class ApiError(Exception):
     status = 500
@@ -122,7 +124,7 @@ def require_one(**params: Any) -> None:
 
 
 async def api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
-    return JSONResponse(exc.body(), status_code=exc.status)
+    return LenientJSONResponse(exc.body(), status_code=exc.status)  # the message may be the platform's own text
 
 
 # First element of a validation error's loc: where the parameter came from, not its name.
