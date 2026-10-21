@@ -125,6 +125,12 @@ def test_url_variants():
         ("stoolpresidente", "7499229683859426602")
     assert M.post_url("HTTPS://WWW.TIKTOK.COM/@Stool/VIDEO/7499229683859426602") == ("Stool", "7499229683859426602")
     assert M.post_url("https://www.tiktok.com/@x/video/\uff17\uff14") is None  # fullwidth digits
+    for tail in ("abc", "abc?lang=en", ".0", "-7499229683859426603", "_1", "%20"):  # not an id that ends there
+        assert M.post_url(f"https://www.tiktok.com/@x/video/7499229683859426602{tail}") is None, tail
+    for tail in ("/", "?lang=en", "/?lang=en#top", "#top", "?"):
+        assert M.post_url(f"https://www.tiktok.com/@x/video/7499229683859426602{tail}") == \
+            ("x", "7499229683859426602"), tail
+    assert M.post_url("https://www.tiktokv.com/share/video/7668090902816017671/") == (None, "7668090902816017671")
     assert M.is_short_url("vm.tiktok.com/ZMabc123/") and M.is_short_url("HTTPS://VT.TIKTOK.COM/ZSabc/")
     assert M.collection_id(COLLECTION) == "7665668414573546258"
     assert M.collection_id("tiktok.com/@a.b/collection/7665668414573546258?lang=en") == "7665668414573546258"

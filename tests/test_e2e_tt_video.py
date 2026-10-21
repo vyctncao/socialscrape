@@ -157,6 +157,7 @@ def test_video_dead_short_link_is_404(client):
     "", "   ", "not a url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", f"https://www.tiktok.com/@{STOOL}",
     "https://www.tiktok.com/music/original-sound-7499229705166163754", "https://www.tiktok.com.evil.com/@a/video/1",
     "javascript:alert(1)", "https://www.tiktok.com/@a/video/１２３", "https://vm.tiktok.com/",
+    f"https://www.tiktok.com/@{STOOL}/video/{STOOL_ID}abc",  # was post {STOOL_ID}
 ])
 def test_video_bad_urls_are_400(client, url):
     err(client, VIDEO, 400, "unsupported_url", url=url)
