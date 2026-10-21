@@ -444,6 +444,44 @@ def test_lockup_video_collaboration_owner():
     assert P.lockup_video(vm)["owner"] is None
 
 
+def test_video_renderer_collaboration_owner():
+    """yt-collab-byline: a collaboration's byline names all its channels and links none: it opens the list of them,
+    a dialog on web, a sheet on mweb. The channel was null in search results (and hashtag pages); it is the
+    uploader, which the avatar links, named as the list names it."""
+    red_bull = "UC11eiKLw3kKczfPur0iVFvg"
+    dialog = {"showDialogCommand": {"panelLoadingStrategy": {"inlineContent": {"dialogViewModel": {"customContent": {
+        "listViewModel": {"listItems": [collab_member("99% Invisible", "99percentinvisiblepodcast", COLLAB),
+                                        collab_member("BBC Podcasts", "bbcpodcasts", "UCbbc")]}}}}}}}
+    vr = {**VIDEO_RENDERER, "ownerText": {"runs": [{"text": "99% Invisible and BBC Podcasts",
+                                                    "navigationEndpoint": dialog}]},
+          "channelThumbnailSupportedRenderers": {"channelThumbnailWithLinkRenderer": {
+              "thumbnail": {"thumbnails": [{"url": "https://yt3.ggpht.com/99pi=s68", "width": 68, "height": 68}]},
+              "navigationEndpoint": browse(COLLAB, "/@99percentinvisiblepodcast")}}}
+    assert P.video_renderer(vr)["owner"] == {"title": "99% Invisible", "id": COLLAB,
+                                             "handle": "99percentinvisiblepodcast",
+                                             "url": "https://www.youtube.com/@99percentinvisiblepodcast",
+                                             "thumbnail": "https://yt3.ggpht.com/99pi=s68"}
+    # mweb's sheet; its list doesn't always show the handle ('994K subscribers')
+    member = collab_member("Red Bull Cliff Diving", "x", red_bull)
+    member["listItemViewModel"]["subtitle"] = {"content": "\u200e\u2068994K subscribers\u2069"}
+    sheet = {"showSheetCommand": {"panelLoadingStrategy": {"inlineContent": {"sheetViewModel": {"content": {
+        "listViewModel": {"listItems": [member, collab_member("Xantheia Pennisi", "Xantheia.Pennisi", "UCsu9")]}}}}}}}
+    mweb = {"videoId": "S4J0unXUApI", "headline": {"runs": [{"text": "Running take-off from 21m?"}]},
+            "shortBylineText": {"runs": [{"text": "Red Bull Cliff Diving and Xantheia Pennisi",
+                                          "navigationEndpoint": sheet}]},
+            "navigationEndpoint": {"commandMetadata": {"webCommandMetadata": {"url": "/shorts/S4J0unXUApI"}}},
+            "channelThumbnail": {"channelThumbnailWithLinkRenderer": {
+                "thumbnail": {"thumbnails": [{"url": "https://yt3.ggpht.com/rb=s68", "width": 68, "height": 68}]},
+                "navigationEndpoint": browse(red_bull, "/@RedBullCliffDiving")}}}
+    out = M._search_payload([("videoWithContextRenderer", mweb)], None, M._Seen(None))
+    assert out["shorts"][0]["channel"] == {"id": red_bull, "title": "Red Bull Cliff Diving",
+                                           "handle": "RedBullCliffDiving", "thumbnail": "https://yt3.ggpht.com/rb=s68"}
+    # no link on the avatar either: as before
+    mweb["channelThumbnail"]["channelThumbnailWithLinkRenderer"].pop("navigationEndpoint")
+    owner = P.video_item("videoWithContextRenderer", mweb)["owner"]
+    assert (owner["id"], owner["title"]) == (None, "Red Bull Cliff Diving and Xantheia Pennisi")
+
+
 def test_lockup_playlist():
     pl = P.lockup_playlist(LOCKUP_PLAYLIST)
     assert pl == {"type": "playlist", "id": "PLF98rxtslw6s", "title": "Nancy Grace Roman Space Telescope",

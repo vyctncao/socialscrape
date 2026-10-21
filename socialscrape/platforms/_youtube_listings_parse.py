@@ -487,6 +487,25 @@ def shorts_lockup(vm: dict[str, Any]) -> dict[str, Any] | None:
     return sc_shelf_item(v, "short") if v else None
 
 
+# The list of channels a collaboration's byline opens instead of linking one: a dialog on web, a sheet on mweb.
+_COLLABORATORS = ("navigationEndpoint", (
+    ("showDialogCommand", "panelLoadingStrategy", "inlineContent", "dialogViewModel", "customContent"),
+    ("showSheetCommand", "panelLoadingStrategy", "inlineContent", "sheetViewModel", "content")),
+    "listViewModel", "listItems", ..., "listItemViewModel", {dict})
+
+
+def _byline_owner(run: dict[str, Any], avatar: dict[str, Any]) -> dict[str, Any]:
+    """Channel of a videoRenderer's byline run (avatar: its channelThumbnailWithLinkRenderer). A collaboration's
+    run names all its channels ('99% Invisible and BBC Podcasts') and links none: the avatar links the uploader,
+    named as the run's list of channels names it."""
+    ref, title, uploader = browse_ref(run), run.get("text"), browse_ref(avatar)
+    if not ref["id"] and uploader["id"]:
+        ref = uploader
+        title = next((text(c.get("title")) for c in traverse_obj(run, _COLLABORATORS)
+                      if browse_ref(traverse_obj(c, ("rendererContext", "commandContext")))["id"] == ref["id"]), title)
+    return {"title": title, **ref, "thumbnail": best_url(traverse_obj(avatar, ("thumbnail", "thumbnails")))}
+
+
 def video_renderer(vr: dict[str, Any]) -> dict[str, Any] | None:
     """videoRenderer (search, hashtag, post attachments) -> normalized dict."""
     vid = vr.get("videoId")
@@ -499,15 +518,14 @@ def video_renderer(vr: dict[str, Any]) -> dict[str, Any] | None:
     badge_nodes = traverse_obj(vr, ("badges", ..., "metadataBadgeRenderer", {dict}))
     nav = traverse_obj(vr, ("navigationEndpoint", "commandMetadata", "webCommandMetadata", "url", {str})) or ""
     when = text(vr.get("publishedTimeText"))
-    avatar = traverse_obj(vr, ("channelThumbnailSupportedRenderers", "channelThumbnailWithLinkRenderer", "thumbnail",
-                               "thumbnails"))
+    avatar = traverse_obj(vr, ("channelThumbnailSupportedRenderers", "channelThumbnailWithLinkRenderer", {dict})) or {}
     return {
         "id": vid,
         "title": text(vr.get("title")),
         "description": text(traverse_obj(vr, ("detailedMetadataSnippets", 0, "snippetText")))
                        or text(vr.get("descriptionSnippet")),
         "thumbnail": best_url(traverse_obj(vr, ("thumbnail", "thumbnails"))),
-        "owner": {"title": run.get("text"), **browse_ref(run), "thumbnail": best_url(avatar)} if run else None,
+        "owner": _byline_owner(run, avatar) if run else None,
         "viewCountText": views,
         "viewCountInt": view_count(views),
         "publishedTimeText": when,
