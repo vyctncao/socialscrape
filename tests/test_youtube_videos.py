@@ -1153,6 +1153,61 @@ def test_video_routes_read_a_video_id_of_another_type_as_another_videos(client, 
         assert (r.status_code, r.json()["error"]) == (500, "upstream_error"), r.text
 
 
+STREAMING = ("streamingData",)
+FORMAT, AUDIO = ("streamingData", "formats", 0), ("streamingData", "adaptiveFormats", 0)
+
+
+@pytest.mark.parametrize("path,value", [
+    (STREAMING, "x"), (STREAMING, None), ((*STREAMING, "formats"), [7]), ((*FORMAT, "url"), 7),
+    ((*FORMAT, "url"), "https://[x/videoplayback"), ((*FORMAT, "url"), f"https://{'a' * 64}.googlevideo.com/x"),
+    ((*FORMAT, "url"), "https://rr1---sn-x.googlevideo.com/videoplayback?itag=18&x=\ud83d"),
+    ((*FORMAT, "mimeType"), 7), ((*FORMAT, "quality"), {"x": 1}), ((*FORMAT, "qualityLabel"), 7),
+    ((*AUDIO, "audioQuality"), None), ((*FORMAT, "averageBitrate"), float("inf")),
+    ((*FORMAT, "averageBitrate"), "9" * 400), ((*FORMAT, "approxDurationMs"), "9" * 400),
+    ((*FORMAT, "width"), 10 ** 400), ((*AUDIO, "audioTrack"), "x"), ((*AUDIO, "audioTrack", "id"), 7),
+    ((*AUDIO, "audioTrack", "displayName"), 7), ((*STREAMING, "formats"), [{"itag": 18, "signatureCipher": 7}]),
+    ((*STREAMING, "hlsManifestUrl"), 7), ((*STREAMING, "hlsManifestUrl"), f"https://{'a' * 64}.googlevideo.com/x"),
+    ((*STREAMING, "hlsManifestUrl"), "https://manifest.google video.com/api/manifest/hls_variant/index.m3u8"),
+    ((*STREAMING, "dashManifestUrl"), "https://\\manifest.googlevideo.com/api/manifest/dash/id/1"),
+], ids=["streaming_data_string", "streaming_data_null", "format_number", "url_number", "url_unclosed_bracket",
+        "url_label_too_long", "url_half_emoji", "mime_type_number", "quality_object", "quality_label_number",
+        "audio_quality_null", "bitrate_infinite", "bitrate_overflowing", "duration_overflowing", "width_overflowing",
+        "audio_track_string", "audio_track_id_number", "audio_track_name_number", "signature_cipher_number",
+        "hls_manifest_number", "hls_manifest_label_too_long", "hls_manifest_host_with_space",
+        "dash_manifest_host_with_backslash"])
+def test_video_routes_read_formats_of_another_type_as_missing(client, monkeypatch, path, value):
+    """yt-formats-type-500: yt-dlp reads a player response's formats as objects of strings and of numbers a float
+    holds, and their URLs as ones it can request (it splits and quotes them, and encodes their hosts as IDNA), so a
+    value of another type (or a URL it can't request) was a 500 (TypeError, AttributeError, OverflowError,
+    ValueError or UnicodeError) before any of our code ran. A manifest URL whose host it can't request failed the
+    video, an upstream_error. It reads as missing, and the response's other details are still read."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        pr = {"playabilityStatus": {"status": "OK"},
+              "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                               "channelId": "UC" + "x" * 22},
+              "streamingData": {  # no manifest, which would be requested
+                  "formats": [{"itag": 18, "url": "https://rr1---sn-x.googlevideo.com/videoplayback?itag=18",
+                               "mimeType": 'video/mp4; codecs="avc1.42001E, mp4a.40.2"', "quality": "medium",
+                               "qualityLabel": "360p", "bitrate": 500000, "averageBitrate": 400000, "width": 640,
+                               "height": 360, "approxDurationMs": "19000", "audioQuality": "AUDIO_QUALITY_LOW"}],
+                  "adaptiveFormats": [{"itag": 140, "url": "https://rr1---sn-x.googlevideo.com/videoplayback?itag=140",
+                                       "mimeType": 'audio/mp4; codecs="mp4a.40.2"', "quality": "tiny",
+                                       "bitrate": 130000, "approxDurationMs": "19000",
+                                       "audioQuality": "AUDIO_QUALITY_MEDIUM",
+                                       "audioTrack": {"displayName": "English original", "id": "en.4"}}]}}
+        node = pr
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+        return pr
+
+    stub_player(monkeypatch, player)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd" and transcript.json()["success"]
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []

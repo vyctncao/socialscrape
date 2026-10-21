@@ -20,6 +20,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, partial
 from typing import Any, Callable, TypeVar
+from urllib.parse import parse_qs, urlsplit
 
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError, YoutubeDLCookieJar
@@ -218,13 +219,52 @@ def _date(value: Any) -> bool:
     return True
 
 
+def _text(value: Any) -> bool:
+    """A string that encodes as UTF-8: yt-dlp quotes URLs (a UnicodeEncodeError on half an emoji, so a 500 here)."""
+    if not isinstance(value, str):
+        return False
+    try:
+        value.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _url(value: Any) -> bool:
+    """An http(s) URL yt-dlp can request: it splits each one (a ValueError on an unclosed '[') and encodes its host
+    as IDNA (a UnicodeError on a label of more than 63 characters), so a 500 here, and a manifest's that it can't
+    request (its host or port isn't one) fails the video's extraction, an upstream_error."""
+    if not _text(value):
+        return False
+    try:
+        parts = urlsplit(value)
+        parts.netloc.encode("idna")
+        host, _ = (parts.hostname or "").encode("idna").decode(), parts.port
+    except (ValueError, UnicodeError):
+        return False
+    return parts.scheme in ("http", "https") and bool(re.fullmatch(r"[\w.-]+|[\da-f.]*:[\da-f:.%\w]*", host))
+
+
+def _cipher(value: Any) -> bool:
+    """A format's signatureCipher: a query string whose URL, if it has one, is one yt-dlp can request (see _url)."""
+    return _text(value) and all(_url(url) for url in parse_qs(value).get("url", [])[:1])
+
+
+_FORMAT = {
+    "url": _url, "signatureCipher": _cipher, "mimeType": str, "quality": str, "qualityLabel": str, "audioQuality": str,
+    "audioTrack": {"id": str, "displayName": str},
+    **dict.fromkeys(("bitrate", "averageBitrate", "approxDurationMs", "width", "height"), _number),
+}
 # The parts of a YouTube player response yt-dlp reads as these types without checking. Anything else is deleted, as
-# missing (see _conform): yt-dlp fails on it (a TypeError, an AttributeError or an OverflowError, so a 500 here).
+# missing (see _conform): yt-dlp fails on it (a TypeError, an AttributeError, an OverflowError, a ValueError or a
+# UnicodeError, so a 500 here).
 _PLAYER_RESPONSE = {
     "videoDetails": {"keywords": [str], "shortDescription": str, "lengthSeconds": _number},
     "microformat": {"playerMicroformatRenderer": {
         "ownerProfileUrl": str, "uploadDate": _date, "lengthSeconds": _number,
         "liveBroadcastDetails": {"startTimestamp": _date, "endTimestamp": _date}}},
+    "streamingData": {
+        "formats": [_FORMAT], "adaptiveFormats": [_FORMAT], "hlsManifestUrl": _url, "dashManifestUrl": _url},
 }
 
 
