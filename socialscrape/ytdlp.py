@@ -32,7 +32,9 @@ from yt_dlp.utils import (
     UnsupportedError,
     UserNotLive,
     YoutubeDLError,
+    parse_iso8601,
     traverse_obj,
+    unified_strdate,
     variadic,
 )
 
@@ -135,6 +137,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             ie = ydl.get_info_extractor("Youtube")
             ie._is_agegated = youtube_agegated
             ie._extract_player_response = partial(_youtube_player_api, ie._extract_player_response)
+            ie._invalid_player_response = partial(_youtube_player_response, ie._invalid_player_response)
         try:
             return fn(ydl)
         finally:
@@ -175,6 +178,63 @@ def _youtube_player_api(extract: Callable[..., Any], *args: Any, **kwargs: Any) 
     if player_response is not None and not isinstance(player_response, dict):
         raise ExtractorError("The player API's response is not an object", expected=True)
     return player_response
+
+
+def _conform(value: Any, schema: Any) -> bool:
+    """Whether `value` fits `schema`, once what doesn't fit is deleted from it: `schema` is a dict of keys to their
+    schemas (a key whose value doesn't fit is deleted), a list of one item's schema (an item that doesn't fit is
+    dropped), a type, or a check."""
+    if isinstance(schema, dict):
+        if not isinstance(value, dict):
+            return False
+        for key in [k for k, v in value.items() if k in schema and not _conform(v, schema[k])]:
+            del value[key]
+        return True
+    if isinstance(schema, list):
+        if not isinstance(value, list):
+            return False
+        value[:] = [item for item in value if _conform(item, schema[0])]
+        return True
+    return isinstance(value, schema) if isinstance(schema, type) else schema(value)
+
+
+def _number(value: Any) -> bool:
+    """A number, or a string of one, too small to overflow yt-dlp's float math (an OverflowError, so a 500 here)."""
+    try:
+        return isinstance(value, (int, float, str)) and abs(float(value)) < 2**64
+    except (ValueError, OverflowError):
+        return False
+
+
+def _date(value: Any) -> bool:
+    """A date string yt-dlp can read: its parse_iso8601 and unified_strdate fail on another type (a TypeError) and on
+    a date that its offset, or a year past a C int, puts out of datetime's range (an OverflowError), so a 500 here."""
+    if not isinstance(value, str):
+        return False
+    try:
+        parse_iso8601(value), unified_strdate(value)
+    except OverflowError:
+        return False
+    return True
+
+
+# The parts of a YouTube player response yt-dlp reads as these types without checking. Anything else is deleted, as
+# missing (see _conform): yt-dlp fails on it (a TypeError, an AttributeError or an OverflowError, so a 500 here).
+_PLAYER_RESPONSE = {
+    "videoDetails": {"keywords": [str], "shortDescription": str, "lengthSeconds": _number},
+    "microformat": {"playerMicroformatRenderer": {
+        "ownerProfileUrl": str, "uploadDate": _date, "lengthSeconds": _number,
+        "liveBroadcastDetails": {"startTimestamp": _date, "endTimestamp": _date}}},
+}
+
+
+def _youtube_player_response(invalid: Callable[[Any, str], Any], player_response: Any, video_id: str) -> Any:
+    """YoutubeIE._invalid_player_response, the first thing yt-dlp does with each player response, once the response
+    is made to fit _PLAYER_RESPONSE. The other video's id it returns for a response of another video is a string:
+    yt-dlp joins those ids into a warning (a TypeError on one of another type, so a 500 here)."""
+    _conform(player_response, _PLAYER_RESPONSE)
+    other_id = invalid(player_response, video_id)
+    return str(other_id) if other_id else other_id
 
 
 def cookie_file_problem(path: str) -> str | None:

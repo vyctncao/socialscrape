@@ -1073,6 +1073,67 @@ def test_video_routes_read_a_thumbnail_that_is_not_an_object_as_none(client, mon
     assert video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
+MICROFORMAT = ("microformat", "playerMicroformatRenderer")
+
+
+@pytest.mark.parametrize("path,value,field,expected", [
+    (("videoDetails", "keywords"), [7, None, "zoo"], ("keywords",), ["zoo"]),
+    (("videoDetails", "shortDescription"), 7, ("description",), None),
+    (("videoDetails", "lengthSeconds"), "9" * 400, ("durationMs",), 19000),
+    ((*MICROFORMAT, "ownerProfileUrl"), 7, ("channel", "handle"), None),
+    ((*MICROFORMAT, "uploadDate"), 7, ("publishDate",), None),
+    ((*MICROFORMAT, "uploadDate"), "0001-01-01T00:00:00+01:00", ("publishDate",), None),
+    ((*MICROFORMAT, "uploadDate"), "Mon, 01 Jan 99999999999999999999 00:00:00", ("publishDate",), None),
+    ((*MICROFORMAT, "liveBroadcastDetails", "startTimestamp"), 7, ("title",), "Odd"),
+    ((*MICROFORMAT, "liveBroadcastDetails", "endTimestamp"), "9999-12-31T23:59:59-01:00", ("title",), "Odd"),
+], ids=["keyword_number_and_null", "description_number", "length_overflowing", "owner_url_number",
+        "upload_date_number", "upload_date_before_year_1", "upload_date_year_overflowing", "live_start_number",
+        "live_end_after_year_9999"])
+def test_video_routes_read_video_details_of_another_type_as_missing(client, monkeypatch, path, value, field, expected):
+    """yt-details-type-500: yt-dlp reads a player response's keywords, description and owner URL as strings, its
+    lengths as numbers a float holds and its dates as dates in datetime's range, so a value of another type (or
+    out of range) was a 500 (TypeError, AttributeError or OverflowError) before any of our code ran. It reads as
+    missing, and the response's other details are still read."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        pr = {"playabilityStatus": {"status": "OK"},
+              "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                               "channelId": "UC" + "x" * 22, "keywords": ["zoo"], "shortDescription": "d"},
+              "microformat": {"playerMicroformatRenderer": {
+                  "ownerProfileUrl": "http://www.youtube.com/@jawed", "uploadDate": "2005-04-23T20:31:52-07:00",
+                  "lengthSeconds": "19", "liveBroadcastDetails": {
+                      "startTimestamp": "2005-04-23T20:31:52-07:00", "endTimestamp": "2005-04-23T20:32:11-07:00"}}},
+              # read with the length: an overflowing one was a 500 here
+              "storyboards": {"playerStoryboardSpecRenderer": {"spec": (
+                  "https://i.ytimg.com/sb/x/storyboard3_L$L/$N.jpg?sqp=a|48#27#100#10#10#0#default#rs$A|"
+                  "80#45#19#10#10#2000#M$M#rs$B")}}}
+        node = pr
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+        return pr
+
+    stub_player(monkeypatch, player)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    body = video.json()
+    for key in field:
+        body = body[key]
+    assert body == expected and transcript.json()["success"]
+
+
+@pytest.mark.parametrize("video_id", [7, ["x"], {"x": 1}], ids=["number", "list", "object"])
+def test_video_routes_read_a_video_id_of_another_type_as_another_videos(client, monkeypatch, video_id):
+    """yt-video-id-type-500: yt-dlp skips a player response whose videoId isn't the video's, naming the ids it got
+    instead in a warning ('/'.join(set(ids))), so one that wasn't a string was a 500 (TypeError) before any of our
+    code ran. The response is skipped as one for another video is: with no other, an upstream_error."""
+    stub_player(monkeypatch, lambda self, *args, **kwargs: {"playabilityStatus": {"status": "OK"}, "videoDetails": {
+        "videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a", "channelId": "UC" + "x" * 22}})
+    for path in ("/v1/youtube/video", "/v1/youtube/video/transcript"):
+        r = client.get(path, params={"url": watch(ZOO)})
+        assert (r.status_code, r.json()["error"]) == (500, "upstream_error"), r.text
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []
