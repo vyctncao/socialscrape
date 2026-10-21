@@ -162,7 +162,11 @@ def test_api_key_auth(tmp_path, keys, good):
         assert c.get("/v1/tiktok/profile").status_code == 401
         for public in ("/health", "/docs", "/redoc", "/openapi.json", "/meta/coverage"):
             assert c.get(public).status_code == 200, public
-        assert c.get("/health/", follow_redirects=False).status_code == 401  # exact-match public paths only
+            r = c.get(f"{public}/", follow_redirects=False)  # an uptime check's trailing slash: redirected
+            assert r.status_code == 307 and r.headers["location"] == f"http://testserver{public}", public
+        assert c.get("/health//").status_code == 200
+        for guarded in ("/", "//", "/healthz", "/health/x", "/docs/oauth2-redirect", "/v1/tiktok/profile/"):
+            assert c.get(guarded, follow_redirects=False).status_code == 401, guarded
 
 
 def test_auth_runs_before_cache(tmp_path):

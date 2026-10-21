@@ -40,7 +40,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         keys = get_settings().api_keys
-        if keys and request.url.path not in PUBLIC_PATHS:
+        # '/health/' as well, which the router redirects to '/health'; '/healthz' or '/health/x' needs a key
+        if keys and (request.url.path.rstrip("/") or "/") not in PUBLIC_PATHS:
             # The header's raw bytes (compare_digest rejects a non-ASCII str), stripped like the keys: uvicorn's
             # httptools parser keeps trailing spaces and tabs, which aren't part of the value.
             given = request.headers.get("x-api-key", "").strip(" \t").encode("latin-1")

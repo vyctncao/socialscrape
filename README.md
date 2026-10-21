@@ -21,7 +21,7 @@ curl 'http://127.0.0.1:8000/v1/instagram/post?url=https://www.instagram.com/p/De
 - `/meta/coverage`: every endpoint's status, the yt-dlp extractor it uses, and its limitations.
 - `/health`: yt-dlp version and which features are enabled.
 
-When auth is on, these three, `/redoc` and `/openapi.json` are the only paths that work without an API key.
+When auth is on, these three, `/redoc` and `/openapi.json` are the only paths that work without an API key (with a trailing slash too, which redirects to the path without it).
 
 Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
 
