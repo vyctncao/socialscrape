@@ -61,7 +61,7 @@ WHISPER_LANGUAGES = frozenset(
     "ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd "
     "gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su yue".split())
 _V3_ONLY = frozenset({"yue"})
-_ALIASES = {"jv": "jw", "nb": "no"}  # ISO 639-1 codes Whisper spells differently
+_ALIASES = {"jv": "jw"}  # an ISO 639-1 code Whisper spells differently (short_lang already makes 'nb' 'no')
 # Multilingual model names both backends resolve to a pre-large-v3 model (99 languages, no yue). 'large' is left
 # out: faster-whisper maps it to large-v3.
 _PRE_V3_MODELS = frozenset("tiny base small medium large-v1 large-v2 distil-large-v2".split())

@@ -339,8 +339,14 @@ def test_short_lang():
     from socialscrape.util import short_lang
 
     for given, code in (("en", "en"), ("EN", "en"), ("eng", "en"), ("spa-ES", "es"), ("cmn-Hans-CN", "zh"),
-                        ("zh-Hans", "zh"), ("zho", "zh"), ("cmn", "zh"), ("arb", "ar"), (" fil ", "fil"),
-                        ("yue", "yue"), ("", ""), (None, "")):
+                        ("zh-Hans", "zh"), ("zho", "zh"), ("cmn", "zh"), ("arb", "ar"), ("yue", "yue"), ("", ""),
+                        (None, "")):
+        assert short_lang(given) == code, given
+    # fix3: one code per language, so that 'he' finds YouTube's 'iw' captions and 'no' TikTok's 'nob-NO' ones
+    for given, code in (("iw", "he"), ("he", "he"), ("heb-IL", "he"), ("in", "id"), ("ind", "id"), ("ji", "yi"),
+                        ("yid", "yi"), ("jw", "jv"), ("jav", "jv"), ("mo", "ro"), ("ron", "ro"), ("nb", "no"),
+                        ("nob-NO", "no"), ("nor", "no"), ("nn", "nn"), (" fil ", "tl"), ("fil-PH", "tl"),
+                        ("tgl", "tl")):
         assert short_lang(given) == code, given
 
 

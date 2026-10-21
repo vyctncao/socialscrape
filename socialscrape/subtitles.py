@@ -17,6 +17,8 @@ from typing import Any
 
 import yt_dlp
 
+from .util import short_lang
+
 FORMAT_PREFERENCE = "json3/vtt/srt/srv3/best"
 
 
@@ -42,7 +44,7 @@ class Transcript:
 
 
 def _base(lang: str) -> str:
-    return lang.split("-")[0].lower()
+    return short_lang(lang)  # one code per language: 'he' finds YouTube's 'iw' track, 'eng' its 'en' one
 
 
 # The script a Chinese region writes in, for tags that leave it out: YouTube lists zh-CN and zh-TW as often as

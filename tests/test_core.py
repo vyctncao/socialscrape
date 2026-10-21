@@ -220,6 +220,17 @@ def test_pick_track_keeps_the_script_of_a_chinese_variant():
     assert subtitles.pick_track({}, {"en-orig": [{}], "en": [{}]}, language="en-Latn") == ("en", True)
 
 
+def test_pick_track_finds_a_track_under_youtubes_own_code():
+    """fix3: YouTube keys Hebrew captions 'iw', Norwegian 'no' and Filipino 'fil' (a TED talk lists all three), so
+    language=he, nb or tl found no track and the transcript was null; so did a 3-letter code such as eng."""
+    up = {k: [{}] for k in ("en", "fil", "id", "iw", "no")}
+    for want, key in (("he", "iw"), ("iw", "iw"), ("heb", "iw"), ("nb", "no"), ("nob", "no"), ("tl", "fil"),
+                      ("fil", "fil"), ("in", "id"), ("eng", "en"), ("EN", "en")):
+        assert subtitles.pick_track(up, {}, language=want) == (key, False), want
+    for want, key in (("ji", "yi"), ("jw", "jv"), ("he-IL", "iw")):
+        assert subtitles.pick_track({}, {"iw": [{}], "jv": [{}], "yi": [{}]}, language=want) == (key, True), want
+
+
 def test_parse_vtt_dedupes_rolling_captions():
     raw = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nhello\n\n00:00:01.000 --> 00:00:02.000\nhello\nworld\n"
     segs = subtitles.parse(raw, "vtt")
@@ -1173,7 +1184,10 @@ def test_whisper_language():
                         ("yue", "yue"), ("jav", "jw"), ("jv", "jw"), ("nob", "no"), ("he", "he"), ("en-US", "en"),
                         ("cmn", "zh"), ("cmn-Hans-CN", "zh")):  # gap-tiktok-2: Mandarin's ISO 639-3 code
         assert whisper_language(given) == code, given
-    for unknown in ("zz", "zzz", "ger", "fil", "", None):  # unknown, ISO 639-2/B, or not in Whisper's list
+    # fix3: Whisper's codes for Hebrew, Indonesian, Bokmål and Filipino under the other codes they go by
+    for given, code in (("iw", "he"), ("in", "id"), ("nb", "no"), ("fil", "tl"), ("fil-PH", "tl"), ("jw", "jw")):
+        assert whisper_language(given) == code, given
+    for unknown in ("zz", "zzz", "ger", "", None):  # unknown or ISO 639-2/B
         assert whisper_language(unknown) is None, unknown
 
 

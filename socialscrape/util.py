@@ -34,14 +34,20 @@ def parse_count(text: Any) -> int | None:
 # ISO 639-3 codes of the standard variety of a macrolanguage, which ISO639Utils (639-1/639-2 only) doesn't know.
 # TikTok names Mandarin caption tracks 'cmn-Hans-CN'.
 _MACROLANGUAGE_OF = {"cmn": "zh", "arb": "ar", "zsm": "ms", "pes": "fa", "swh": "sw"}
+# One language under two codes: withdrawn ISO 639-1 codes still in use (YouTube keys Hebrew captions 'iw', Java
+# reports 'iw', 'in' and 'ji'), Bokmål, which YouTube and Whisper call Norwegian ('no'), and Filipino, standard
+# Tagalog, which YouTube calls 'fil' and Whisper 'tl'.
+_SAME_LANGUAGE = {"iw": "he", "in": "id", "ji": "yi", "jw": "jv", "mo": "ro", "nb": "no", "fil": "tl"}
 
 
 def short_lang(code: str | None) -> str:
-    """'en' / 'EN' / 'eng' / 'spa-ES' / 'cmn-Hans-CN' -> 'en', 'en', 'en', 'es', 'zh': the language part as an
-    ISO 639-1 code. One without such a code ('fil', 'yue') is returned lower-cased, None as ''."""
+    """'en' / 'EN' / 'eng' / 'spa-ES' / 'cmn-Hans-CN' / 'iw' -> 'en', 'en', 'en', 'es', 'zh', 'he': the language
+    part as an ISO 639-1 code, the same one for every code of a language. One without such a code ('yue', 'haw')
+    is returned lower-cased, None as ''."""
     base = (code or "").strip().split("-")[0].lower()
     base = _MACROLANGUAGE_OF.get(base, base)
-    return ISO639Utils.long2short(base) or base
+    base = ISO639Utils.long2short(base) or base
+    return _SAME_LANGUAGE.get(base, base)
 
 
 def format_count(n: int | None, unit: str = "") -> str | None:
