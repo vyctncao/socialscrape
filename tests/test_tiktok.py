@@ -76,6 +76,8 @@ def test_missing_params_are_400(client, path):
     ("/v1/tiktok/user/live", {"handle": "https://www.youtube.com/@x"}),
     ("/v1/tiktok/live", {"room_id": "abc", "user_id": "1"}),
     ("/v1/tiktok/song", {"clipId": "Build-a-Btch"}),
+    ("/v1/tiktok/song", {"clipId": "https://www.tiktok.com/music/Build-a-Btch"}),
+    ("/v1/tiktok/song/videos", {"clipId": STOOL_VIDEO}),
     ("/v1/tiktok/song/videos", {"clipId": CLIP_ID, "cursor": "-5"}),
     # non-ASCII digits match str.isdigit() and \d (int("\u00b2") used to raise -> 500): must be a clean 400
     ("/v1/tiktok/song/videos", {"clipId": CLIP_ID, "cursor": "\u00b2"}),
@@ -128,6 +130,15 @@ def test_url_variants():
     assert M.collection_id("tiktok.com/@a.b/collection/7665668414573546258?lang=en") == "7665668414573546258"
     assert M.collection_id("https://www.tiktok.com/@a/collection/name") is None
     assert M.collection_id(STOOL_VIDEO) is None
+    # a sound's page, as TikTokSoundIE's tests give it, with whatever title the address bar shows
+    assert M.music_id(f"https://www.tiktok.com/music/Build-a-Btch-{CLIP_ID}?lang=en") == CLIP_ID
+    assert M.music_id(f" m.tiktok.com/music/original-sound-2024-{CLIP_ID}/ ") == CLIP_ID
+    assert M.music_id(f"HTTPS://WWW.TIKTOK.COM/MUSIC/{CLIP_ID}#top") == CLIP_ID
+    assert M.music_id(f"https://www.tiktok.com/music/%E5%8E%9F%E5%A3%B0-{CLIP_ID}") == CLIP_ID
+    for url in ("https://www.tiktok.com/music/Build-a-Btch", f"https://www.tiktok.com/music/x-{CLIP_ID}/videos",
+                f"https://www.tiktok.com/tag/x-{CLIP_ID}", f"https://vm.tiktok.com/music/x-{CLIP_ID}",
+                "https://www.tiktok.com/music/x-\uff16\uff19", STOOL_VIDEO, COLLECTION):
+        assert M.music_id(url) is None, url
 
 
 def test_clean_handle():
@@ -597,6 +608,28 @@ def test_profile_cache(monkeypatch):
     with pytest.raises(UpstreamError):
         tiktok._profile(None, "nosec")
     tiktok._profiles.clear()
+
+
+def test_song_routes_take_a_sound_page_url(client, fake_ydl, monkeypatch):
+    _, calls = fake_ydl
+    asked = []
+
+    def music_page(ydl, mid, cursor):
+        asked.append((mid, cursor))
+        return {"aweme_list": [{"aweme_id": "1", "music": {"id_str": mid, "title": "Build a B*tch"}}],
+                "has_more": True, "cursor": cursor + 20}
+
+    monkeypatch.setattr(tiktok, "_music_page", music_page)
+    song = ok(client, "/v1/tiktok/song", clipId=f"https://www.tiktok.com/music/Build-a-Btch-{CLIP_ID}?lang=en")
+    assert song["music_info"] == {"id_str": CLIP_ID, "title": "Build a B*tch"}
+    page = ok(client, "/v1/tiktok/song/videos", clipId=f" tiktok.com/music/{CLIP_ID} ", cursor="20")
+    assert page["cursor"] == 40 and page["aweme_list"][0]["music"]["id_str"] == CLIP_ID
+    assert asked == [(CLIP_ID, 0), (CLIP_ID, 20)] and calls[-1]["extractor_args"] == tiktok._APP_API
+    for clip in ("https://www.tiktok.com/music/Build-a-Btch", STOOL_VIDEO, "abc"):
+        r = client.get("/v1/tiktok/song", params={"clipId": clip})
+        assert (r.status_code, r.json()["error"]) == (400, "bad_request"), r.text
+        assert "tiktok.com/music/<title>-<id>" in r.json()["message"]
+    assert len(asked) == 2
 
 
 def test_app_aweme_lookup(monkeypatch):

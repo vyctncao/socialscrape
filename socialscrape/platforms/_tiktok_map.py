@@ -27,6 +27,9 @@ _PROFILE_URL = re.compile(
 # TikTokCollectionIE._VALID_URL, also accepting m./no-www hosts and a title-less path
 _COLLECTION_URL = re.compile(
     r"^https?://(?:www\.|m\.)?tiktok\.com/@[\w.-]+/collection/(?:[^/?#]*-)?(?P<id>[0-9]+)/?(?:[?#].*)?$", re.I)
+# A sound's page, as TikTokSoundIE._VALID_URL takes it (/music/<title>-<id>), likewise with m./no-www and no title
+_MUSIC_URL = re.compile(
+    r"^https?://(?:www\.|m\.)?tiktok\.com/music/(?:[^/?#]*-)?(?P<id>[0-9]+)/?(?:[?#].*)?$", re.I)
 _SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://", re.I)
 
 
@@ -58,6 +61,11 @@ def is_short_url(url: str) -> bool:
 
 def collection_id(url: str) -> str | None:
     m = _COLLECTION_URL.match(with_scheme(url))
+    return m.group("id") if m else None
+
+
+def music_id(url: str) -> str | None:
+    m = _MUSIC_URL.match(with_scheme(url))
     return m.group("id") if m else None
 
 

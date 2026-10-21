@@ -81,6 +81,16 @@ def _numeric(name: str, value: str | None) -> str:
     return value
 
 
+def _clip(value: str | None) -> str:
+    """clipId: a sound's id, or the address of its page (https://www.tiktok.com/music/<title>-<id>)."""
+    value = (value or "").strip()
+    clip = (M.music_id(value) or "") if "/" in value else value
+    if not _ID.fullmatch(clip):
+        raise BadRequest("clipId must be a TikTok sound id or the URL of its page "
+                         "(https://www.tiktok.com/music/<title>-<id>)")
+    return clip
+
+
 def _offset(name: str, value: str | None) -> int:
     """Item-offset cursor from a previous response ('' / None -> 0)."""
     if value in (None, ""):
@@ -562,10 +572,11 @@ async def tiktok_live(room_id: str = Query(...), user_id: str = Query(...)) -> d
 
 
 @sc_get(router, "/v1/tiktok/song", source="yt-dlp TikTokSoundIE (app API aweme/v1/music/aweme)",
-        notes="music_info is the app's music object embedded in the sound's first video (there is no music "
+        notes="clipId is the sound's id or the address of its page (https://www.tiktok.com/music/<title>-<id>). "
+              "music_info is the app's music object embedded in the sound's first video (there is no music "
               "detail call in yt-dlp); user_count is omitted when the embed reports 0.")
 async def tiktok_song(clipId: str = Query(...)) -> dict[str, Any]:
-    clip = _numeric("clipId", clipId)
+    clip = _clip(clipId)
     resp = await with_ydl(P, lambda ydl: _music_page(ydl, clip, 0), extractor_args=_APP_API)
     music = next((a["music"] for a in resp.get("aweme_list") or []
                   if str((a.get("music") or {}).get("id_str")) == clip), None)
@@ -577,12 +588,13 @@ async def tiktok_song(clipId: str = Query(...)) -> dict[str, Any]:
 
 
 @sc_get(router, "/v1/tiktok/song/videos", source="yt-dlp TikTokSoundIE (app API aweme/v1/music/aweme)",
-        notes="TikTok app response as-is (~20 per page), so counts past int32 are the app's pinned 2147483597. "
+        notes="clipId is the sound's id or the address of its page (https://www.tiktok.com/music/<title>-<id>). "
+              "TikTok app response as-is (~20 per page), so counts past int32 are the app's pinned 2147483597. "
               "cursor is the offset from the previous page and is omitted on the last page; a cursor that isn't "
               "such an offset is a 400 bad_cursor.")
 async def tiktok_song_videos(clipId: str | None = None, cursor: str | None = None) -> dict[str, Any]:
     require_one(clipId=clipId)
-    clip = _numeric("clipId", clipId)
+    clip = _clip(clipId)
     offset = _offset("cursor", cursor)
     resp = await with_ydl(P, lambda ydl: _music_page(ydl, clip, offset), extractor_args=_APP_API)
     if not resp.get("aweme_list") and not offset:

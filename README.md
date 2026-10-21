@@ -98,7 +98,7 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 | `/v3/tiktok/profile/videos` | Native `max_cursor`, newest first. Photo posts carry their images as `image_post_info`, as on `/v2/tiktok/video`; posts carry no `music`. `sort_by=popular` returns 501, and `include_pinned=false` can't be honored. TikTok's intermittent statusCode 10102 refusal is a retryable `503 upstream_blocked`. |
 | `/v1/tiktok/profile/region` | Read from the app API through the creator's own original sound. Returns 404 if none of their recent posts uses one; if the app API can't be reached, it's the same retryable 502/503 as `/song`. |
 | `/v1/tiktok/user/live`, `/v1/tiktok/live` | Live room data. `user/live` passes TikTok's live-page JS challenge with yt-dlp's solver; one it can't pass is a `503 upstream_blocked`. |
-| `/v1/tiktok/song`, `/v1/tiktok/song/videos` | App API, `cursor` paging. Counts past int32 are the app's pinned 2147483597. |
+| `/v1/tiktok/song`, `/v1/tiktok/song/videos` | App API, `cursor` paging. `clipId` is the sound's id or the address of its page (`tiktok.com/music/<title>-<id>`). Counts past int32 are the app's pinned 2147483597. |
 | `/v1/tiktok/collection/videos` | Public collections, 30 per page. Only TikTok's statusCode 100001 (removed or non-public) is a 404; a private one (10216/10222) is a 403, a refusal of anonymous requests a 503, an unknown code a 500. |
 
 The other 19 return 501: comments and replies, followers and following, audience, every search endpoint, trending, popular creators, Shop, showcase and the Ad Library. yt-dlp has no TikTok extractor for any of them.

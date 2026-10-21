@@ -211,8 +211,18 @@ def test_song_original_sound(client):
     assert m["owner_handle"] == STOOL and m["title"] == f"original sound - {STOOL}"
 
 
+@pytest.mark.live
+def test_song_from_its_page_url(client):
+    # the sound page's address (TikTokSoundIE's own test URL), and the m. host without a title or scheme
+    m = ok(client, SONG, clipId=f"https://www.tiktok.com/music/Build-a-Btch-{LICENSED_SOUND}?lang=en")["music_info"]
+    assert m["id_str"] == LICENSED_SOUND and m["title"] == "Build a B*tch"
+    page = ok(client, SONG_VIDEOS, clipId=f"m.tiktok.com/music/{SMALL_SOUND}/")
+    assert page["aweme_list"] and {a["music"]["id_str"] for a in page["aweme_list"]} == {SMALL_SOUND}
+
+
 @pytest.mark.parametrize("clip", ["", "  ", "abc", "-1", "1.0", "1" * 26, "６９５６",
-                                  f"https://www.tiktok.com/music/Build-a-Btch-{LICENSED_SOUND}"])
+                                  "https://www.tiktok.com/music/Build-a-Btch", f"https://www.tiktok.com/@{STOOL}",
+                                  f"https://www.youtube.com/music/x-{LICENSED_SOUND}"])
 def test_song_bad_clip_id(client, clip):
     err(client, SONG, 400, "bad_request", clipId=clip)
 
@@ -278,7 +288,7 @@ def test_song_videos_bad_cursor_is_400(client, cursor):
 def test_song_videos_param_validation(client):
     for params in ({}, {"clipId": ""}):
         assert err(client, SONG_VIDEOS, 400, "bad_request", **params)["message"] == "Provide one of: clipId"
-    for clip in ("abc", "-1", f"https://www.tiktok.com/music/x-{SMALL_SOUND}"):
+    for clip in ("abc", "-1", f"https://www.tiktok.com/tag/x-{SMALL_SOUND}"):
         err(client, SONG_VIDEOS, 400, "bad_request", clipId=clip)
     err(client, SONG_VIDEOS, 404, "not_found", clipId="1")
 
