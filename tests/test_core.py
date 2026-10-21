@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import time
@@ -318,6 +319,34 @@ def test_pick_track_takes_the_other_norwegian():
     assert subtitles.pick_track(tracks("no"), tracks("nn"), language="nn") == ("nn", True)  # even auto-generated
     assert subtitles.pick_track(tracks("en"), tracks("da"), language="nn") is None
     assert subtitles.pick_track(tracks("en", "fa"), {}, language="per") == ("fa", False)
+
+
+def test_parse_timed_text():
+    """srv2 times (milliseconds) were read as seconds, a TTML cue's end as its duration (0), and a time that isn't
+    one number ('1.2.3') was a 500."""
+    seg = subtitles.Segment
+    srv1 = '<transcript><text start="1.5" dur="2.25">Hi &amp; bye</text><text start="1.2.3" dur="">odd</text>'
+    assert subtitles.parse(srv1, "srv1") == [seg(1.5, 3.75, "Hi & bye"), seg(0.0, 0.0, "odd")]
+    srv2 = '<timedtext><body><text t="1500" d="2250" w="1">Hi <s>there</s></text></body></timedtext>'
+    assert subtitles.parse(srv2, "srv2") == [seg(1.5, 3.75, "Hi there")]
+    srv3 = '<timedtext format="3"><body><p t="1500" d="2250" w="1"><s ac="0">Hey</s></p><p t="." d="1">x</p>'
+    assert subtitles.parse(srv3, "srv3") == [seg(1.5, 3.75, "Hey"), seg(0.0, 0.001, "x")]
+    ttml = '<tt><body><div><p begin="00:00:01.500" end="00:00:03.750" style="s2">Yo</p><p begin="0:05.000">x</p>'
+    assert subtitles.parse(ttml, "ttml") == [seg(1.5, 3.75, "Yo"), seg(5.0, 5.0, "x")]
+    assert subtitles.parse(f'<text start="{"9" * 400}" dur="1">big</text>', "srv1") == [seg(0.0, 1.0, "big")]
+    assert subtitles.parse("9" * 5000 + ":00:00.000 --> 00:00:01.000\nlong", "vtt")[0].text == "long"
+
+
+def test_parse_json3_skips_what_isnt_a_caption():
+    """JSON that isn't an object, null events or segments, and times that aren't numbers were a 500 (or lost the
+    whole transcript)."""
+    for raw in ("[1, 2]", "null", '"x"', '{"events": 5}', '{"events": [null, 1, {"segs": null}, {"segs": {}}]}'):
+        assert subtitles.parse(raw, "json3") == [], raw
+    raw = json.dumps({"events": [{"segs": [None, {"utf8": None}, {"utf8": 5}, {"utf8": "a"}], "tStartMs": "x"},
+                                 {"segs": [{"utf8": "b"}], "tStartMs": 1500, "dDurationMs": True},
+                                 {"segs": [{"utf8": "c"}], "tStartMs": float("nan"), "dDurationMs": 1e400}]})
+    seg = subtitles.Segment
+    assert subtitles.parse(raw, "json3") == [seg(0.0, 0.0, "a"), seg(1.5, 1.5, "b"), seg(0.0, 0.0, "c")]
 
 
 def test_parse_vtt_dedupes_rolling_captions():

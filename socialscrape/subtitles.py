@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 import re
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -148,7 +149,7 @@ def machine_translated(automatic: dict[str, Any]) -> set[str]:
 
 # --- parsing -----------------------------------------------------------------
 
-_TS = re.compile(r"(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})")
+_TS = re.compile(r"(?:(\d{1,9}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})")  # int() refuses over 4300 digits
 _TAG = re.compile(r"<[^>]+>")
 
 
@@ -160,18 +161,31 @@ def _ts(value: str) -> float:
     return int(h or 0) * 3600 + int(mi) * 60 + int(s) + int(ms.ljust(3, "0")) / 1000
 
 
+def _seconds(value: Any, scale: float = 1) -> float | None:
+    """A time given as a number (or the digits of one, as in srv files) -> seconds. None for anything else ('1.2.3',
+    null, NaN, a number too large for a float)."""
+    if isinstance(value, str) and re.fullmatch(r"\d+(?:\.\d*)?|\.\d+", value):
+        value = float(value)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value / scale):
+        return None
+    return value / scale
+
+
 def parse_json3(raw: str) -> list[Segment]:
+    """YouTube's json3 captions. Events, segments or times of another shape are skipped (or taken as 0)."""
     data = json.loads(raw)
+    events = data.get("events") if isinstance(data, dict) else None
     out = []
-    for ev in data.get("events") or []:
-        segs = ev.get("segs")
-        if not segs:
+    for ev in events if isinstance(events, list) else []:
+        segs = ev.get("segs") if isinstance(ev, dict) else None
+        if not isinstance(segs, list):
             continue
-        text = "".join(s.get("utf8", "") for s in segs).replace("\n", " ").strip()
+        text = "".join(seg["utf8"] for seg in segs if isinstance(seg, dict) and isinstance(seg.get("utf8"), str))
+        text = text.replace("\n", " ").strip()
         if not text:
             continue
-        start = (ev.get("tStartMs") or 0) / 1000
-        out.append(Segment(start, start + (ev.get("dDurationMs") or 0) / 1000, text))
+        start = _seconds(ev.get("tStartMs"), 1000) or 0.0
+        out.append(Segment(start, start + (_seconds(ev.get("dDurationMs"), 1000) or 0.0), text))
     return out
 
 
@@ -205,16 +219,31 @@ def parse(raw: str, ext: str) -> list[Segment]:
     if ext in ("vtt", "srt"):
         return parse_cues(raw)
     if ext.startswith("srv") or ext == "ttml":
-        segs = []
-        for m in re.finditer(r'<(?:text|p)[^>]*?(?:start|begin|t)="([^"]+)"[^>]*?(?:dur|d)?="?([^"\s>]*)"?[^>]*>(.*?)</(?:text|p)>', raw, re.S):
-            start_raw, dur_raw, body = m.groups()
-            start = float(start_raw) / (1000 if ext == "srv3" else 1) if re.fullmatch(r"[\d.]+", start_raw) else _ts(start_raw)
-            dur = float(dur_raw) / (1000 if ext == "srv3" else 1) if re.fullmatch(r"[\d.]+", dur_raw or "") else 0.0
-            text = html.unescape(_TAG.sub("", body)).strip()
-            if text:
-                segs.append(Segment(start, start + dur, text))
-        return segs
+        return parse_timed_text(raw)
     return []
+
+
+_CUE_ELEMENT = re.compile(r"<(text|p)\b([^>]*)>(.*?)</\1>", re.S)
+_ATTRIBUTE = re.compile(r'([\w:.-]+)="([^"]*)"')
+
+
+def parse_timed_text(raw: str) -> list[Segment]:
+    """YouTube's srv1 (<text start= dur=> in seconds), srv2 and srv3 (<text t= d=>, <p t= d=> in milliseconds) and
+    TTML (<p begin= end=> clock times). A cue whose times aren't numbers starts at 0 and lasts 0 s."""
+    segs = []
+    for m in _CUE_ELEMENT.finditer(raw):
+        attrs = dict(_ATTRIBUTE.findall(m[2]))
+        if "begin" in attrs:
+            start = _ts(attrs["begin"])
+            end = max(start, _ts(attrs["end"])) if "end" in attrs else start
+        else:
+            start_ms = "start" not in attrs  # srv1 counts seconds, srv2 and srv3 milliseconds
+            start = _seconds(attrs.get("t" if start_ms else "start"), 1000 if start_ms else 1) or 0.0
+            end = start + (_seconds(attrs.get("d" if start_ms else "dur"), 1000 if start_ms else 1) or 0.0)
+        text = html.unescape(_TAG.sub("", m[3])).strip()
+        if text:
+            segs.append(Segment(start, end, text))
+    return segs
 
 
 # --- fetching ----------------------------------------------------------------
