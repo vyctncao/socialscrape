@@ -71,10 +71,13 @@ def format_count(n: int | None, unit: str = "") -> str | None:
 
 
 def iso_utc(ts: float | int | None, *, millis: bool = True) -> str | None:
-    """Unix seconds -> '2024-01-02T03:04:05.000Z'."""
+    """Unix seconds -> '2024-01-02T03:04:05.000Z'; None for None, junk, NaN or a time past the year 9999."""
     if ts is None:
         return None
-    dt = datetime.fromtimestamp(float(ts), timezone.utc)
+    try:
+        dt = datetime.fromtimestamp(float(ts), timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
     if millis:
         return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")

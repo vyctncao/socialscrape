@@ -103,6 +103,9 @@ def test_util():
     assert util.parse_count("2.75M subscribers") == 2_750_000
     assert util.parse_count(None) is None
     assert util.iso_utc(0) == "1970-01-01T00:00:00.000Z"
+    assert util.iso_utc("1700000000", millis=False) == "2023-11-14T22:13:20Z"
+    for junk in (10**20, -(10**20), float("nan"), float("inf"), "x", [1], {"a": 1}):  # fix14: was a 500
+        assert util.iso_utc(junk) is None, junk
     assert util.clock(75) == "1:15" and util.clock(3675) == "1:01:15"
     assert util.clock(348, always_hours=True) == "00:05:48"
 

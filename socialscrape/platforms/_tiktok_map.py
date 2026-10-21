@@ -41,8 +41,23 @@ def to_int(value: Any) -> int | None:
         return None
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: an infinite float
         return None
+
+
+def obj(value: Any) -> dict[str, Any]:
+    """`value` if it is a JSON object, else {}: a field TikTok sends as another type reads as missing."""
+    return value if isinstance(value, dict) else {}
+
+
+def objs(value: Any) -> list[dict[str, Any]]:
+    """The JSON objects of a list (its null or other entries skipped); [] for anything but a list."""
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def text(value: Any) -> str | None:
+    """`value` if it is a string, else None."""
+    return value if isinstance(value, str) else None
 
 
 def with_scheme(url: str) -> str:
@@ -82,12 +97,12 @@ def clean_handle(handle: str) -> str | None:
 
 
 def web_url(handle: str | None, aweme_id: str) -> str:
-    return f"https://www.tiktok.com/@{handle or '_'}/video/{aweme_id}"
+    return f"https://www.tiktok.com/@{text(handle) or '_'}/video/{aweme_id}"
 
 
 def image(url: str | None) -> dict[str, Any] | None:
     """Image URL -> app-style {uri, url_list}; `uri` only when the CDN path has one."""
-    if not url:
+    if not text(url):
         return None
     m = _IMAGE_URI.match(url)
     return compact({"uri": m.group(1) if m else None, "url_list": [url]})
@@ -95,12 +110,13 @@ def image(url: str | None) -> dict[str, Any] | None:
 
 def codec_flag(url_key: str | None) -> int | None:
     """App `is_bytevc1`: 0 h264, 1 bytevc1 (h265), 2 bytevc2 — read from the url_key."""
-    m = _CODEC.search(url_key or "")
+    m = _CODEC.search(text(url_key) or "")
     return _CODEC_FLAG[m.group(1)] if m else None
 
 
 def play_addr(pa: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not pa or not pa.get("UrlList"):
+    pa = obj(pa)
+    if not pa.get("UrlList"):
         return None
     return compact({
         "data_size": to_int(pa.get("DataSize")),
@@ -119,7 +135,7 @@ def bit_rate(b: dict[str, Any]) -> dict[str, Any]:
         "bit_rate": to_int(b.get("Bitrate")),
         "fps": to_int(b.get("BitrateFPS")),
         "gear_name": b.get("GearName"),
-        "is_bytevc1": codec_flag((b.get("PlayAddr") or {}).get("UrlKey")),
+        "is_bytevc1": codec_flag(obj(b.get("PlayAddr")).get("UrlKey")),
         "play_addr": play_addr(b.get("PlayAddr")),
         "quality_type": to_int(b.get("QualityType")),
         "video_extra": b.get("VideoExtra"),
@@ -127,6 +143,7 @@ def bit_rate(b: dict[str, Any]) -> dict[str, Any]:
 
 
 def cla_info(cla: dict[str, Any] | None) -> dict[str, Any] | None:
+    cla = obj(cla)
     if not cla:
         return None
     captions = [compact({
@@ -144,8 +161,8 @@ def cla_info(cla: dict[str, Any] | None) -> dict[str, Any] | None:
         "url": c.get("url"),
         "url_list": c.get("urlList"),
         "variant": c.get("variant"),
-    }) for c in cla.get("captionInfos") or []]
-    orig = cla.get("originalLanguageInfo") or {}
+    }) for c in objs(cla.get("captionInfos"))]
+    orig = obj(cla.get("originalLanguageInfo"))
     return compact({
         "caption_infos": captions,
         "captions_type": to_int(cla.get("captionsType")),
@@ -168,30 +185,30 @@ def duration_ms(item: dict[str, Any]) -> int | None:
     sound it is the *source* video's length and must not be used - and music.original marks the
     sound, not this post: reusing another creator's original sound keeps it True.
     """
-    seconds = to_int((item.get("video") or {}).get("duration"))
+    seconds = to_int(obj(item.get("video")).get("duration"))
     if not seconds or seconds <= 0:
         return None
-    m, au = item.get("music") or {}, item.get("author") or {}
+    m, au = obj(item.get("music")), obj(item.get("author"))
     own = m.get("original") is True and bool(m.get("authorName")) and m["authorName"] in (
         au.get("nickname"), au.get("uniqueId"))
-    precise = (m.get("preciseDuration") or {}).get("preciseVideoDuration")
+    precise = obj(m.get("preciseDuration")).get("preciseVideoDuration")
     if own and isinstance(precise, (int, float)) and abs(precise - seconds) < 2:
         return round(precise * 1000)
     return seconds * 1000
 
 
 def video(item: dict[str, Any], *, with_captions: bool) -> dict[str, Any]:
-    v = item.get("video") or {}
-    pas = v.get("PlayAddrStruct")
+    v = obj(item.get("video"))
+    pas = obj(v.get("PlayAddrStruct"))
     return compact({
-        "bit_rate": [bit_rate(b) for b in v.get("bitrateInfo") or []] or None,
+        "bit_rate": [bit_rate(b) for b in objs(v.get("bitrateInfo"))] or None,
         "cla_info": cla_info(v.get("claInfo")) if with_captions else None,
         "cover": image(v.get("cover")),
         "download_addr": {"url_list": [v["downloadAddr"]]} if v.get("downloadAddr") else None,
         "duration": duration_ms(item),
         "dynamic_cover": image(v.get("dynamicCover")),
         "height": v.get("height") or None,  # photo posts report 0
-        "is_bytevc1": codec_flag((pas or {}).get("UrlKey")),
+        "is_bytevc1": codec_flag(pas.get("UrlKey")),
         "origin_cover": image(v.get("originCover")),
         "play_addr": play_addr(pas),
         "ratio": v.get("ratio") or v.get("definition"),
@@ -218,7 +235,7 @@ def exact_count(v2: dict[str, Any] | None, v1: dict[str, Any] | None, *keys: str
     TikTok's int fields overflow int32 (heartCount = -1894967296 for 2.4B likes); the
     V2 strings don't, and they are exact where the int fields are rounded.
     """
-    for src in (v2 or {}, v1 or {}):
+    for src in (obj(v2), obj(v1)):
         for key in keys:
             n = to_int(src.get(key))
             if n is not None and n >= 0:
@@ -238,7 +255,7 @@ def exact_stats(stats: dict[str, Any] | None, stats_v2: dict[str, Any] | None) -
 
 
 def author(item: dict[str, Any]) -> dict[str, Any]:
-    a = item.get("author") or {}
+    a = obj(item.get("author"))
     st, st2 = item.get("authorStats") or {}, item.get("authorStatsV2") or {}
     secret = a.get("secret")
     return compact({
@@ -267,7 +284,7 @@ def author(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def music(item: dict[str, Any]) -> dict[str, Any] | None:
-    m = item.get("music") or {}
+    m = obj(item.get("music"))
     if not m.get("id"):
         return None
     return compact({
@@ -287,8 +304,8 @@ def music(item: dict[str, Any]) -> dict[str, Any] | None:
 def image_post_info(item: dict[str, Any]) -> dict[str, Any] | None:
     """Photo/slideshow posts: web `imagePost.images[].imageURL` -> app `display_image`."""
     images = []
-    for img in (item.get("imagePost") or {}).get("images") or []:
-        urls = (img.get("imageURL") or {}).get("urlList") or []
+    for img in objs(obj(item.get("imagePost")).get("images")):
+        urls = obj(img.get("imageURL")).get("urlList") or []
         if urls:
             images.append({"display_image": compact({
                 "url_list": urls, "width": to_int(img.get("imageWidth")), "height": to_int(img.get("imageHeight"))})})
@@ -304,7 +321,7 @@ def aweme(item: dict[str, Any], *, detail: bool = False) -> dict[str, Any]:
     """
     aweme_id = str(item["id"])
     created = to_int(item.get("createTime"))
-    handle = (item.get("author") or {}).get("uniqueId")
+    handle = obj(item.get("author")).get("uniqueId")
     return compact({
         "aweme_id": aweme_id,
         "desc": item.get("desc"),
@@ -365,15 +382,16 @@ def caption_track(item: dict[str, Any], language: str | None = None) -> dict[str
     language, one in its sibling (sibling_lang: 'nno-NO' for 'no') is taken. Without a language
     the original-audio track wins.
     """
-    v = item.get("video") or {}
-    cla = v.get("claInfo") or {}
-    codes = {c.get("language"): c.get("languageCode") for c in cla.get("captionInfos") or [] if c.get("language")}
-    original = (cla.get("originalLanguageInfo") or {}).get("language")
-    tracks = [{"name": t.get("LanguageCodeName"), "url": t["Url"], "format": t.get("Format")}
-              for t in v.get("subtitleInfos") or [] if t.get("Url")]
+    v = obj(item.get("video"))
+    cla = obj(v.get("claInfo"))
+    captions = objs(cla.get("captionInfos"))
+    codes = {c["language"]: text(c.get("languageCode")) for c in captions if text(c.get("language"))}
+    original = obj(cla.get("originalLanguageInfo")).get("language")
+    tracks = [{"name": text(t.get("LanguageCodeName")), "url": t["Url"], "format": text(t.get("Format"))}
+              for t in objs(v.get("subtitleInfos")) if text(t.get("Url"))]
     if not tracks:  # fall back to the caption list itself
-        tracks = [{"name": c.get("language"), "url": c["url"], "format": c.get("captionFormat")}
-                  for c in cla.get("captionInfos") or [] if c.get("url")]
+        tracks = [{"name": text(c.get("language")), "url": c["url"], "format": text(c.get("captionFormat"))}
+                  for c in captions if text(c.get("url"))]
     tracks = [t for t in tracks if (t["format"] or "webvtt").lower() == "webvtt"]
     if language:
         langs = [{short_lang(codes.get(t["name"])), short_lang(t["name"])} for t in tracks]  # 'eng-US' -> 'en'
@@ -386,9 +404,10 @@ def live_user(user: dict[str, Any], stats: dict[str, Any] | None) -> dict[str, A
     """Live page / profile page user -> SC liveRoomUserInfo (user fields + follower stats)."""
     keys = ("avatarLarger", "avatarMedium", "avatarThumb", "id", "nickname", "secUid", "secret", "uniqueId",
             "verified", "roomId", "signature", "status", "followStatus")
+    user, stats = obj(user), obj(stats)
     out = {k: user[k] for k in keys if k in user}
     for k in ("followingCount", "followerCount"):
-        if (stats or {}).get(k) is not None:
+        if stats.get(k) is not None:
             out[k] = stats[k]
     return out
 
@@ -398,7 +417,7 @@ _ROOM_STATUS = {2: "live", 4: "ended"}
 
 def live_room(data: dict[str, Any]) -> dict[str, Any]:
     """webcast/room/info `data` -> SC /v1/tiktok/live body."""
-    owner = data.get("owner") or {}
+    owner, covers = obj(data.get("owner")), obj(data.get("cover")).get("url_list")
     like_count = to_int(data.get("like_count"))
     return compact({
         "room_id": data.get("id_str") or (str(data["id"]) if data.get("id") else None),
@@ -406,7 +425,7 @@ def live_room(data: dict[str, Any]) -> dict[str, Any]:
         "viewer_count": to_int(data.get("user_count")),
         "status": _ROOM_STATUS.get(to_int(data.get("status")) or -1),
         "title": data.get("title"),
-        "cover_url": next(iter((data.get("cover") or {}).get("url_list") or []), None),
+        "cover_url": covers[0] if isinstance(covers, list) and covers else None,
         "owner": compact({
             "id": owner.get("id_str") or (str(owner["id"]) if owner.get("id") else None),
             "username": owner.get("display_id"),

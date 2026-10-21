@@ -326,6 +326,39 @@ def test_aweme_never_invents_values():
                  "video": {}, "author": {}}
 
 
+def test_mappers_read_a_field_of_another_type_as_missing():
+    # fix14: a field TikTok sent as another type than usual (an entry of a list null, a string for an object, a
+    # number for a list) crashed the mapper: a 500 on every route that maps a post
+    odd = _web_item(author="someone", authorStats=[1], stats="7", statsV2=None, music=["555"], createTime=10**20,
+                    imagePost={"images": [None, "x", {"imageURL": "https://img/1"},
+                                          {"imageURL": {"urlList": ["https://img/2"]}}]})
+    odd["video"].update(
+        PlayAddrStruct="https://v16/play", bitrateInfo=[None, 7, {"Bitrate": 9, "PlayAddr": "x"}],
+        cover={"url": "https://p16/c.jpg"}, dynamicCover=["https://p16/d.jpg"],
+        claInfo={"captionInfos": [None, "eng-US", {"language": ["eng-US"], "languageCode": 7}],
+                 "originalLanguageInfo": "eng-US"},
+        subtitleInfos=[None, {"LanguageCodeName": {"name": "eng-US"}, "Url": "https://cdn/x.vtt", "Format": 7},
+                       {"LanguageCodeName": "spa-ES", "Url": ["https://cdn/es.vtt"], "Format": "webvtt"}])
+    for detail in (False, True):
+        a = M.aweme(odd, detail=detail)
+        assert a["url"] == "https://www.tiktok.com/@_/video/7300000000000000001" and a["create_time"] == 10**20
+        assert "create_time_utc" not in a and "music" not in a  # no date that far out
+        assert a["author"] == {} and a["statistics"] == {"aweme_id": "7300000000000000001"}
+        assert a["video"]["bit_rate"] == [{"bit_rate": 9}] and a["video"]["duration"] == 15000
+        assert not {"cover", "dynamic_cover", "play_addr", "is_bytevc1"} & set(a["video"])
+        assert a["image_post_info"] == {"images": [{"display_image": {"url_list": ["https://img/2"]}}]}
+    assert M.aweme(odd)["video"]["cla_info"] == {"caption_infos": [{"lang": ["eng-US"], "language_code": 7}]}
+    assert M.caption_track(odd) == {"name": None, "url": "https://cdn/x.vtt", "format": None}
+    assert M.caption_track(odd, "en") is None and M.caption_track(odd, "es") is None
+    assert M.duration_ms(_web_item(music={**_web_item()["music"], "preciseDuration": 14.861})) == 15000
+    assert M.aweme(_web_item(video="x", author={"uniqueId": ["someone"]}))["video"] == {}
+    assert M.app_detail({"aweme_id": "1", "create_time": 10**20, "author": {"unique_id": {}}}) == {
+        "aweme_id": "1", "create_time": 10**20, "author": {"unique_id": {}}, "url": "https://www.tiktok.com/@_/video/1"}
+    assert M.live_user("x", [1]) == {} and M.live_user({"id": "7"}, "x") == {"id": "7"}
+    assert M.live_room({"id_str": "9", "owner": "x", "cover": {"url_list": "https://c/1"}}) == {"room_id": "9"}
+    assert M.to_int(float("inf")) is None and M.to_int(float("nan")) is None
+
+
 def test_caption_track_selection():
     item = _web_item()
     assert M.caption_track(item)["url"] == "https://cdn/en.vtt"  # original language wins
@@ -1125,6 +1158,86 @@ def test_user_page_challenge_and_status_codes(fake_ydl):
         ydl.ies["TikTokUser"] = _FakeUserPage({"someone": _user_detail(status)})
         with pytest.raises(error):
             tiktok._user_page(ydl, "someone")
+
+
+def test_pages_and_feeds_of_another_shape(fake_ydl):
+    # fix14: an item_list, user page or live page whose fields TikTok sent as another type (an itemList entry
+    # null, a statusCode list, a userInfo string) was a 500
+    for status in ([10202], {"code": 10202}, "10202"):
+        feed = _FakeFeed([])
+        feed._download_json = lambda *args, **kwargs: {"statusCode": status, "itemList": []}
+        with pytest.raises(UpstreamError):
+            tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US")
+        assert tiktok._status_error(status) is None
+    for body in ([], "x", None):
+        feed._download_json = lambda *args, **kwargs: body
+        with pytest.raises(UpstreamError, match="no video list"):
+            tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US")
+    when = 1_699_999_999
+    feed._download_json = lambda *args, **kwargs: {"statusCode": 0, "hasMorePrevious": False, "itemList": [
+        None, "x", 7, {"id": ["5"], "createTime": when}, {"id": {"5": 1}, "createTime": when},
+        {"id": "x5", "createTime": when}, {"id": "5", "createTime": [1]}, {"id": "5", "createTime": when}]}
+    items, cursor = tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US")
+    assert items == [{"id": "5", "createTime": when}] and cursor is None
+    feed._download_json = lambda *args, **kwargs: {"statusCode": 0, "itemList": 7}
+    assert tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US") == ([], None)
+
+    ydl, _ = fake_ydl
+    for info in ("x", [1], {"user": "someone"}, {"user": [{"id": "1"}]}):
+        ydl.ies["TikTokUser"] = _FakeUserPage({"someone": {"webapp.user-detail": {"statusCode": 0, "userInfo": info}}})
+        with pytest.raises(NotFound):
+            tiktok._user_page(ydl, "someone")
+    user = {"id": "1", "uniqueId": "someone", "secUid": "sec"}
+    ydl.ies["TikTokUser"] = _FakeUserPage({"someone": _user_detail(0, user=user, stats="x")})
+    assert tiktok._profile(ydl, "someone")["videoCount"] is None
+    for state in ({"LiveRoom": "x"}, {"LiveRoom": {"liveRoomUserInfo": [1]}},
+                  {"LiveRoom": {"liveRoomUserInfo": {"user": "someone"}}}):
+        assert tiktok._live_page(_FakeLive({"someone": state}), "someone") is None
+
+    def music_page(ydl, mid, cursor):
+        return {"aweme_list": [None, "x", {"aweme_id": "8", "author": "someone"},
+                               {"aweme_id": "9", "author": {"uid": "42", "region": "US"}}]}
+
+    tiktok_music_page, tiktok._music_page = tiktok._music_page, music_page
+    try:
+        own = {"id": "5", "music": {"id": "555", "original": True, "authorName": "Some One"}, "author": "x"}
+        assert tiktok._account_region(None, {"id": "42", "nickname": "Some One"}, [{"music": "x"}, own]) == "US"
+        assert tiktok._app_aweme(None, _web_item(music="x")) is None
+        assert tiktok._app_aweme(None, _web_item(id="9")) is None  # the entry has no video object
+    finally:
+        tiktok._music_page = tiktok_music_page
+
+
+def test_routes_answer_responses_of_another_shape(client, fake_ydl, monkeypatch):
+    # fix14: the same on the song, collection, live and user/live routes
+    ydl, _ = fake_ydl
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {
+        "aweme_list": [None, "x", {"music": "x"}, {"aweme_id": "1", "music": {"id_str": CLIP_ID, "title": "t"}}]})
+    assert ok(client, "/v1/tiktok/song", clipId=CLIP_ID)["music_info"] == {"id_str": CLIP_ID, "title": "t"}
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": 7})
+    r = client.get("/v1/tiktok/song", params={"clipId": CLIP_ID})
+    assert r.status_code == 404 and r.json()["error"] == "not_found", r.text
+    ydl.ies["TikTokCollection"] = _FakeCollection({"statusCode": 0, "hasMore": False, "itemList": 7})
+    assert ok(client, "/v1/tiktok/collection/videos", url=COLLECTION)["videos"] == []
+    ydl.ies["TikTokCollection"] = _FakeCollection({"statusCode": [100001], "itemList": []})
+    r = client.get("/v1/tiktok/collection/videos", params={"url": COLLECTION})
+    assert (r.status_code, r.json()["error"]) == (500, "upstream_error"), r.text
+    ydl.ies["TikTokLive"] = _FakeLive({}, room={"data": {"id_str": "99", "owner": "7", "status": 2}})
+    r = client.get("/v1/tiktok/live", params={"room_id": "99", "user_id": "7"})
+    assert r.status_code == 404 and r.json()["message"] == "This live room does not belong to user_id", r.text
+    ydl.ies["TikTokLive"] = _FakeLive({}, room={"data": {"id_str": "99", "owner": {"id_str": "7"}, "cover": "x"}})
+    assert ok(client, "/v1/tiktok/live", room_id="99", user_id="7")["room_id"] == "99"
+
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: _user_info(name, roomId="77", uniqueId=["x"]))
+    for room in ({"data": "x"}, [1], "x"):
+        ydl.ies["TikTokLive"] = _FakeLive({}, room=room)
+        body = ok(client, "/v1/tiktok/user/live", handle="someone")
+        assert body["is_live"] is False and body["liveRoomUserInfo"]["roomId"] == "77"
+    state = _live_state("someone", 2)
+    state["LiveRoom"]["liveRoomUserInfo"].update(liveRoom="x", stats=[9])
+    ydl.ies["TikTokLive"] = _FakeLive({"someone": state})
+    body = ok(client, "/v1/tiktok/user/live", handle="someone")
+    assert body["is_live"] is True and "liveRoom" not in body and "followerCount" not in body["liveRoomUserInfo"]
 
 
 # --- live -------------------------------------------------------------------------

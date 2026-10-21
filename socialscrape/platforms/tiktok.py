@@ -138,6 +138,8 @@ def _check_post_url(url: str) -> None:
 
 def _status_error(status: Any) -> ApiError | None:
     """403 for a private statusCode, 503 for one refusing anonymous requests, else None."""
+    if not isinstance(status, int):  # TikTok's codes are numbers (and a list or object can't be looked up)
+        return None
     if status in _PRIVATE:
         return Forbidden(_PRIVATE[status])
     if status in _REFUSED:
@@ -219,7 +221,7 @@ def _app_aweme(ydl: yt_dlp.YoutubeDL, item: dict[str, Any]) -> dict[str, Any] | 
     music/aweme still answers with full app objects - the shape ScrapeCreators serves.
     Needs extractor_args=_APP_API. Any failure just means "use the web data".
     """
-    mid = str((item.get("music") or {}).get("id") or "")
+    mid = str(M.obj(item.get("music")).get("id") or "")
     if not _ID.fullmatch(mid):
         return None
     try:
@@ -227,7 +229,7 @@ def _app_aweme(ydl: yt_dlp.YoutubeDL, item: dict[str, Any]) -> dict[str, Any] | 
     except (ApiError, ExtractorError) as exc:
         log.info("tiktok: no app aweme for %s via sound %s: %s", item.get("id"), mid, exc)
         return None
-    return next((a for a in resp.get("aweme_list") or []
+    return next((a for a in M.objs(resp.get("aweme_list"))
                  if str(a.get("aweme_id")) == str(item["id"]) and isinstance(a.get("video"), dict)), None)
 
 
@@ -248,8 +250,8 @@ def _user_page(ydl: yt_dlp.YoutubeDL, ident: str) -> dict[str, Any]:
     if not isinstance(detail, dict):
         raise UpstreamBlocked("TikTok returned no profile data (likely a bot check); retry later")
     status = detail.get("statusCode") or 0
-    info = detail.get("userInfo") or {}
-    if not info.get("user"):
+    info = M.obj(detail.get("userInfo"))
+    if not M.obj(info.get("user")):
         raise _status_error(status) or NotFound(f"TikTok user not found (status {status})")
     return {**info, "stats": M.exact_stats(info.get("stats"), info.get("statsV2")), "statusCode": status}
 
@@ -261,8 +263,8 @@ def _live_page(ie: Any, name: str) -> dict[str, Any] | None:
     carry just CurrentRoom.
     """
     page = _web_page(ie, f"https://www.tiktok.com/@{name}/live", name, "Downloading live page")
-    info = (ie._get_sigi_state(page, name).get("LiveRoom") or {}).get("liveRoomUserInfo") or {}
-    return info if info.get("user") else None
+    info = M.obj(M.obj(ie._get_sigi_state(page, name).get("LiveRoom")).get("liveRoomUserInfo"))
+    return info if M.obj(info.get("user")) else None
 
 
 def _profile(ydl: yt_dlp.YoutubeDL, name: str) -> dict[str, Any]:
@@ -281,7 +283,7 @@ def _profile(ydl: yt_dlp.YoutubeDL, name: str) -> dict[str, Any]:
         raise UpstreamError("TikTok profile has no secUid")
     prof = {"id": str(user.get("id") or ""), "secUid": user["secUid"], "nickname": user.get("nickname"),
             "private": info["statusCode"] == 10222 or bool(user.get("privateAccount")),
-            "videoCount": (info.get("stats") or {}).get("videoCount")}
+            "videoCount": M.obj(info.get("stats")).get("videoCount")}
     with _profiles_lock:
         _profiles.pop(key, None)
         while len(_profiles) >= _PROFILE_MAX:
@@ -300,17 +302,19 @@ def _feed_page(ie: Any, sec_uid: str, display: str, cursor: int, region: str) ->
     for _ in range(_FEED_HOPS):
         query = {**ie._build_web_query(sec_uid, cursor), "region": region}
         resp = ie._download_json(ie._API_BASE_URL, display, "Downloading video list", query=query)
+        if not isinstance(resp, dict):
+            raise UpstreamError("TikTok returned no video list")
         status = resp.get("statusCode") or resp.get("status_code")
-        if status in _GONE:
+        if isinstance(status, int) and status in _GONE:
             raise NotFound(f"TikTok user not found (status {status})")
         if status:  # 10201 is a bad query parameter; no other code's meaning here is established
             raise _status_error(status) or UpstreamError(f"TikTok item_list failed: {resp.get('status_msg') or status}")
         seen: set[str] = set()
         items = []
-        for it in resp.get("itemList") or []:
-            created = M.to_int(it.get("createTime"))
-            if it.get("id") and it["id"] not in seen and created and created * 1000 <= cursor:
-                seen.add(it["id"])
+        for it in M.objs(resp.get("itemList")):
+            aweme_id, created = str(it.get("id") or ""), M.to_int(it.get("createTime"))
+            if _ID.fullmatch(aweme_id) and aweme_id not in seen and created and created * 1000 <= cursor:
+                seen.add(aweme_id)
                 items.append(it)
         more = bool(resp.get("hasMorePrevious"))
         if items:
@@ -334,9 +338,9 @@ def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dic
     throttled empty body), the last failure is raised: the region may well be there.
     """
     def own_sound(it: dict[str, Any]) -> bool:
-        m = it.get("music") or {}
+        m = M.obj(it.get("music"))
         return (m.get("original") is True and bool(_ID.fullmatch(str(m.get("id") or "")))
-                and m.get("authorName") in (prof.get("nickname"), (it.get("author") or {}).get("nickname")))
+                and m.get("authorName") in (prof.get("nickname"), M.obj(it.get("author")).get("nickname")))
 
     own = [it for it in items if own_sound(it)]
     failure: Exception | None = None
@@ -353,8 +357,8 @@ def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dic
             failure = exc
             continue
         answered = True
-        for a in resp.get("aweme_list") or []:
-            au = a.get("author") or {}
+        for a in M.objs(resp.get("aweme_list")):
+            au = M.obj(a.get("author"))
             if (str(au.get("uid")) == prof["id"] or str(a.get("aweme_id")) == str(it.get("id"))) and au.get("region"):
                 return str(au["region"])
     if failure is not None and not answered:
@@ -438,9 +442,9 @@ async def tiktok_transcript(url: str = Query(...), language: str | None = None,
         return item, _captions(ie, item, language)
 
     item, transcript = await with_ydl(P, go)
-    page = M.web_url((item.get("author") or {}).get("uniqueId"), str(item["id"]))
+    page = M.web_url(M.obj(item.get("author")).get("uniqueId"), str(item["id"]))
     if transcript is None and truthy(use_ai_as_fallback):
-        duration = (item.get("video") or {}).get("duration")
+        duration = M.obj(item.get("video")).get("duration")
         result = await transcribe(page, platform=P, language=language,  # the core maps eng -> en, or answers 400
                                   allow_long=allow_long_transcription == "true",
                                   duration=duration if isinstance(duration, (int, float)) and duration > 0 else None)
@@ -550,19 +554,19 @@ async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
         info, profile = _live_page(ie, name), None
         if info is None:
             profile = _user_page(ydl, name)
-            unique = profile["user"].get("uniqueId")
+            unique = M.text(profile["user"].get("uniqueId"))
             if unique and unique != name:  # 'WeatherNewsLive' or a numeric id: retry with the real uniqueId
                 info = _live_page(ie, unique)
         if info:
-            room = info.get("liveRoom") or {}
+            room = M.obj(info.get("liveRoom"))
             live = M.to_int(room.get("status")) == 2 or M.to_int(info["user"].get("status")) == 2
             return compact({"is_live": live, "liveRoomUserInfo": M.live_user(info["user"], info.get("stats")),
                             "liveRoom": room or None})
         user, live = profile["user"], False
         if user.get("roomId"):
             resp = ie._download_json(_ROOM_INFO, user["roomId"], "Downloading room info", fatal=False,
-                                     query={"aid": "1988", "room_id": user["roomId"]}) or {}
-            live = M.to_int((resp.get("data") or {}).get("status")) == 2
+                                     query={"aid": "1988", "room_id": user["roomId"]})
+            live = M.to_int(M.obj(M.obj(resp).get("data")).get("status")) == 2
         return {"is_live": live, "liveRoomUserInfo": M.live_user(user, profile.get("stats"))}
 
     return await with_ydl(P, go)
@@ -582,7 +586,7 @@ async def tiktok_live(room_id: str = Query(...), user_id: str = Query(...)) -> d
     data = resp.get("data") if isinstance(resp, dict) else None
     if not isinstance(data, dict) or resp.get("status_code") or not data.get("id_str"):
         raise NotFound("TikTok live room not found")
-    if str((data.get("owner") or {}).get("id_str") or "") != uid:
+    if str(M.obj(data.get("owner")).get("id_str") or "") != uid:
         raise NotFound("This live room does not belong to user_id")
     return M.live_room(data)
 
@@ -600,8 +604,8 @@ async def tiktok_song(clipId: str = Query(...)) -> dict[str, Any]:
         return mid, _music_page(ydl, mid, 0)
 
     clip, resp = await with_ydl(P, go, extractor_args=_APP_API)
-    music = next((a["music"] for a in resp.get("aweme_list") or []
-                  if str((a.get("music") or {}).get("id_str")) == clip), None)
+    music = next((a["music"] for a in M.objs(resp.get("aweme_list"))
+                  if str(M.obj(a.get("music")).get("id_str")) == clip), None)
     if not music:
         raise NotFound("TikTok sound not found")
     if not music.get("user_count"):
@@ -664,7 +668,7 @@ async def tiktok_collection_videos(url: str = Query(...), cursor: str | None = N
         "max_cursor": str(nxt) if nxt not in (None, "") else None,
         "status_code": 0,
         "status_msg": resp.get("status_msg") or "",
-        "videos": [it for it in resp.get("itemList") or [] if isinstance(it, dict) and it.get("id")],
+        "videos": [it for it in M.objs(resp.get("itemList")) if it.get("id")],
     })
 
 
