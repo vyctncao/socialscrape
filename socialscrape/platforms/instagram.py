@@ -495,7 +495,10 @@ def _video_url(media: dict[str, Any]) -> str | None:
 def video_duration(media: dict[str, Any]) -> float | None:
     """Item's video_duration, else the DASH manifest's mediaPresentationDuration."""
     if isinstance(media.get("video_duration"), (int, float)):
-        return float(media["video_duration"])
+        try:
+            return float(media["video_duration"])
+        except OverflowError:  # an int past a float's range: the manifest's, if any
+            pass
     manifest = media.get("video_dash_manifest")
     m = re.search(r'mediaPresentationDuration="([^"]+)"', manifest) if isinstance(manifest, str) else None
     return parse_duration(m.group(1)) if m else None

@@ -257,6 +257,8 @@ def test_duration_ms():
     assert M.duration_ms(_web_item(music={**own, "authorName": "Some One"})) == 14861  # by nickname
     assert M.duration_ms(_web_item(music={**own, "authorName": ""})) == 15000
     assert M.duration_ms(_web_item(music={**own, "authorName": None}, author={})) == 15000
+    endless = _web_item(video={**_web_item()["video"], "duration": 10 ** 400})  # past a float's range: was a 500
+    assert M.duration_ms(endless) == 10 ** 403
 
 
 def test_counts_survive_int32_overflow():

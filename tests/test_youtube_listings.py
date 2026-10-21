@@ -400,6 +400,7 @@ def test_length():
         assert P.length(shown) == (shown, 74782294), shown
     for junk in ("1,234", "20,77:51:34", "1,234:56", "LIVE", "", None, 5):
         assert P.length(junk) == (None, None), junk
+    assert P.length("9" * 400 + ":51:34") == (None, None)  # more hours than a float holds: was a 500
     badge = {"thumbnailBadgeViewModel": {"text": "20,772:51:34"}}
     long_stream = copy.deepcopy(LOCKUP_VIDEO)
     long_stream["contentImage"]["thumbnailViewModel"]["overlays"] = [

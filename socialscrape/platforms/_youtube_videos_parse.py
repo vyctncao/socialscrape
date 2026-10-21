@@ -372,7 +372,7 @@ def most_replayed(initial_data: dict[str, Any]) -> dict[str, Any] | None:
             try:
                 markers.append({"startMillis": int(m["startMillis"]), "durationMillis": int(m["durationMillis"]),
                                 "intensityScoreNormalized": float(m["intensityScoreNormalized"])})
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError, OverflowError):  # OverflowError: an int past a float's range
                 continue
         ranges = [{
             "startMillis": d.get("visibleTimeRangeStartMillis"),
@@ -462,7 +462,10 @@ def badge_length(badge: str | None) -> tuple[str | None, int | None]:
     if not m:
         return None, None
     hours, rest = m.group(1), m.group(2).replace(".", ":")
-    return hours + rest, int(parse_duration(re.sub(r"\D", "", hours) + rest))
+    seconds = parse_duration(re.sub(r"\D", "", hours) + rest)
+    if not math.isfinite(seconds):  # more hours than a float holds
+        return None, None
+    return hours + rest, int(seconds)
 
 
 def _readable_sources(lockup: dict[str, Any]) -> dict[str, Any]:
@@ -533,14 +536,22 @@ def watch_next_videos(tab_ie: Any, initial_data: dict[str, Any]) -> list[dict[st
     return [v for lv in lockups if (v := watch_next_video(tab_ie, lv))]
 
 
+def millis(seconds: float | int | None) -> int | None:
+    """Seconds -> whole milliseconds; None for no time or one a float can't hold in ms (NaN, 1e306 s)."""
+    if seconds is None:
+        return None
+    ms = seconds * 1000
+    return int(ms) if not isinstance(ms, float) or math.isfinite(ms) else None
+
+
 def chapters(info: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for c in info.get("chapters") or []:
         start, end = c.get("start_time"), c.get("end_time")
         out.append({
             "title": c.get("title"),
-            "startMs": int(start * 1000) if start is not None else None,
-            "endMs": int(end * 1000) if end is not None else None,
+            "startMs": millis(start),
+            "endMs": millis(end),
             "startTimeText": clock(start),
         })
     return out
@@ -626,7 +637,7 @@ def video_payload(info: dict[str, Any], initial_data: dict[str, Any], player_res
         "watchNextVideos": watch_next_videos(tab_ie, initial_data),
         "keywords": info.get("tags") or [],
         "genre": categories[0] if categories else None,
-        "durationMs": int(duration * 1000) if duration is not None else None,
+        "durationMs": millis(duration),
         "durationFormatted": clock(duration, always_hours=True),
         "isPaidPromotion": is_paid_promotion(player_responses),
         "most_replayed": most_replayed(initial_data),

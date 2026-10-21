@@ -365,6 +365,8 @@ def test_video_duration_and_music():
     assert ig.video_duration(REEL) == pytest.approx(84.666664)
     assert ig.video_duration({"video_duration": 7}) == 7.0
     assert ig.video_duration({}) is None
+    assert ig.video_duration({"video_duration": 10 ** 400}) is None  # past a float's range: was a 500
+    assert ig.video_duration({**REEL, "video_duration": 10 ** 400}) == pytest.approx(84.666664)  # the manifest's
     assert ig.music_attribution(REEL["clips_metadata"]) == {
         "artist_name": "jane", "song_name": "Original audio", "uses_original_audio": True,
         "should_mute_audio": False, "should_mute_audio_reason": "", "audio_id": "3011705342342322"}

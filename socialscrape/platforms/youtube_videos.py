@@ -7,6 +7,7 @@ the `next` API YoutubeIE uses for comments, and YoutubeTabIE's page loader.
 
 from __future__ import annotations
 
+import math
 import re
 import tempfile
 from collections.abc import Callable
@@ -349,6 +350,12 @@ def segment_ends(segments: list[subtitles.Segment]) -> list[float]:
     return ends
 
 
+def _ms_text(seconds: float) -> str | None:
+    """A cue's time in milliseconds as SC writes it ('1500'); None where that is past a float's range."""
+    ms = seconds * 1000
+    return str(round(ms)) if math.isfinite(ms) else None
+
+
 def transcript_payload(vid: str, info: dict[str, Any], transcript: subtitles.Transcript | None) -> dict[str, Any]:
     segments = transcript.segments if transcript else []
     name = transcript and (transcript.name or transcript.language)
@@ -358,8 +365,8 @@ def transcript_payload(vid: str, info: dict[str, Any], transcript: subtitles.Tra
         "url": watch_url(vid),
         "transcript": [{
             "text": s.text,
-            "startMs": str(round(s.start * 1000)),
-            "endMs": str(round(end * 1000)),
+            "startMs": _ms_text(s.start),
+            "endMs": _ms_text(end),
             "startTimeText": clock(s.start),
         } for s, end in zip(segments, segment_ends(segments))] or None,
         "transcript_only_text": (transcript.text or None) if segments else None,

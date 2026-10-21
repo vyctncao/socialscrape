@@ -88,8 +88,8 @@ def iso_utc(ts: float | int | None, *, millis: bool = True) -> str | None:
 
 
 def clock(seconds: float | int | None, *, always_hours: bool = False) -> str | None:
-    """75 -> '1:15', 3675 -> '1:01:15' (always_hours: '00:01:15')."""
-    if seconds is None:
+    """75 -> '1:15', 3675 -> '1:01:15' (always_hours: '00:01:15'); None for NaN or ±Infinity."""
+    if seconds is None or isinstance(seconds, float) and not math.isfinite(seconds):
         return None
     s = int(seconds)
     h, rem = divmod(s, 3600)

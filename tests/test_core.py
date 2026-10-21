@@ -120,6 +120,17 @@ def test_parse_count_reads_a_number_too_big_to_hold_as_missing():
     assert util.parse_count(1e308) == int(1e308) and util.parse_count(2.7) == 2
 
 
+def test_times_too_big_to_hold_read_as_missing():
+    """A time past a float's range was a 500 (OverflowError, ValueError): a json3 caption's start and length, and
+    seconds of NaN or ±Infinity shown as a clock. It reads as missing."""
+    seg = subtitles.Segment
+    raw = json.dumps({"events": [{"segs": [{"utf8": "far"}], "tStartMs": 10 ** 400, "dDurationMs": 10 ** 400},
+                                 {"segs": [{"utf8": "hi"}], "tStartMs": 1500, "dDurationMs": 2250}]})
+    assert subtitles.parse(raw, "json3") == [seg(0.0, 0.0, "far"), seg(1.5, 3.75, "hi")]
+    for junk in (float("nan"), float("inf"), float("-inf")):
+        assert util.clock(junk) is None and util.clock(junk, always_hours=True) is None, junk
+
+
 def test_clean_param_drops_what_a_copied_value_carries_along():
     link = "https://youtu.be/jNQXAC9IVRw"
     for pasted in (f"\ufeff{link}", f"\u200b{link}\u200b", f"\u200e {link} \u200f", f"\u2068{link}\u2069",

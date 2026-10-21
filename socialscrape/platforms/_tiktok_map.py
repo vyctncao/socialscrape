@@ -192,8 +192,11 @@ def duration_ms(item: dict[str, Any]) -> int | None:
     own = m.get("original") is True and bool(m.get("authorName")) and m["authorName"] in (
         au.get("nickname"), au.get("uniqueId"))
     precise = obj(m.get("preciseDuration")).get("preciseVideoDuration")
-    if own and isinstance(precise, (int, float)) and abs(precise - seconds) < 2:
-        return round(precise * 1000)
+    try:
+        if own and isinstance(precise, (int, float)) and abs(precise - seconds) < 2:
+            return round(precise * 1000)
+    except OverflowError:  # a length past a float's range
+        pass
     return seconds * 1000
 
 

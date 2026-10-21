@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import calendar
+import math
 import re
 import urllib.parse
 from typing import Any
@@ -104,8 +105,8 @@ def length(value: Any) -> tuple[str | None, int | None]:
         return None, None
     shown = value.strip()
     plain = _GROUPED_HOURS.sub(lambda m: re.sub(r"\D", "", m.group()), shown)
-    if _DURATION.match(plain):
-        return shown, int(parse_duration(plain))
+    if _DURATION.match(plain) and math.isfinite(seconds := parse_duration(plain)):  # not more hours than a float holds
+        return shown, int(seconds)
     return None, None
 
 

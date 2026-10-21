@@ -166,9 +166,13 @@ def _seconds(value: Any, scale: float = 1) -> float | None:
     null, NaN, a number too large for a float)."""
     if isinstance(value, str) and re.fullmatch(r"\d+(?:\.\d*)?|\.\d+", value):
         value = float(value)
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value / scale):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
-    return value / scale
+    try:
+        seconds = value / scale
+    except OverflowError:  # an int past a float's range
+        return None
+    return seconds if math.isfinite(seconds) else None
 
 
 def parse_json3(raw: str) -> list[Segment]:

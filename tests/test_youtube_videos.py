@@ -760,6 +760,33 @@ def test_counts_too_big_to_hold_read_as_missing(ies):
             assert reply is None and old_reply is None, (likes[:5], age[:5])
 
 
+def test_lengths_too_big_to_hold_read_as_missing(ies):
+    """A length or a time past a float's range was a 500 (OverflowError) in a related video's length, the video's
+    length, a chapter, a most-replayed marker and a transcript cue. It reads as missing."""
+    hours = "9" * 400 + ":51:34"
+    assert P.badge_length(hours) == (None, None)
+    video = P.watch_next_video(ui_tab("en"), lockup("5", "5 views", "", hours))
+    assert (video["lengthText"], video["lengthInSeconds"]) == (None, None) and video["viewCountInt"] == 5
+    assert P.millis(1.5) == 1500 and P.millis(10 ** 400) == 10 ** 403 and P.millis(None) is None
+    info = {"id": "abcdefghijk", "duration": 1.7e308, "chapters": [
+        {"title": "a", "start_time": 1.5, "end_time": float("inf")}, {"title": "b", "start_time": float("nan")}]}
+    body = P.video_payload(info, {}, [], ies[1])
+    assert body["durationMs"] is None and body["chapters"] == [
+        {"title": "a", "startMs": 1500, "endMs": None, "startTimeText": "0:01"},
+        {"title": "b", "startMs": None, "endMs": None, "startTimeText": None}]
+    markers = [{"startMillis": "0", "durationMillis": "190", "intensityScoreNormalized": 10 ** 400},
+               {"startMillis": "190", "durationMillis": "190", "intensityScoreNormalized": 0.5}]
+    heatmap = {"frameworkUpdates": {"entityBatchUpdate": {"mutations": [{"payload": {"macroMarkersListEntity": {
+        "markersList": {"markerType": "MARKER_TYPE_HEATMAP", "markers": markers}}}}]}}}
+    assert P.most_replayed(heatmap)["markers"] == [
+        {"startMillis": 190, "durationMillis": 190, "intensityScoreNormalized": 0.5}]
+    cues = subtitles.parse(f'<text start="1.5" dur="2.25">hi</text><text start="{"9" * 308}" dur="1">far</text>',
+                           "srv1")  # 1e308 s: a float, but not in ms
+    body = M.transcript_payload(ZOO, {}, subtitles.Transcript("en", "English", True, "srv1", "", cues))
+    assert [(c["text"], c["startMs"], c["endMs"]) for c in body["transcript"]] == [("hi", "1500", "3750"),
+                                                                                   ("far", None, None)]
+
+
 def test_relative_time_words_of_more_ui_languages():
     now, day = P.relative_ts("now 0 seconds"), 86400
     for lang, text, seconds in (
