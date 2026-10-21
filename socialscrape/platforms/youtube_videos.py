@@ -18,7 +18,7 @@ import yt_dlp
 from fastapi import APIRouter, Query
 from yt_dlp.extractor.youtube import YoutubeIE
 from yt_dlp.networking.exceptions import HTTPError
-from yt_dlp.utils import DownloadError, ExtractorError, traverse_obj
+from yt_dlp.utils import DownloadError, ExtractorError, get_first, traverse_obj
 
 from .. import subtitles
 from ..errors import ApiError, BadRequest, Forbidden, NotFound, UpstreamBlocked
@@ -129,16 +129,21 @@ def native_token(token: str, kind: str, video: str | None = None) -> tuple[str, 
 
 def capture_watch_data(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
     """Keep the ytInitialData / player responses YoutubeIE downloads (it drops most of them). A playability status or
-    reason that isn't a string is dropped first: YoutubeIE goes on to read them as strings (a 500 here)."""
+    reason that isn't a string is dropped first: YoutubeIE goes on to read them as strings (a 500 here). So is the
+    lack of a reason for an error screen's subreason: YoutubeIE adds the subreason to the reason (a 500 on None)."""
     ie = ydl.get_info_extractor("Youtube")
     raw: dict[str, Any] = {"initial_data": {}, "player_responses": []}
     original = ie._initial_extract
 
     def initial_extract(*args: Any, **kwargs: Any):
         result = original(*args, **kwargs)
-        for status in traverse_obj(result[4], (..., "playabilityStatus", {dict})):
+        statuses = traverse_obj(result[4], (..., "playabilityStatus", {dict}))
+        for status in statuses:
             for key in [k for k in ("status", "reason") if not isinstance(status.get(k, ""), str)]:
                 del status[key]
+        error = get_first(statuses, ("errorScreen", "playerErrorMessageRenderer"), expected_type=dict) or {}
+        if ie._get_text(error, "subreason") and not (ie._get_text(error, "reason") or get_first(statuses, "reason")):
+            statuses[0].setdefault("reason", "")
         raw["initial_data"], raw["player_responses"] = result[2] or {}, result[4] or []
         return result
 
@@ -180,7 +185,7 @@ def ensure_playable(player_responses: list[dict[str, Any]], info: dict[str, Any]
     reasons = traverse_obj(statuses, (..., ("reason", ("errorScreen", (
         ("playerErrorMessageRenderer", "subreason"),
         ("playerInterstitialRenderer", "content", "interstitialViewModel", "description")))), {P.text_of}, {str}))
-    reasons = [r for r in reasons or [] if r != "Video unavailable"]  # the headline over the actual reason
+    reasons = [r for r in reasons or [] if r and r != "Video unavailable"]  # the headline over the actual reason
     geo = next((r for r in reasons if re.search(r"\bcountr(?:y|ies)\b", r, re.I)), None)
     if geo:
         raise Forbidden(geo, code="geo_restricted")  # 'The uploader has not made this video available in your country'

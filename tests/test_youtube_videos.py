@@ -1073,6 +1073,25 @@ def test_video_routes_read_a_thumbnail_that_is_not_an_object_as_none(client, mon
     assert video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
+@pytest.mark.parametrize("subreason,expected", [
+    ("The uploader has not made this video available in your country", 403), ("Gone", 200)], ids=["geo", "other"])
+def test_video_routes_read_an_error_screens_subreason_without_a_reason(client, monkeypatch, subreason, expected):
+    """yt-subreason-500: for a video with no formats, yt-dlp adds its error screen's subreason to its playability
+    reason (reason += '. ' + subreason), so a subreason with no reason was a 500 (TypeError) before any of our code
+    ran. The video's details are still read, and the subreason still says why the video can't be played."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        return {"playabilityStatus": {"status": "UNPLAYABLE", "errorScreen": {"playerErrorMessageRenderer": {
+            "subreason": {"simpleText": subreason}}}}, "videoDetails": {
+            "videoId": video_id, "title": "Odd", "lengthSeconds": "10", "author": "a", "channelId": "UCx"}}
+
+    stub_player(monkeypatch, player)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, expected), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd"
+    assert transcript.json().get("error") == ("geo_restricted" if expected == 403 else None)
+
+
 MICROFORMAT = ("microformat", "playerMicroformatRenderer")
 
 
