@@ -172,7 +172,8 @@ def test_sc_get_writes_what_json_cannot(monkeypatch):
     """json-render-500: upstream JSON as Python reads it can carry NaN, Infinity, a number too large for a float or
     half an emoji, none of which a response can write (ValueError, UnicodeEncodeError): a 500 wherever a raw upstream
     object passes through, as a TikTok video's stats or an Instagram post's play count do, or an error message
-    quotes the platform. They are null, and U+FFFD."""
+    quotes the platform. So was an int of more digits than Python writes out, as a length of 4300 digits (as many
+    as it reads) is in ms. They are null, and U+FFFD."""
     from fastapi import APIRouter, FastAPI
 
     from socialscrape import registry
@@ -185,7 +186,8 @@ def test_sc_get_writes_what_json_cannot(monkeypatch):
 
     @registry.sc_get(router, "/v9/test/raw", source="test")
     async def raw_object():
-        return {"aweme_detail": raw, "list": [float("nan"), (float("inf"), "\ud83d\ude00")]}
+        return {"aweme_detail": raw, "list": [float("nan"), (float("inf"), "\ud83d\ude00")],
+                "durationMs": int("9" * 4300) * 1000, "count": int("9" * 4300)}
 
     @registry.sc_get(router, "/v9/test/gone", source="test")
     async def gone():
@@ -198,7 +200,8 @@ def test_sc_get_writes_what_json_cannot(monkeypatch):
     r = client.get("/v9/test/raw")
     assert r.status_code == 200 and r.json() == {"success": True, "credits_charged": 0, "aweme_detail": {
         "stats": {"diggCount": None, "playCount": None, "shareCount": None, "ratio": 0.5},
-        "desc": "so good \ufffd", "\ufffd": [1, 2.5], "emoji": "\U0001f600"}, "list": [None, [None, "\U0001f600"]]}
+        "desc": "so good \ufffd", "\ufffd": [1, 2.5], "emoji": "\U0001f600"}, "list": [None, [None, "\U0001f600"]],
+        "durationMs": None, "count": int("9" * 4300)}
     r = client.get("/v9/test/gone")
     assert r.status_code == 404 and r.json()["message"] == "This video is unavailable \ufffd"
 

@@ -803,6 +803,22 @@ def test_video_route_prefers_app_aweme(client, fake_ydl, monkeypatch):
     assert ok(client, "/v2/tiktok/video", url=url)["aweme_detail"] == M.aweme(item, detail=True)
 
 
+def test_video_length_too_long_to_write_in_ms_is_null(client, fake_ydl, monkeypatch):
+    """A web video.duration of 4300 digits (as many as Python reads) is more in ms than it writes out: a 500
+    (ValueError) writing /v2/tiktok/video and /v3/tiktok/profile/videos. It is null."""
+    ydl, _ = fake_ydl
+    item = _web_item(video={**_web_item()["video"], "duration": int("9" * 4300)})
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": []})
+    ydl.ies["TikTok"] = _FakePost((item, 0))
+    d = ok(client, "/v2/tiktok/video", url=M.web_url("someone", item["id"]))["aweme_detail"]
+    assert d["video"]["duration"] is None and d["aweme_id"] == item["id"]
+    now = int(time.time())
+    ydl.ies["TikTokUser"] = _FakeFeed([now - 60], extra={"video": {"duration": int("9" * 4300)}})
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: _user_info(name))
+    feed = ok(client, "/v3/tiktok/profile/videos", handle="someone")["aweme_list"]
+    assert [(a["aweme_id"], a["video"]["duration"]) for a in feed] == [(str(now - 60), None)]
+
+
 def test_profile_videos_route(client, fake_ydl, monkeypatch):
     ydl, _ = fake_ydl
     now = int(time.time())
