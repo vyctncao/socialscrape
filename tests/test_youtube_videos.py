@@ -367,6 +367,39 @@ def test_mappers_read_a_field_of_another_type_as_missing(ies):
         assert P.map_comment(ies[0], item, entities, level=0, with_replies_token=True) is None, item
 
 
+def test_watch_page_reads_a_field_of_another_type_as_missing(ies):
+    """yt-watch-field-type-500: on a watch page, a description's text, link list or link length, a heatmap's marker
+    list, a caption track's URL or a related video's thumbnail source of another type than YouTube sends was a 500
+    (TypeError or AttributeError). It reads as missing."""
+    link = {"startIndex": 0, "length": 4, "onTap": {"innertubeCommand": {"urlEndpoint": {"url": "https://x.com/"}}}}
+
+    def described(**description):
+        return nest(("contents", "twoColumnWatchNextResults", "results", "results", "contents"),
+                    [{"videoSecondaryInfoRenderer": {"attributedDescription": description}}])
+
+    assert P.description_links(described(content="Shop here", commandRuns=[link]), ZOO) == [
+        {"text": "Shop", "url": "https://x.com/"}]
+    assert P.description_links(described(content={"x": 1}, commandRuns=[link]), ZOO) == [
+        {"text": "", "url": "https://x.com/"}]
+    assert P.description_links(described(content="Shop here", commandRuns=[{**link, "length": "4"}]), ZOO) == [
+        {"text": "", "url": "https://x.com/"}]
+    assert P.description_links(described(content="Shop here", commandRuns=7), ZOO) == []
+    heatmap = nest(("frameworkUpdates", "entityBatchUpdate", "mutations"), [nest(
+        ("payload", "macroMarkersListEntity", "markersList"), {"markerType": "MARKER_TYPE_HEATMAP", "markers": 7})])
+    assert P.most_replayed(heatmap) is None
+    track = {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=de", "languageCode": "de"}
+    tracks = ("captions", "playerCaptionsTracklistRenderer", "captionTracks")
+    odd = {"baseUrl": {"x": 1}, "languageCode": "en"}
+    responses = [{"streamingData": {"formats": []}, **nest(tracks, [odd, track])}]
+    assert P.caption_tracks(responses) == [{**track, "name": {"simpleText": None}}]
+    image = {"sources": ["x", {"url": "https://i.ytimg.com/vi/x/hq.jpg", "width": 168, "height": 94}]}
+    lockup = {"contentType": "LOCKUP_CONTENT_TYPE_VIDEO", "contentId": "dQw4w9WgXcQ",
+              "contentImage": {"thumbnailViewModel": {"image": image}}}
+    video = P.watch_next_video(ies[1], lockup)
+    assert video["id"] == "dQw4w9WgXcQ" and video["thumbnail"] == "https://i.ytimg.com/vi/x/hq.jpg"
+    assert lockup["contentImage"]["thumbnailViewModel"]["image"] is image and len(image["sources"]) == 2
+
+
 def test_video_payload_empty_description_is_null(ies):
     info = {**cached(f"{ZOO}.info.json"), "description": ""}
     body = P.video_payload(info, cached(f"{ZOO}.initial.json"), cached(f"{ZOO}.players.json"), ies[1],

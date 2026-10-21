@@ -276,14 +276,15 @@ def link_target(command: dict[str, Any], video_id: str | None = None) -> str | N
 def description_links(initial_data: dict[str, Any], video_id: str) -> list[dict[str, str]]:
     """Links YouTube renders in the description: [{text, url}]."""
     desc = traverse_obj(_renderer(initial_data, "videoSecondaryInfoRenderer"), ("attributedDescription", {dict})) or {}
-    content = desc.get("content") or ""
+    content = traverse_obj(desc, ("content", {str})) or ""
     out = []
-    for run in desc.get("commandRuns") or []:
+    for run in traverse_obj(desc, ("commandRuns", ..., {dict})) or []:
         command = traverse_obj(run, ("onTap", "innertubeCommand", {dict})) or {}
         url = link_target(command, video_id)
         if not url or not isinstance(run.get("startIndex"), int):
             continue
-        out.append({"text": _clean(_utf16_slice(content, run["startIndex"], run.get("length") or 0)), "url": url})
+        length = traverse_obj(run, ("length", {int})) or 0
+        out.append({"text": _clean(_utf16_slice(content, run["startIndex"], length)), "url": url})
     return out
 
 
@@ -357,7 +358,7 @@ def most_replayed(initial_data: dict[str, Any]) -> dict[str, Any] | None:
         if markers_list.get("markerType") != "MARKER_TYPE_HEATMAP":
             continue
         markers = []
-        for m in markers_list.get("markers") or []:
+        for m in traverse_obj(markers_list, ("markers", ..., {dict})) or []:
             try:
                 markers.append({"startMillis": int(m["startMillis"]), "durationMillis": int(m["durationMillis"]),
                                 "intensityScoreNormalized": float(m["intensityScoreNormalized"])})
@@ -376,8 +377,8 @@ def most_replayed(initial_data: dict[str, Any]) -> dict[str, Any] | None:
 
 def _needs_po_token(track: Any) -> bool:
     """yt-dlp's rule: a caption URL in YouTube's exp=xpe/xpv experiment serves an empty file without a PO token."""
-    url = track.get("baseUrl") if isinstance(track, dict) else None
-    return any(e in ("xpe", "xpv") for e in parse_qs(urlparse(url or "").query).get("exp") or [])
+    url = traverse_obj(track, ("baseUrl", {str})) or ""
+    return any(e in ("xpe", "xpv") for e in parse_qs(urlparse(url).query).get("exp") or [])
 
 
 def caption_tracks(player_responses: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -390,10 +391,11 @@ def caption_tracks(player_responses: list[dict[str, Any]]) -> list[dict[str, Any
                   lists[0][1] if lists else [])
     out = []
     for t in tracks:
-        if not isinstance(t, dict) or not t.get("baseUrl"):
+        base_url = traverse_obj(t, ("baseUrl", {str}))
+        if not base_url:
             continue
         track = {
-            "baseUrl": t["baseUrl"],
+            "baseUrl": base_url,
             "name": {"simpleText": text_of(t.get("name"))},
             "vssId": t.get("vssId"),
             "languageCode": t.get("languageCode"),
@@ -453,11 +455,22 @@ def badge_length(badge: str | None) -> tuple[str | None, int | None]:
     return hours + rest, int(parse_duration(re.sub(r"\D", "", hours) + rest))
 
 
+def _readable_sources(lockup: dict[str, Any]) -> dict[str, Any]:
+    """The lockup with only the thumbnail sources that are objects: yt-dlp calls .get() on each one."""
+    content = traverse_obj(lockup, ("contentImage", {dict})) or {}
+    view = traverse_obj(content, ("thumbnailViewModel", {dict})) or {}
+    image = traverse_obj(view, ("image", {dict}))
+    if image is None:
+        return lockup
+    image = {**image, "sources": traverse_obj(image, ("sources", ..., {dict})) or []}
+    return {**lockup, "contentImage": {**content, "thumbnailViewModel": {**view, "image": image}}}
+
+
 def watch_next_video(tab_ie: Any, lockup: dict[str, Any]) -> dict[str, Any] | None:
     """One related video from the watch page's lockupViewModel."""
     if lockup.get("contentType") != "LOCKUP_CONTENT_TYPE_VIDEO":
         return None
-    entry = tab_ie._extract_lockup_view_model(lockup)
+    entry = tab_ie._extract_lockup_view_model(_readable_sources(lockup))
     if not entry or not entry.get("id"):
         return None
     meta = traverse_obj(lockup, ("metadata", "lockupMetadataViewModel", {dict})) or {}
