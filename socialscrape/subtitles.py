@@ -45,6 +45,21 @@ def _base(lang: str) -> str:
     return lang.split("-")[0].lower()
 
 
+# The script a Chinese region writes in, for tags that leave it out: YouTube lists zh-CN and zh-TW as often as
+# zh-Hans and zh-Hant.
+_ZH_SCRIPTS = {"tw": "hant", "hk": "hant", "mo": "hant", "cn": "hans", "sg": "hans", "my": "hans"}
+
+
+def _script(lang: str) -> str | None:
+    """The script a tag names or implies ('sr-Latn' -> 'latn', 'zh-TW' -> 'hant'), None when it doesn't say."""
+    base, *subtags = lang.lower().split("-")
+    if not subtags:
+        return None
+    if len(subtags[0]) == 4 and subtags[0].isalpha() and subtags[0] != "orig":
+        return subtags[0]
+    return _ZH_SCRIPTS.get(subtags[0]) if base == "zh" else None
+
+
 def pick_track(
     subtitles: dict[str, Any],
     automatic: dict[str, Any],
@@ -59,6 +74,8 @@ def pick_track(
     language        explicit request ('en', 'en-US'); exact match beats prefix match,
                     uploaded tracks beat auto-generated ones, and a real track of the
                     language beats a machine translation ('en-US' over a translated 'en').
+                    Short of an exact match, a track in another script comes last (zh-HK
+                    takes zh-TW or zh-Hant over zh-CN, sr-Cyrl takes sr over sr-Latn).
     original        prefer the track in the spoken language (yt-dlp marks the
                     untranslated ASR track with an '-orig' suffix on YouTube).
     video_language  the original audio language, if known. An auto-dubbed video has
@@ -74,8 +91,12 @@ def pick_track(
     translated = frozenset(translated)
 
     def match(tracks: dict[str, Any], want: str, avoid: frozenset[str] = frozenset()) -> str | None:
-        want_l = want.lower()
-        ranked = [(key in avoid, key.lower() != want_l, key.endswith("-orig"), i, key)
+        want_l, script = want.lower(), _script(want)
+
+        def other_script(key: str) -> int:  # 0 same script, 1 unknown (either tag doesn't say), 2 another one
+            return 1 if not (script and (key_script := _script(key))) else 0 if key_script == script else 2
+
+        ranked = [(key in avoid, key.lower() != want_l, other_script(key), key.endswith("-orig"), i, key)
                   for i, key in enumerate(tracks) if _base(key) == _base(want_l)]
         return min(ranked)[-1] if ranked else None
 

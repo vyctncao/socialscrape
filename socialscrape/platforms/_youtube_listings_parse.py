@@ -198,11 +198,22 @@ def channel_ref(data: dict[str, Any]) -> list[str | None]:
     return [meta.get("externalId"), meta.get("title"), handle_of(meta.get("vanityChannelUrl"))]
 
 
+_SORT_SHEET = ("tapCommand", "innertubeCommand", "showSheetCommand", "panelLoadingStrategy", "inlineContent",
+               "sheetViewModel", "content", "listViewModel", "listItems", ..., "listItemViewModel", {dict})
+
+
 def sort_chip_token(content: Any, label: str) -> str | None:
-    """Continuation token behind a channel tab's 'Latest' / 'Popular' / 'Oldest' chip."""
+    """Continuation token behind a channel tab's 'Latest' / 'Popular' / 'Oldest' chip. A videos tab that also has
+    'Members only' / 'Public' chips (LinusTechTips') puts the three in the drop-down of one chip instead."""
     for chip in traverse_obj(content, (..., "header", "chipBarViewModel", "chips", ..., "chipViewModel", {dict})):
-        if (chip.get("text") or "").lower() == label.lower():
-            return traverse_obj(chip, ("tapCommand", "innertubeCommand", "continuationCommand", "token", {str}))
+        if (chip.get("text") or "").lower() == label.lower() and (token := traverse_obj(chip, (
+                "tapCommand", "innertubeCommand", "continuationCommand", "token", {str}))):
+            return token
+        for item in traverse_obj(chip, _SORT_SHEET):
+            if (traverse_obj(item, ("title", "content", {str})) or "").lower() == label.lower():
+                return traverse_obj(item, ("rendererContext", "commandContext", "onTap", "innertubeCommand",
+                                           "commandExecutorCommand", "commands", ..., "continuationCommand", "token",
+                                           {str}, any))
     return None
 
 

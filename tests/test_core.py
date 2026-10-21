@@ -195,6 +195,31 @@ def test_pick_track_uploaded_track_is_never_a_machine_translation():
         assert subtitles.pick_track(up_en, ko, translated=subtitles.machine_translated(ko), **kwargs) == ("en", False)
 
 
+def test_pick_track_keeps_the_script_of_a_chinese_variant():
+    """fix3: TED talks upload zh-CN and zh-TW, and language=zh-Hant or zh-HK took zh-CN: a match that isn't exact
+    went by YouTube's list order alone, so a request for Traditional Chinese got Simplified."""
+    ted = {"en": [{}], "zh-CN": [{}], "zh-TW": [{}]}
+    for want in ("zh-Hant", "zh-HK", "zh-MO", "zh-Hant-HK", "ZH-hk"):
+        assert subtitles.pick_track(ted, {}, language=want) == ("zh-TW", False), want
+    for want in ("zh-Hans", "zh-SG", "zh-Hans-HK"):
+        assert subtitles.pick_track({"zh-TW": [{}], "zh-CN": [{}]}, {}, language=want) == ("zh-CN", False), want
+    scripts = {"zh-Hans": [{}], "zh-Hant": [{}]}
+    assert subtitles.pick_track(scripts, {}, language="zh-TW") == ("zh-Hant", False)
+    assert subtitles.pick_track({}, scripts, language="zh-HK") == ("zh-Hant", True)
+    assert subtitles.pick_track({}, {"zh-Hans-orig": [{}], "zh-Hant": [{}]}, language="zh-TW") == ("zh-Hant", True)
+    # a tag that doesn't say its script comes before the other script; a plain 'zh' keeps YouTube's order
+    assert subtitles.pick_track({"zh-CN": [{}], "zh": [{}]}, {}, language="zh-TW") == ("zh", False)
+    assert subtitles.pick_track(scripts, {}, language="zh") == ("zh-Hans", False)
+    assert subtitles.pick_track({"sr-Latn": [{}], "sr": [{}]}, {}, language="sr-Cyrl") == ("sr", False)
+    # the script only ranks tracks of one tier: an uploaded Simplified track still beats a translation
+    hant = [{"url": "https://www.youtube.com/api/timedtext?lang=en&tlang=zh-Hant&fmt=json3"}]
+    assert subtitles.pick_track({"zh-CN": [{}]}, {"zh-Hant": hant}, language="zh-Hant",
+                                translated=subtitles.machine_translated({"zh-Hant": hant})) == ("zh-CN", False)
+    # region and script subtags of other languages change nothing: list order decides among en-GB and en
+    assert subtitles.pick_track({"en-GB": [{}], "en": [{}]}, {}, language="en-US") == ("en-GB", False)
+    assert subtitles.pick_track({}, {"en-orig": [{}], "en": [{}]}, language="en-Latn") == ("en", True)
+
+
 def test_parse_vtt_dedupes_rolling_captions():
     raw = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nhello\n\n00:00:01.000 --> 00:00:02.000\nhello\nworld\n"
     segs = subtitles.parse(raw, "vtt")

@@ -201,6 +201,11 @@ def test_channel_base_accepts(args, base):
     (None, "bad handle!", None),
     (None, "गाना!", None),
     (None, None, "MrBeast"),
+    # hosts urllib raises ValueError on: a stray bracket, a full-width '／' (a CJK keyboard's '/'); 400, not 500
+    (None, None, "https://www.youtube.com]/@MrBeast"),
+    ("https://[www.youtube.com]/@MrBeast", None, None),
+    (None, "http://[::1", None),
+    (None, None, "https://www.youtube.com／@MrBeast"),
 ])
 def test_channel_base_rejects(args):
     with pytest.raises(BadRequest):
@@ -225,10 +230,12 @@ def test_playlist_and_hashtag_inputs():
                              ("Straße", "straße"), ("kadıköy", "kadıköy"), ("KADIKÖY", "kadiköy")):
         assert M.hashtag_of(given) == (canonical, False), given
         assert unicodedata.is_normalized("NFC", M.hashtag_of(given)[0]), given
-    for bad in ("https://www.tiktok.com/tag/funny", "https://www.youtube.com/watch?v=x", "short"):
+    for bad in ("https://www.tiktok.com/tag/funny", "https://www.youtube.com/watch?v=x", "short",
+                f"https://www.youtube.com]/playlist?list={TF2}", f"youtube.com／playlist?list={TF2}"):
         with pytest.raises(BadRequest):
             M.playlist_id_of(bad)
-    for bad in ("##", "two words", "https://www.tiktok.com/tag/funny", "https://www.youtube.com/@MrBeast", "#\u200d"):
+    for bad in ("##", "two words", "https://www.tiktok.com/tag/funny", "https://www.youtube.com/@MrBeast", "#\u200d",
+                "http://[::1", "https://www.youtube.com／hashtag/funny"):
         with pytest.raises(BadRequest):
             M.hashtag_of(bad)
 
@@ -300,7 +307,7 @@ def test_cursor_round_trip_drops_empty_fields():
 
 def test_region():
     assert M._region("us") == "US" and M._region(" gb ") == "GB" and M._region(None) is None
-    for bad in ("ZZ", "XX", "EU", "AP", "USA", "u1"):
+    for bad in ("ZZ", "XX", "EU", "AP", "USA", "u1", "ß", "ın", "ſe", "ﬁ"):  # upper(): SS, IN, SE, FI
         with pytest.raises(BadRequest):
             M._region(bad)
 
@@ -533,6 +540,37 @@ def test_walk_skips_header_chips_and_collects_tokens():
     assert P.walk(P.continuation_items({"responseContext": {}})) == ([], [])  # terminal page
 
 
+def sort_chip(text: str, token: str, selected: bool = False) -> dict:
+    return {"chipViewModel": {"text": text, "selected": selected, "tapCommand": {"innertubeCommand": {
+        "continuationCommand": {"token": token, "request": "CONTINUATION_REQUEST_TYPE_BROWSE"}}}}}
+
+
+def sort_sheet_item(title: str, token: str) -> dict:
+    return {"listItemViewModel": {"title": {"content": title}, "rendererContext": {"commandContext": {"onTap": {
+        "innertubeCommand": {"commandExecutorCommand": {"commands": [
+            {"entityUpdateCommand": {"entityBatchUpdate": {"mutations": []}}},
+            {"continuationCommand": {"token": token, "request": "CONTINUATION_REQUEST_TYPE_BROWSE"}}]}}}}}}}
+
+
+def test_sort_chip_token_reads_the_sort_drop_down():
+    # usual chip bar: one chip per order
+    plain = {"richGridRenderer": {"header": {"chipBarViewModel": {"chips": [
+        sort_chip("Latest", "LATEST", True), sort_chip("Popular", "POPULAR"), sort_chip("Oldest", "OLDEST")]}}}}
+    assert P.sort_chip_token(plain, "Popular") == "POPULAR" and P.sort_chip_token(plain, "oldest") == "OLDEST"
+    # a videos tab with members-only videos (LinusTechTips'): the orders sit in a drop-down chip, next to filters
+    drop_down = {"chipViewModel": {"text": "Latest", "displayType": "CHIP_VIEW_MODEL_DISPLAY_TYPE_DROP_DOWN",
+                                   "tapCommand": {"innertubeCommand": {"showSheetCommand": {"panelLoadingStrategy": {
+                                       "inlineContent": {"sheetViewModel": {"content": {"listViewModel": {
+                                           "listItems": [sort_sheet_item("Latest", "LATEST"),
+                                                         sort_sheet_item("Popular", "POPULAR"),
+                                                         sort_sheet_item("Oldest", "OLDEST")]}}}}}}}}}}
+    members = {"richGridRenderer": {"header": {"chipBarViewModel": {"chips": [
+        drop_down, sort_chip("Members only", "MEMBERS"), sort_chip("Public", "PUBLIC")]}}}}
+    assert P.sort_chip_token(members, "Popular") == "POPULAR" and P.sort_chip_token(members, "Latest") == "LATEST"
+    assert P.sort_chip_token(members, "Public") == "PUBLIC" and P.sort_chip_token(members, "Newest") is None
+    assert P.sort_chip_token({"richGridRenderer": {"contents": []}}, "Popular") is None
+
+
 def test_probe_pages():
     """Whole cached pages (from the probe run) still parse into full listings."""
     videos = cached("mrbeast_videos")["data"]
@@ -658,6 +696,12 @@ def test_missing_params_is_400(client, path):
     ("/v1/youtube/channel/lives", {"continuationToken": encode_cursor({"k": "channel-posts", "t": "x"})}),
     ("/v1/youtube/playlist", {"playlist_id": TF2, "continuationToken": encode_cursor({"k": "playlist", "t": "x",
                                                                                       "p": UPLOADS})}),
+    # urllib raises ValueError on these hosts
+    ("/v1/youtube/channel", {"url": "https://www.youtube.com]/@MrBeast"}),
+    ("/v1/youtube/channel-videos", {"handle": "https://www.youtube.com／@MrBeast"}),
+    ("/v1/youtube/channel/community-posts", {"channelId": "http://[::1"}),
+    ("/v1/youtube/playlist", {"playlist_id": f"https://[www.youtube.com]/playlist?list={TF2}"}),
+    ("/v1/youtube/search/hashtag", {"hashtag": "https://www.youtube.com／hashtag/funny"}),
 ])
 def test_bad_input_is_400(client, path, params):
     r = client.get(path, params=params)

@@ -409,7 +409,10 @@ def test_search_results_agree_with_detail_routes(client):
     playlists = ok(client, f"{YT}/search", query="lofi", type="playlists")["playlists"]
     assert playlists
     for pl in [x for x in playlists if x["videoCount"]][:2]:
-        assert ok(client, f"{YT}/playlist", playlist_id=pl["id"])["totalVideos"] == pl["videoCount"]
+        # two YouTube counts, which can drift apart on a playlist with unavailable videos: search's badge said 10
+        # where the playlist page said "11 videos" and "4 unavailable videos are hidden"
+        total = ok(client, f"{YT}/playlist", playlist_id=pl["id"])["totalVideos"]
+        assert total == pytest.approx(pl["videoCount"], rel=0.1, abs=1), (pl["id"], total, pl["videoCount"])
 
 
 @pytest.mark.parametrize("region,status,code", [

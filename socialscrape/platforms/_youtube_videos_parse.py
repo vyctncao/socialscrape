@@ -829,7 +829,10 @@ _EVIDENCE_CHARS = 120
 
 def site_of(url: str) -> str | None:
     """Registrable domain of a URL ('https://www.betterhelp.com/x' -> 'betterhelp.com')."""
-    host = urlparse(url if "://" in url else "http://" + url).hostname or ""
+    try:
+        host = urlparse(url if "://" in url else "http://" + url).hostname or ""
+    except ValueError:  # 'http://[::1' (_URL stops at ']'), a full-width '：' after the host ('https://x.jp：詳細')
+        return None
     labels = [p for p in host.lower().split(".") if p]
     if len(labels) < 2:
         return None
@@ -839,6 +842,12 @@ def site_of(url: str) -> str | None:
 
 def _brand_key(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _lower(text: str) -> str:
+    """text.lower() keeping text's offsets: 'İ'.lower() is two characters ('i' and a combining dot)."""
+    low = text.lower()
+    return low if len(low) == len(text) else "".join(c.lower()[0] for c in text)
 
 
 def _snippet(text: str, around: int | None = None) -> str:
@@ -926,9 +935,9 @@ def detect_sponsors(description: str | None, transcript_text: str | None, *, own
                 methods.append("promo code")
 
     transcript = _clean(transcript_text or "")
-    low = transcript.lower()
+    low = _lower(transcript)  # a match's offset in low is its offset in transcript (the snippet's)
     for entry in found.values():
-        keys = {entry["name"].lower(), *([entry["website"].split(".")[0]] if entry["website"] else [])}
+        keys = {_lower(entry["name"]), *([entry["website"].split(".")[0]] if entry["website"] else [])}
         pos = min((m.start() for k in keys if len(k) > 2 for m in [re.search(rf"\b{re.escape(k)}\b", low)] if m),
                   default=None)
         if pos is not None:

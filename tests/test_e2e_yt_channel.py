@@ -234,6 +234,17 @@ def test_channel_videos_popular_is_sorted_by_views(client):
     assert ids_of([latest["videos"]]) == ids_of([ok(client, "/v1/youtube/channel-videos", handle="MrBeast")["videos"]])
 
 
+@pytest.mark.live
+def test_channel_videos_popular_behind_the_sort_drop_down(client):
+    """A Videos tab with members-only videos (LTT's) has Latest/Popular/Oldest in a drop-down chip, not as chips of
+    their own; sort=popular used to answer the latest order there."""
+    popular = ok(client, "/v1/youtube/channel-videos", handle="LinusTechTips", sort="popular")["videos"]
+    assert len(popular) == 30
+    assert_most_viewed_first([v["viewCountInt"] for v in popular])
+    latest = ok(client, "/v1/youtube/channel-videos", handle="LinusTechTips")["videos"]
+    assert ids_of([popular]) != ids_of([latest])
+
+
 @pytest.mark.parametrize("sort", ["Latest", "POPULAR", "oldest", "newest"])
 def test_channel_videos_bad_sort(client, sort):
     err(client, "/v1/youtube/channel-videos", 400, handle="MrBeast", sort=sort)

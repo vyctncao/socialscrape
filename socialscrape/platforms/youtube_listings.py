@@ -73,8 +73,12 @@ def _yt_url(value: str) -> urllib.parse.ParseResult | None:
     """Parse URL-looking input (anything with a '/'); 400 if it points at another site."""
     if "/" not in value:
         return None
-    parsed = urllib.parse.urlparse(value if "://" in value else f"https://{value}")
-    if not _YT_HOST.fullmatch(parsed.hostname or ""):
+    try:
+        parsed = urllib.parse.urlparse(value if "://" in value else f"https://{value}")
+        host = parsed.hostname or ""
+    except ValueError:  # a stray bracket ('youtube.com]/@x') or a full-width '／', '：'... in the host (NFKC'd)
+        host = ""
+    if not _YT_HOST.fullmatch(host):
         raise BadRequest(f"Not a YouTube URL: {value}")
     return parsed
 
@@ -160,7 +164,8 @@ def _region(value: str | None) -> str | None:
     if not value:
         return None
     code = value.strip().upper()
-    if code in ("AP", "EU") or not ISO3166Utils.short2full(code):  # regions, not countries
+    # ASCII only: upper() also makes 'ß' 'SS' (South Sudan), 'ın' 'IN' and 'ﬁ' 'FI'; AP and EU are regions
+    if not value.strip().isascii() or code in ("AP", "EU") or not ISO3166Utils.short2full(code):
         raise BadRequest(f"region must be a 2-letter ISO 3166 country code, got {value!r}")
     return code
 
@@ -428,8 +433,9 @@ async def youtube_channel(channelId: str | None = None, handle: str | None = Non
 
 @sc_get(router, "/v1/youtube/channel-videos",
         source=f"{_SRC} (channel Videos tab webpage, then InnerTube browse on yt-dlp's mweb client)",
-        notes="The Videos webpage resolves the channel and its 'Popular' chip; the listing itself (first page and "
-              "continuations) comes from yt-dlp's mweb InnerTube client, whose items carry exact view counts "
+        notes="The Videos webpage resolves the channel and its 'Popular' chip (an entry of the sort drop-down on a "
+              "tab with members-only videos); the listing itself (first page and continuations) comes from yt-dlp's "
+              "mweb InnerTube client, whose items carry exact view counts "
               "('251,675,820 views'). sort=popular falls back to latest when the channel shows no chips. "
               "description is not part of the tab listing and is omitted; channel.thumbnail is null like "
               "ScrapeCreators. includeExtras is ignored (needs one extra request per video); "

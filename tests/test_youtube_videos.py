@@ -63,7 +63,9 @@ def cached(name: str) -> dict:
 
 @pytest.mark.parametrize("url", [watch(ZOO), f"https://youtu.be/{ZOO}", f"https://www.youtube.com/shorts/{ZOO}",
                                  f"https://m.youtube.com/watch?v={ZOO}&list=PL123", ZOO,
-                                 f"youtube.com/watch?v={ZOO}", f"youtu.be/{ZOO}", f"www.youtube.com/shorts/{ZOO}"])
+                                 f"youtube.com/watch?v={ZOO}", f"youtu.be/{ZOO}", f"www.youtube.com/shorts/{ZOO}",
+                                 f"HTTPS://WWW.YOUTUBE.COM/watch?v={ZOO}", f"Https://youtu.be/{ZOO}", f"Youtu.be/{ZOO}",
+                                 f"M.YouTube.com/shorts/{ZOO}"])
 def test_video_id_accepts_youtube_urls(url):
     assert M.video_id(url) == ZOO
 
@@ -84,7 +86,10 @@ def test_post_id(url):
 
 
 @pytest.mark.parametrize("url", [watch(ZOO), f"https://www.instagram.com/post/{POST}", "https://www.youtube.com/post/",
-                                 f"https://www.youtube.com/channel/UChhw6DlKKTQ9mYSpTfXUYqA/posts/{POST}"])
+                                 f"https://www.youtube.com/channel/UChhw6DlKKTQ9mYSpTfXUYqA/posts/{POST}",
+                                 # hosts urllib raises ValueError on: a stray bracket, a full-width '／'
+                                 "[]", "http://[::1", f"https://www.youtube.com]/post/{POST}",
+                                 f"https://www.youtube.com／post/{POST}"])
 def test_post_id_rejects(url):
     with pytest.raises(BadRequest):
         M.post_id(url)
@@ -113,6 +118,9 @@ def test_language_validation():
     assert M.ui_language_args(None) == {} and M.ui_language_args("xx") == {}  # no such UI: YouTube's default
     assert [M.ui_language(c) for c in ("zh", "zh-Hant", "he", "nb", "en-US", "pt-BR", "es-419", "ZH-tw")] == [
         "zh-CN", "zh-TW", "iw", "no", "en", "pt", "es-419", "zh-TW"]
+    # zh-MO fell back to zh, a Simplified UI, for a region that writes Traditional
+    assert [M.ui_language(c) for c in ("zh-MO", "zh-Hant-MO", "zh-Hans-MO", "zh-MY")] == [
+        "zh-HK", "zh-TW", "zh-CN", "zh-CN"]
     assert M.caption_language("en-US") == "en-US"
     for bad in ("e!", "en_US!"):
         with pytest.raises(BadRequest):
@@ -355,6 +363,26 @@ def test_detect_sponsors_ignores_lowercase_code_and_own_links():
                              paid_promotion=False) == ([], [])
     coded, methods = P.detect_sponsors("Use code SAVE20 at https://nordvpn.com/x", None, own=set(), paid_promotion=False)
     assert coded[0]["website"] == "nordvpn.com" and methods == ["description link", "promo code"]
+
+
+def test_detect_sponsors_transcript_evidence_after_dotted_capital_i():
+    """'İ'.lower() is two characters, so the mention's offset in the lower-cased transcript pointed past it in the
+    transcript: after enough of them (Turkish captions) the evidence snippet no longer showed the brand."""
+    transcript = " ".join(["İyi"] * 150) + " a word from our sponsor betterhelp " + " ".join(["tamam"] * 60)
+    sponsors, _ = P.detect_sponsors("Sponsored by BetterHelp: https://betterhelp.com/x", transcript, own=set(),
+                                    paid_promotion=False)
+    [said] = [e["text"] for e in sponsors[0]["evidence"] if e["source"] == "transcript"]
+    assert "sponsor betterhelp" in said and sponsors[0]["confidence"] == "high"
+
+
+def test_detect_sponsors_survives_hosts_urllib_rejects():
+    """A link whose host urllib raises ValueError on is no site, not a 500 from /v1/youtube/video/sponsors: the
+    link pattern stops at ']' ('http://[::1'), and NFKC turns a full-width '：' typed after a URL into ':'."""
+    assert P.site_of("http://[::1") is None and P.site_of("https://shop.example.jp：詳細はこちら") is None
+    for junk in ("Docs: http://[::1]:8080/docs", "詳しくは https://shop.example.jp：詳細はこちら"):
+        sponsors, methods = P.detect_sponsors(f"Use code SAVE20 at https://nordvpn.com/x. {junk}", None, own=set(),
+                                              paid_promotion=False)
+        assert [s["website"] for s in sponsors] == ["nordvpn.com"] and methods == ["description link", "promo code"]
 
 
 def test_detect_sponsors_skips_redirect_hosts():
@@ -720,6 +748,8 @@ def test_unplayable_videos_are_403():
     ("/v1/youtube/video", {}),
     ("/v1/youtube/video/comment/replies", {}),
     ("/v1/youtube/community-post", {}),
+    ("/v1/youtube/community-post", {"url": "[]"}),  # urllib raises ValueError on the host
+    ("/v1/youtube/community-post", {"url": f"youtube.com／post/{POST}"}),
 ])
 def test_bad_input_is_400(client, path, params):
     r = client.get(path, params=params)

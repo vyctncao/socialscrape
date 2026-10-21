@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import concurrent.futures as cf
 import re
+import socket
 
 import httpx2
 import pytest
@@ -41,6 +42,13 @@ SHARED_POST = "UgkxLWl-HZtRwLZR0KlKXNQ7dOHJx5vhqgsd"  # @YouTubeViewers sharing 
 ROUTES = ["/v1/youtube/video", "/v1/youtube/video/transcript", "/v1/youtube/video/comments",
           "/v1/youtube/video/comment/replies", "/v1/youtube/video/sponsors", "/v1/youtube/community-post"]
 STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z")
+
+
+_GETADDRINFO = socket.getaddrinfo
+
+
+def ipv4_only(*args, **kwargs) -> list:
+    return [ai for ai in _GETADDRINFO(*args, **kwargs) if ai[0] == socket.AF_INET]
 
 
 def watch(vid: str) -> str:
@@ -357,7 +365,10 @@ def test_cache_hit_still_needs_an_api_key(tmp_path):
 def test_setting_errors_on_every_route(tmp_path, replies_token, env, status, code):
     (tmp_path / "bad.txt").write_bytes(b"garbage, not a cookies.txt\n\x00\x01")
     env = {k: v.format(tmp=tmp_path, port=free_port()) for k, v in env.items()}
-    with app_with(env) as c:
+    # IPv4 only: on a host that resolves YouTube's IPv6 addresses but has no route to them (a VPN's tunnels can do
+    # that), yt-dlp's connect loop raises the last address's error, an instant 'No route to host' (502), after
+    # every IPv4 attempt timed out
+    with app_with(env, patches=[(socket, "getaddrinfo", ipv4_only)]) as c:
         for path in ROUTES:
             err(c, path, status, code, **route_params(path, replies_token))
         if code == "cookies_error":

@@ -39,8 +39,8 @@ UNSUPPORTED = {
 
 _LANG = re.compile(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*")
 # BCP-47 tags YouTube spells differently (or only regionally) in its UI language list.
-_UI_LANG_ALIASES = {"zh": "zh-CN", "zh-hans": "zh-CN", "zh-sg": "zh-CN", "zh-hant": "zh-TW", "he": "iw",
-                    "nb": "no", "nn": "no", "in": "id", "tl": "fil"}
+_UI_LANG_ALIASES = {"zh": "zh-CN", "zh-hans": "zh-CN", "zh-sg": "zh-CN", "zh-hant": "zh-TW", "zh-mo": "zh-HK",
+                    "he": "iw", "nb": "no", "nn": "no", "in": "id", "tl": "fil"}
 _BOOL = {"true": True, "1": True, "yes": True, "false": False, "0": False, "no": False, "": False}
 
 
@@ -51,6 +51,8 @@ def video_id(url: str) -> str:
     url = (url or "").strip()
     if "://" not in url and not re.fullmatch(r"[\w-]{11}", url):
         url = "https://" + url  # 'youtube.com/watch?v=..', 'youtu.be/..'
+    # YoutubeIE's patterns are case-sensitive but scheme and host aren't ('Youtu.be/..' from a phone keyboard)
+    url = re.sub(r"^[a-z][a-z\d+.-]*://[^/?#]*", lambda m: m.group().lower(), url, flags=re.I)
     m = YoutubeIE._match_valid_url(url)
     if not m or not m.group("id"):
         raise BadRequest("Not a YouTube video URL", code="unsupported_url")
@@ -60,8 +62,12 @@ def video_id(url: str) -> str:
 def post_id(url: str) -> str:
     """Post id from youtube.com/post/<id> or a channel's community?lb=<id> / posts?lb=<id> URL."""
     url = (url or "").strip()
-    parsed = urlparse(url if "://" in url else "https://" + url)
-    if (parsed.hostname or "").lower() in ("youtube.com", "www.youtube.com", "m.youtube.com"):
+    try:
+        parsed = urlparse(url if "://" in url else "https://" + url)
+        host = parsed.hostname or ""
+    except ValueError:  # a stray bracket ('youtube.com]/post/..') or a full-width '／', '：'... in the host
+        host = ""
+    if host in ("youtube.com", "www.youtube.com", "m.youtube.com"):
         if m := re.fullmatch(r"/post/([\w-]{10,})/?", parsed.path):
             return m.group(1)
         if re.fullmatch(r"(?:/(?:channel/[\w-]+|@[^/]+|c/[^/]+|user/[^/]+))?/(?:community|posts)/?", parsed.path):
@@ -384,7 +390,8 @@ def spoken_language(info: dict[str, Any], player_responses: list[dict[str, Any]]
               "track YouTube labels original, else the '-orig' ASR track when there is only one: auto-dubbed videos "
               "have one per dub); when that language is unknown the default falls back to "
               "uploaded English, then any uploaded track, then auto-generated. language picks a real track of that "
-              "language over YouTube's machine translation into it (en gets an en-US track); a language only "
+              "language over YouTube's machine translation into it (en gets an en-US track), and a track in its "
+              "script over one in another (zh-HK and zh-Hant get zh-TW, not zh-CN); a language only "
               "available as a machine translation returns transcript null (YouTube rate-limits anonymous translated captions with "
               "HTTP 429). Live and upcoming streams return transcript null (a live stream's captions are an HLS feed, "
               "not a file). An uploaded track that downloads blank gives way to the auto-generated track of its "
