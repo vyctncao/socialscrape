@@ -23,7 +23,7 @@ from typing import Any, Callable, TypeVar
 
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError, YoutubeDLCookieJar
-from yt_dlp.extractor.youtube import YoutubeBaseInfoExtractor
+from yt_dlp.extractor.youtube import YoutubeBaseInfoExtractor, YoutubeIE
 from yt_dlp.networking.exceptions import HTTPError, NoSupportingHandlers, ProxyError, RequestError, TransportError
 from yt_dlp.utils import (
     DownloadError,
@@ -130,6 +130,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
         if platform == "youtube":
             for key in ("Youtube", "YoutubeTab"):
                 ydl.get_info_extractor(key)._extract_alerts = _youtube_alerts
+            ydl.get_info_extractor("Youtube")._is_agegated = youtube_agegated
         try:
             return fn(ydl)
         finally:
@@ -145,6 +146,14 @@ def _youtube_alerts(data: Any) -> list[tuple[str, str]]:
     return [(alert["type"], message) for alert in traverse_obj(data, ("alerts", {list}, ..., {dict}, ..., {dict}))
             if alert.get("type") and isinstance(alert["type"], str)
             and (message := YoutubeBaseInfoExtractor._get_text(alert, "text"))]
+
+
+def youtube_agegated(player_response: Any) -> bool:
+    """YoutubeIE._is_agegated, but a playability status or reason that isn't a string is none: yt-dlp's own check,
+    which it runs on every player response, fails on one (a TypeError, so a 500 here)."""
+    status = traverse_obj(player_response, ("playabilityStatus", {dict})) or {}
+    return YoutubeIE._is_agegated({"playabilityStatus": {
+        k: v for k, v in status.items() if k not in ("status", "reason") or isinstance(v, str)}})
 
 
 def cookie_file_problem(path: str) -> str | None:

@@ -23,7 +23,7 @@ from .. import subtitles
 from ..errors import ApiError, BadRequest, Forbidden, NotFound, UpstreamBlocked
 from ..registry import sc_get
 from ..util import clock
-from ..ytdlp import translate_error, with_ydl
+from ..ytdlp import translate_error, with_ydl, youtube_agegated
 from . import _youtube_videos_parse as P
 
 router = APIRouter()
@@ -127,13 +127,17 @@ def native_token(token: str, kind: str, video: str | None = None) -> tuple[str, 
 
 
 def capture_watch_data(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
-    """Keep the ytInitialData / player responses YoutubeIE downloads (it drops most of them)."""
+    """Keep the ytInitialData / player responses YoutubeIE downloads (it drops most of them). A playability status or
+    reason that isn't a string is dropped first: YoutubeIE goes on to read them as strings (a 500 here)."""
     ie = ydl.get_info_extractor("Youtube")
     raw: dict[str, Any] = {"initial_data": {}, "player_responses": []}
     original = ie._initial_extract
 
     def initial_extract(*args: Any, **kwargs: Any):
         result = original(*args, **kwargs)
+        for status in traverse_obj(result[4], (..., "playabilityStatus", {dict})):
+            for key in [k for k in ("status", "reason") if not isinstance(status.get(k, ""), str)]:
+                del status[key]
         raw["initial_data"], raw["player_responses"] = result[2] or {}, result[4] or []
         return result
 
@@ -155,7 +159,7 @@ AGE_RESTRICTED = "This video is age-restricted; YouTube only shows it to signed-
 
 def is_age_restricted(player_responses: list[dict[str, Any]]) -> bool:
     """YouTube asked to confirm age (a mere content warning, which anyone can click through, doesn't count)."""
-    return any(YoutubeIE._is_agegated(pr)
+    return any(youtube_agegated(pr)
                and traverse_obj(pr, ("playabilityStatus", "status")) != "CONTENT_CHECK_REQUIRED"
                for pr in player_responses if isinstance(pr, dict))
 

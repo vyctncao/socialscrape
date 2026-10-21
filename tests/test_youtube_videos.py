@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 import pytest
 import yt_dlp
-from yt_dlp.extractor.youtube import YoutubeTabIE
+from yt_dlp.extractor.youtube import YoutubeIE, YoutubeTabIE
 from yt_dlp.utils import DownloadError, ExtractorError
 
 from socialscrape import subtitles
@@ -935,6 +935,33 @@ def test_video_route_age_restricted_is_403(client, monkeypatch):
     stub_watch(monkeypatch, AGE_GATED, "fix/raw_HtVdAasjOgU.json")
     r = client.get("/v1/youtube/video", params={"url": watch(AGE_GATED)})
     assert r.status_code == 403 and r.json()["error"] == "age_restricted", r.text
+
+
+@pytest.mark.parametrize("status,expected", [
+    ({"status": 5}, 200), ({"status": "OK", "reason": 7}, 200), ({"status": "LOGIN_REQUIRED", "reason": ["x"]}, 200),
+    ({"status": "ERROR", "reason": {"simpleText": "Video unavailable"}}, 200),
+    ({"status": True, "reason": "Sign in to confirm your age"}, 403),
+], ids=["status_number", "reason_number", "reason_list", "reason_object", "status_bool_age_gate"])
+def test_video_routes_read_a_playability_status_of_another_type_as_none(client, monkeypatch, status, expected):
+    """yt-playability-type-500: yt-dlp reads each player response's playability status and reason as strings (its
+    age-gate check on every response, then the reason it gives for a video without formats), so one of another
+    type was a 500 (TypeError or AttributeError) before any of our code ran. It reads as missing; an age-gate
+    reason still makes a 403."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        return {"playabilityStatus": dict(status), "videoDetails": {
+            "videoId": video_id, "title": "Odd", "lengthSeconds": "10", "author": "a", "channelId": "UCx"}}
+
+    monkeypatch.setattr(YoutubeIE, "_extract_player_response", player)
+    for name, value in (("_download_initial_webpage", None), ("_download_initial_data", {}), ("_download_ytcfg", {}),
+                        ("_download_player_url", None)):  # no watch page, no other request
+        monkeypatch.setattr(YoutubeIE, name, lambda self, *args, value=value, **kwargs: value)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (expected, expected), (video.text, transcript.text)
+    if expected == 403:
+        assert video.json()["error"] == transcript.json()["error"] == "age_restricted"
+    else:
+        assert video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
 def test_video_route_exact_comment_count(client, monkeypatch):
