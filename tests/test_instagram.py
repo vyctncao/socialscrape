@@ -186,6 +186,8 @@ def test_post_url_accepts_post_urls_and_shortcodes(value):
     "https://www.instagram.com/p/a.b.c/", "https://www.instagram.com/p/../", "https://www.instagram.com/p/%2E%2E/",
     "https://www.instagram.com/p/%3Cscript%3E/", "https://www.instagram.com/p/abc!def/",
     "https://www.instagram.com/reel/abc+def/", "https://www.instagram.com/p/\u00e9t\u00e9xyz/",
+    # an id longer than a shortcode: its pk is past the 4300 digits str() writes (a ValueError in InstagramIE, a 500)
+    pytest.param(f"https://www.instagram.com/p/{'B' * 2500}/", id="2500-character-id"),
     # share links without an id, with one outside the shortcode alphabet or a path after it, or off Instagram
     "https://www.instagram.com/share/", "https://www.instagram.com/share/reel/", "https://www.instagram.com/share/p/",
     "https://www.instagram.com/share/reel/a.b.c.d/", "https://notinstagram.com/share/reel/_shAre-12/",
@@ -1006,8 +1008,10 @@ def test_share_link_is_followed_to_its_post(monkeypatch):
     ig._post_flow(f"{ig.WEB}/p/{REEL_CODE}/")(_ydl(ie))  # any other URL goes straight to InstagramIE
     assert ie.requests == [] and ie.extracted == [f"{ig.WEB}/p/{REEL_CODE}/"]
 
-    # an unknown share id answers 200 without a redirect; a link can also lead somewhere that isn't a post
-    for final in (SHARE, f"{ig.WEB}/jane/", f"{ig.WEB}/stories/jane/3700000000000000000/", "https://example.com/"):
+    # an unknown share id answers 200 without a redirect; a link can also lead somewhere that isn't a post, or to
+    # an id longer than a shortcode
+    for final in (SHARE, f"{ig.WEB}/jane/", f"{ig.WEB}/stories/jane/3700000000000000000/", "https://example.com/",
+                  f"{ig.WEB}/p/{'B' * 2500}/"):
         ie = _share_ie(final)
         with pytest.raises(NotFound, match="does not lead to an Instagram post"):
             ig._post_flow(SHARE)(_ydl(ie))
@@ -1075,8 +1079,9 @@ def test_post_routes_without_a_shortcode_of_their_own(client, stubbed, monkeypat
 
 
 def test_post_code_outside_the_shortcode_alphabet_is_missing(client, stubbed, monkeypatch):
-    # fix14 (ig-code-alphabet-500): a post code with a character _id_to_pk can't read (half an emoji, a "!") made
-    # /v2/instagram/post/comments a 500 "Internal server error", and a share link's transcript asked for /p/<it>/
+    # fix14 (ig-code-alphabet-500): a post code with a character _id_to_pk can't read (half an emoji, a "!"), or
+    # one so long that its pk is past the 4300 digits str() writes, made /v2/instagram/post/comments a 500
+    # "Internal server error", and a share link's transcript asked for /p/<it>/
     requests: list[str] = []
     ie = SimpleNamespace(_API_BASE_URL="https://i.instagram.com/api/v1", _api_headers={}, _is_logged_in=True,
                          _download_webpage_handle=None,
@@ -1087,22 +1092,23 @@ def test_post_code_outside_the_shortcode_alphabet_is_missing(client, stubbed, mo
 
     monkeypatch.setattr(ig, "with_ydl", with_ydl)
     message = "Instagram returned the post without its shortcode"
-    for code in (CAROUSEL_CODE + "\ud83d", "Cx!y"):
+    for code in (CAROUSEL_CODE + "\ud83d", "Cx!y", "9" * 5000):
         monkeypatch.setattr(ig, "fetch_post", lambda url, code=code: _async(({**CAROUSEL, "code": code}, None)))
         body = client.get("/v2/instagram/post/comments", params={"url": CAROUSEL_CODE}).json()
         assert [c["id"] for c in body["comments"]] == [COMMENT["pk"]]
         assert f"/media/{ig._id_to_pk(CAROUSEL_CODE)}/comments/" in requests[-1]  # the URL's
         assert _err(client.get("/v2/instagram/post/comments", params={"url": SHARE}), 500, "upstream_error")[
             "message"] == message
-    assert len(requests) == 2
+    assert len(requests) == 3
 
     seen: list[str] = []
-    monkeypatch.setattr(ig, "fetch_post", lambda url: _async(({**REEL, "code": "Cx!y"}, None)))
     monkeypatch.setattr(transcribe, "enabled", lambda: True)
     monkeypatch.setattr(transcribe, "transcribe", lambda url, **kwargs: seen.append(url) or _async(
         SimpleNamespace(text="hello")))
-    assert _err(client.get("/v2/instagram/media/transcript", params={"url": SHARE}), 500, "upstream_error")[
-        "message"] == message
+    for code in ("Cx!y", "9" * 5000):
+        monkeypatch.setattr(ig, "fetch_post", lambda url, code=code: _async(({**REEL, "code": code}, None)))
+        assert _err(client.get("/v2/instagram/media/transcript", params={"url": SHARE}), 500, "upstream_error")[
+            "message"] == message
     assert seen == []
 
 

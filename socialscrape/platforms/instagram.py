@@ -56,7 +56,7 @@ RULING_PATH = "/api/v1/web/get_ruling_for_content/"
 COOKIE_NOTE = "requires SOCIALSCRAPE_COOKIES_INSTAGRAM; not verified anonymously"
 
 _SHORTCODE = re.compile(r"[A-Za-z0-9_-]{5,64}")
-_SHORTCODE_CHARS = re.compile(r"[A-Za-z0-9_-]+")  # _id_to_pk's alphabet
+_SHORTCODE_CHARS = re.compile(r"[A-Za-z0-9_-]{1,64}")  # _id_to_pk's alphabet, up to a shortcode's length
 # A link from the app's share sheet (/share/reel/<id>, /share/<id>), whose id (as long as a shortcode, so that
 # '/share/reel/' isn't one) redirects to the post.
 _SHARE_URL = re.compile(r"https://www\.instagram\.com/share/(?:[a-z]+/)?[A-Za-z0-9_-]{5,64}/?(?:[?#].*)?")
