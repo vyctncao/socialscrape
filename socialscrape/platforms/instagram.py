@@ -62,9 +62,12 @@ _SHORTCODE_CHARS = re.compile(r"[A-Za-z0-9_-]+")  # _id_to_pk's alphabet
 _SHARE_URL = re.compile(r"https://www\.instagram\.com/share/(?:[a-z]+/)?[A-Za-z0-9_-]{5,64}/?(?:[?#].*)?")
 # No leading/trailing '.' and no '..', as on Instagram (and so '.'/'..' can't collapse /<handle>/ to the homepage).
 _HANDLE = re.compile(r"(?!\.)(?!.*\.\.)[A-Za-z0-9._]{1,30}(?<!\.)")
-# The address of a profile, one of its tabs, or its follower or following list (a modal over the profile page)
-_PROFILE_URL = re.compile(r"https://www\.instagram\.com/([A-Za-z0-9._]{1,30})"
-                          r"(?:/(?:reels|tagged|saved|guides|featured|followers|following))?/?(?:[?#].*)?")
+# The address of a profile, one of its tabs, its follower or following list (a modal over the profile page) or one
+# of its saved collections; or that of its story, or of one item in it (/stories/<handle>/<pk>/)
+_PROFILE_URL = re.compile(r"https://www\.instagram\.com/(?:(?P<user>[A-Za-z0-9._]{1,30})"
+                          r"(?:/(?:reels|tagged|guides|featured|followers|following"
+                          r"|saved(?:/all-posts|/[^/?#]+/[0-9]+)?))?"
+                          r"|stories/(?P<story>[A-Za-z0-9._]{1,30})(?:/[0-9]+)?)/?(?:[?#].*)?")
 # Instagram routes that look like handles: /challenge/ is the checkpoint page, /graphql/ answers 400, and the
 # login-only app routes always redirect to the login page (which would read as a rate limit). Other app pages
 # are told apart by their pageID (missing_profile_error).
@@ -78,6 +81,8 @@ _HIGHLIGHT_SHARE = re.compile(r"https://www\.instagram\.com/s/(aGlnaGxpZ2h0[A-Za
 _TOPIC_URL = re.compile(r"https://www\.instagram\.com/(?:explore/tags|popular)/([^/?#]+)/?(?:[?#].*)?")
 # instagr.am is Instagram's old short domain: instagr.am/p/<code>/ redirects to the same path on www.
 _INSTAGRAM_HOSTS = {"www.instagram.com", "instagram.com", "m.instagram.com", "instagr.am"}
+# A value that is an Instagram address rather than a handle, id or topic ('instagr.am' alone may be a handle)
+_INSTAGRAM_LINK = re.compile(r"instagram\.com|instagr\.am/", re.I)
 _PAGE_ID = re.compile(r'"pageID":"(\w+)"')
 # A profile Instagram hides from logged-out visitors (age-gated brands): its page's props carry a "gating" object,
 # or the server-rendered page shows the "Restricted profile" icon.
@@ -127,12 +132,14 @@ def post_url(url: str | None) -> tuple[str, str]:
 
 
 def clean_handle(handle: str | None) -> str:
-    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it, or its /followers/ or /following/
-    list) -> 'jane'. 400 for anything else. The '@' may be the full-width '＠' of Japanese and Chinese keyboards."""
+    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it, its /followers/ or /following/ list or a
+    saved collection), or that of jane's story (/stories/jane/) -> 'jane'. 400 for anything else. The '@' may be
+    the full-width '＠' of Japanese and Chinese keyboards."""
     value = (handle or "").strip()
-    if re.search(r"instagram\.com", value, re.I):
+    if _INSTAGRAM_LINK.search(value):
         m = _PROFILE_URL.fullmatch(canonical_url(value))
-        value = m.group(1) if m else ""
+        # /stories/highlights/<id>/ is a highlight, not the story of an account named 'highlights'
+        value = (m["user"] or m["story"]) if m and (m["story"] or "").lower() != "highlights" else ""
     value = value.lstrip("@＠﹫").rstrip("/")
     if not _HANDLE.fullmatch(value) or value.lower() in _RESERVED_PATHS:
         raise BadRequest("Not a valid Instagram handle", code="bad_handle")
@@ -143,7 +150,7 @@ def clean_highlight_id(value: str | None) -> str:
     """'18382085791177637', 'highlight:1838...', a /stories/highlights/<id>/ URL or the app's share link
     (/s/<base64 of 'highlight:<id>'>) -> the numeric id."""
     value = (value or "").strip()
-    if re.search(r"instagram\.com", value, re.I):
+    if _INSTAGRAM_LINK.search(value):
         value = canonical_url(value)
     if m := _HIGHLIGHT_SHARE.fullmatch(value):
         code = urllib.parse.unquote(m.group(1)).rstrip("=")
@@ -173,7 +180,7 @@ def clean_topic(query: str | None, *, single_word: bool = False) -> str:
     vowel signs, Tamil virama), which \\w doesn't match. Decomposed (NFD) spellings are composed first: only
     /explore/tags/espa%C3%B1a/ exists, not /explore/tags/espan%CC%83a/."""
     value = (query or "").strip()
-    if re.search(r"instagram\.com", value, re.I) and (m := _TOPIC_URL.fullmatch(canonical_url(value))):
+    if _INSTAGRAM_LINK.search(value) and (m := _TOPIC_URL.fullmatch(canonical_url(value))):
         value = urllib.parse.unquote(m.group(1)).strip()
     value = unicodedata.normalize("NFC", re.sub(r"\s+", " ", value.lstrip("#＃﹟")).strip())
     value = value.replace("İ", "i").lower()

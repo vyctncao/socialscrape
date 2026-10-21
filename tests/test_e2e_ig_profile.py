@@ -137,7 +137,7 @@ def test_private_profile(client):
 
 BAD_HANDLES = [
     "", " ", "@", "@jane@", "jane.", ".jane", "ja..ne", "jäne", "a" * 31, "jane?", "%40jane", "about", "explore",
-    "www.instagram.com/@jane", f"{IG}/jane/p/xyz/", f"{IG}/p/DLDXI0fylTC/", f"{IG}/stories/jane/",
+    "www.instagram.com/@jane", f"{IG}/jane/p/xyz/", f"{IG}/p/DLDXI0fylTC/", f"{IG}/stories/highlights/{HIGHLIGHT}/",
     "https://instagram.com.evil.com/jane/", "https://www.youtube.com/@jane", "javascript:alert(1)",
 ]
 

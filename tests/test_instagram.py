@@ -218,6 +218,12 @@ def test_post_url_takes_share_links(value, link):
     ("＠jane", "jane"), ("﹫jane", "jane"),  # the full-width '@' of Japanese and Chinese keyboards was a 400
     # the address bar while the profile's follower or following list is open was a 400
     ("https://www.instagram.com/jane/followers/", "jane"), ("instagram.com/jane/following?hl=en", "jane"),
+    # the address of jane's story, or of one item in it, a saved collection and instagr.am were 400s
+    ("https://www.instagram.com/stories/jane/", "jane"), ("instagram.com/stories/Jane.Doe_1", "Jane.Doe_1"),
+    ("https://www.instagram.com/stories/jane/3815154085155445315/?utm_source=ig_story_item_share&igsh=abc", "jane"),
+    ("https://www.instagram.com/jane/saved/all-posts/", "jane"),
+    ("https://www.instagram.com/jane/saved/recipes/17891234567890123/", "jane"),
+    ("instagr.am/jane", "jane"), ("HTTPS://INSTAGR.AM/jane/?hl=en", "jane"), ("instagr.am", "instagr.am"),
 ])
 def test_clean_handle(value, expected):
     assert ig.clean_handle(value) == expected
@@ -230,7 +236,13 @@ def test_clean_handle(value, expected):
                                    "challenge", "graphql", "qr", "nametag", "press", "your_activity", "@Challenge",
                                    "https://www.instagram.com/qr/", "notifications", "meta_verified", "＠",
                                    "https://www.instagram.com/jane/followers/x/",
-                                   "https://www.instagram.com/jane/follower/"])
+                                   "https://www.instagram.com/jane/follower/",
+                                   # a highlight is no account's story; nor is a story URL with more after it
+                                   "https://www.instagram.com/stories/highlights/18382085791177637/",
+                                   "https://www.instagram.com/stories/Highlights/", "instagram.com/stories/",
+                                   "https://www.instagram.com/stories/jane/x/", "instagram.com/stories/jane/1/2/",
+                                   "https://www.instagram.com/stories/explore/", "instagr.am/p/DLDXI0fylTC/",
+                                   "https://www.instagram.com/jane/saved/x/", "instagr.am/jane/saved/recipes/"])
 def test_clean_handle_rejects(value):
     with pytest.raises(BadRequest):
         ig.clean_handle(value)
@@ -246,7 +258,10 @@ def share_code(text: str) -> str:
                                    # the app's share link (was a 400): /s/<base64 of 'highlight:<id>'>
                                    f"https://www.instagram.com/s/{share_code(f'highlight:{HIGHLIGHT_ID}')}"
                                    "?story_media_id=3815154085155445315_8663171404&igsh=MWQ1ZGUxMzBkMA==",
-                                   f"instagram.com/s/{share_code(f'highlight:{HIGHLIGHT_ID}')}/"])
+                                   f"instagram.com/s/{share_code(f'highlight:{HIGHLIGHT_ID}')}/",
+                                   # on Instagram's old short domain (was a 400)
+                                   f"instagr.am/stories/highlights/{HIGHLIGHT_ID}/",
+                                   f"https://instagr.am/s/{share_code(f'highlight:{HIGHLIGHT_ID}')}"])
 def test_clean_highlight_id(value):
     assert ig.clean_highlight_id(value) == HIGHLIGHT_ID
     assert ig.clean_highlight_id("9" * 19) == "9" * 19
@@ -304,6 +319,9 @@ def test_clean_topic():
     assert ig.clean_topic("https://www.instagram.com/popular/basketball/?utm_source=explore_tag") == "basketball"
     assert ig.clean_topic("https://m.instagram.com/explore/tags/%E0%A4%AD%E0%A4%BE%E0%A4%B0%E0%A4%A4/") == "भारत"
     assert ig.clean_topic("https://www.instagram.com/popular/st-john-basketball/") == "st-john-basketball"
+    # the tag page's address on Instagram's old short domain was a 400
+    assert ig.clean_topic("instagr.am/explore/tags/cats/", single_word=True) == "cats"
+    assert ig.clean_topic("https://instagr.am/popular/funny-dogs/") == "funny-dogs"
     for bad in ("", "#", "a/b", "x?y", "a" * 101, "https://www.instagram.com/explore/tags/",
                 "https://www.instagram.com/explore/tags/a%2Fb/", "https://www.instagram.com/explore/tags/cats/top/",
                 "https://www.instagram.com/explore/locations/212988663/", "https://www.instagram.com/p/DaZMYijhtXd/"):
