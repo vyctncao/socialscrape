@@ -556,6 +556,43 @@ def test_map_popular_category_hub():
     assert_conforms(_sc(body), "/v1/instagram/search/popular", min_coverage=0.4)
 
 
+def test_mappers_read_a_field_of_another_type_as_missing():
+    # fix14: an owner, caption, usertag position, image size, DASH manifest, media_type, comment author, timeline
+    # or topic post author of another type (a string for an object, a list for a number) was a 500
+    odd = copy.deepcopy(REEL)
+    odd.update(user="jane", caption="I think I like this goosey life", video_dash_manifest=7)
+    small, large = odd["image_versions2"]["candidates"]
+    large["width"] = "1080"
+    odd["image_versions2"]["candidates"].append({"url": {"uri": "https://cdn.example/x.jpg"}, "width": 4000,
+                                                 "height": 4000})
+    odd["usertags"]["in"][0]["position"] = {"0": 0.5}
+    media = copy.deepcopy(REEL_MEDIA)
+    comment = media["comments_connection"]["edges"][0]["node"]
+    comment["user"] = "fan"
+    post = ig.map_post(odd, media)
+    assert post["display_url"] == small["url"] and post["__typename"] == "XDTGraphVideo"
+    assert "owner" not in post and post["edge_media_to_caption"] == {"edges": []} and "video_duration" not in post
+    assert post["edge_media_to_tagged_user"]["edges"][0]["node"].keys() == {"user"}
+    assert post["edge_media_to_parent_comment"]["edges"][0]["node"]["owner"] == {}
+    assert ig.map_comment(comment)["user"] == {}
+    assert ig.map_post({**REEL, "media_type": [2]})["__typename"] == "XDTGraphImage"
+    children = ig.map_post({**CAROUSEL, "carousel_media": [{"media_type": {"2": 2}}]})["edge_sidecar_to_children"]
+    assert children["edges"][0]["node"]["__typename"] == "XDTGraphImage"
+    licensed = {"music_info": {"music_asset_info": "Mariah Carey", "music_consumption_info": [False]}}
+    assert ig.music_attribution(licensed) == {"uses_original_audio": False}
+
+    profile = ig.map_profile({**PROFILE, "polaris_ordered_timeline_connection": "x"})
+    assert profile["edge_owner_to_timeline_media"] == {"edges": []}
+    edges = [{"node": {**PROFILE["polaris_ordered_timeline_connection"]["edges"][0]["node"], "media_type": [2]}}]
+    timeline = ig.map_profile({**PROFILE, "polaris_ordered_timeline_connection": {"page_info": "x", "edges": edges}})[
+        "edge_owner_to_timeline_media"]
+    assert "page_info" not in timeline and timeline["edges"][0]["node"]["__typename"] == "GraphImage"
+
+    node = {**TOPIC["xig_logged_out_popular_search_media_info"]["edges"][0]["node"], "user": "maxdog"}
+    data = {"xig_logged_out_popular_search_media_info": {"edges": [{"node": node}]}}
+    assert ig.map_popular("dogs", data, "")["posts"][0]["owner"] == {} and ig.map_hashtag_post(node)["owner"] == {}
+
+
 # --- routes, offline (fetchers stubbed with the data above) ---------------------------------
 
 
@@ -995,6 +1032,39 @@ def test_share_link_routes(client, stubbed, monkeypatch):
     body = client.get("/v2/instagram/media/transcript", params={"url": link}).json()
     assert body["transcripts"] == [{"id": REEL_PK, "shortcode": REEL_CODE, "text": "hello"}]
     assert seen == [f"{ig.WEB}/p/{REEL_CODE}/"]  # the post itself: yt-dlp can't open the share link
+
+
+def test_post_routes_without_a_shortcode_of_their_own(client, stubbed, monkeypatch):
+    # fix14: the comments of a post whose code wasn't a string, and a share link's transcript when its post had no
+    # code, were a 500 "Internal server error"
+    requests: list[str] = []
+    ie = SimpleNamespace(_API_BASE_URL="https://i.instagram.com/api/v1", _api_headers={}, _is_logged_in=True,
+                         _download_webpage_handle=None,
+                         _download_json=lambda url, *a, **kw: requests.append(url) or {"comments": [COMMENT]})
+
+    async def with_ydl(platform, fn, **opts):
+        return fn(SimpleNamespace(get_info_extractor=lambda name: ie, urlopen=None))
+
+    async def fetch_post(url):
+        return {**copy.deepcopy(CAROUSEL), "code": 7}, None
+
+    monkeypatch.setattr(ig, "with_ydl", with_ydl)
+    monkeypatch.setattr(ig, "fetch_post", fetch_post)
+    body = client.get("/v2/instagram/post/comments", params={"url": CAROUSEL_CODE}).json()
+    assert [c["id"] for c in body["comments"]] == [COMMENT["pk"]]
+    assert f"/media/{ig._id_to_pk(CAROUSEL_CODE)}/comments/" in requests[0]  # the shortcode of the URL asked for
+    message = "Instagram returned the post without its shortcode"
+    assert _err(client.get("/v2/instagram/post/comments", params={"url": SHARE}), 500, "upstream_error")[
+        "message"] == message
+    assert len(requests) == 1
+
+    monkeypatch.setattr(ig, "fetch_post", lambda url: _async(({k: v for k, v in REEL.items() if k != "code"}, None)))
+    monkeypatch.setattr(transcribe, "enabled", lambda: True)
+    monkeypatch.setattr(transcribe, "transcribe", lambda url, **kwargs: _async(SimpleNamespace(text="hello")))
+    assert _err(client.get("/v2/instagram/media/transcript", params={"url": SHARE}), 500, "upstream_error")[
+        "message"] == message
+    body = client.get("/v2/instagram/media/transcript", params={"url": REEL_CODE}).json()
+    assert body["transcripts"] == [{"id": REEL_PK, "shortcode": REEL_CODE, "text": "hello"}]  # the URL's
 
 
 def test_rejected_session_envelope(client, monkeypatch):

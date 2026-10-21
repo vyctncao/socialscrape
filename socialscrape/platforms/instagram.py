@@ -476,10 +476,16 @@ def _display(media: dict[str, Any]) -> str | None:
 
 def _best_image(media: dict[str, Any]) -> str | None:
     """Largest image_versions2 candidate (the full-size frame), else display_uri."""
-    candidates = traverse_obj(media, ("image_versions2", "candidates", lambda _, v: v["url"]))
+    candidates = traverse_obj(media, ("image_versions2", "candidates",
+                                      lambda _, v: v["url"] and isinstance(v["url"], str)))
     if candidates:
-        return max(candidates, key=lambda c: (c.get("width") or 0) * (c.get("height") or 0))["url"]
+        return max(candidates, key=lambda c: _size(c.get("width")) * _size(c.get("height")))["url"]
     return media.get("display_uri")
+
+
+def _size(value: Any) -> int | float:
+    """An image's width or height, 0 when it isn't a number."""
+    return value if isinstance(value, (int, float)) else 0
 
 
 def _video_url(media: dict[str, Any]) -> str | None:
@@ -490,7 +496,8 @@ def video_duration(media: dict[str, Any]) -> float | None:
     """Item's video_duration, else the DASH manifest's mediaPresentationDuration."""
     if isinstance(media.get("video_duration"), (int, float)):
         return float(media["video_duration"])
-    m = re.search(r'mediaPresentationDuration="([^"]+)"', media.get("video_dash_manifest") or "")
+    manifest = media.get("video_dash_manifest")
+    m = re.search(r'mediaPresentationDuration="([^"]+)"', manifest) if isinstance(manifest, str) else None
     return parse_duration(m.group(1)) if m else None
 
 
@@ -506,8 +513,8 @@ def music_attribution(clips: dict[str, Any] | None) -> dict[str, Any] | None:
             "audio_id": str_or_none(sound.get("audio_asset_id")),
         })
     if music := traverse_obj(clips, ("music_info", {dict})):
-        asset = music.get("music_asset_info") or {}
-        consumption = music.get("music_consumption_info") or {}
+        asset = traverse_obj(music, ("music_asset_info", {dict})) or {}
+        consumption = traverse_obj(music, ("music_consumption_info", {dict})) or {}
         return compact({
             "artist_name": asset.get("display_artist"),
             "song_name": asset.get("title"),
@@ -519,8 +526,8 @@ def music_attribution(clips: dict[str, Any] | None) -> dict[str, Any] | None:
     return None
 
 
-def _owner(user: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not user:
+def _owner(user: Any) -> dict[str, Any] | None:
+    if not isinstance(user, dict) or not user:
         return None
     return compact({
         "id": str_or_none(user.get("pk") or user.get("id")),
@@ -536,7 +543,8 @@ def _owner(user: dict[str, Any] | None) -> dict[str, Any] | None:
 def _tagged_users(media: dict[str, Any]) -> list[dict[str, Any]]:
     edges = []
     for tag in traverse_obj(media, ("usertags", "in", lambda _, v: isinstance(v["user"], dict))):
-        user, pos = tag["user"], tag.get("position") or [None, None]
+        user, pos = tag["user"], tag.get("position")
+        pos = pos if isinstance(pos, list) else []
         edges.append({"node": compact({
             "user": compact({k: user.get(k)
                              for k in ("full_name", "id", "is_verified", "profile_pic_url", "username")}),
@@ -546,10 +554,15 @@ def _tagged_users(media: dict[str, Any]) -> list[dict[str, Any]]:
     return edges
 
 
+def _graph_type(media_type: Any) -> str:
+    """media_type 1, 2 or 8 -> GraphImage, GraphVideo or GraphSidecar; GraphImage for any other value."""
+    return _GRAPH_TYPE.get(media_type, "GraphImage") if isinstance(media_type, int) else "GraphImage"
+
+
 def _sidecar_child(media: dict[str, Any]) -> dict[str, Any]:
     is_video = media.get("media_type") == 2
     return compact({
-        "__typename": "XDT" + _GRAPH_TYPE.get(media.get("media_type"), "GraphImage"),
+        "__typename": "XDT" + _graph_type(media.get("media_type")),
         "id": str_or_none(media.get("pk")),
         "shortcode": media.get("code"),
         "dimensions": compact({"height": media.get("original_height"), "width": media.get("original_width")}) or None,
@@ -564,7 +577,7 @@ def _sidecar_child(media: dict[str, Any]) -> dict[str, Any]:
 
 
 def _comment_node(node: dict[str, Any]) -> dict[str, Any]:
-    user = node.get("user") or {}
+    user = traverse_obj(node, ("user", {dict})) or {}
     replies = node.get("child_comment_count")
     return compact({
         "id": str_or_none(node.get("pk") or node.get("id")),
@@ -590,13 +603,13 @@ def map_post(product: dict[str, Any], media: dict[str, Any] | None = None, *,
     """Logged-out XIG media (or a logged-in media/info item) -> SC's data.xdt_shortcode_media."""
     mtype = product.get("media_type")
     is_video = mtype == 2
-    caption = product.get("caption") or {}
+    caption = traverse_obj(product, ("caption", {dict})) or {}
     page_info = traverse_obj(media, ("comments_connection", "page_info", {dict}))
     carousel = traverse_obj(product, ("carousel_media", ..., {dict}))
     out = compact({
         "id": str_or_none(product.get("pk")),
         "shortcode": product.get("code"),
-        "__typename": "XDT" + _GRAPH_TYPE.get(mtype, "GraphImage"),
+        "__typename": "XDT" + _graph_type(mtype),
         "thumbnail_src": _display(product),
         "display_url": _best_image(product),
         "video_url": _video_url(product) if is_video else None,
@@ -642,7 +655,7 @@ def map_post(product: dict[str, Any], media: dict[str, Any] | None = None, *,
 
 def map_comment(node: dict[str, Any]) -> dict[str, Any]:
     """comments_connection node -> SC v2 comment."""
-    user = node.get("user") or {}
+    user = traverse_obj(node, ("user", {dict})) or {}
     pk = str_or_none(user.get("pk") or user.get("id"))
     return {
         **compact({
@@ -666,7 +679,7 @@ def map_comment(node: dict[str, Any]) -> dict[str, Any]:
 def _timeline_node(node: dict[str, Any]) -> dict[str, Any]:
     text = traverse_obj(node, ("caption", "text", {str}))
     return compact({
-        "__typename": _GRAPH_TYPE.get(node.get("media_type"), "GraphImage"),
+        "__typename": _graph_type(node.get("media_type")),
         "id": str_or_none(node.get("pk")),
         "shortcode": node.get("code"),
         "display_url": node.get("display_uri"),
@@ -681,8 +694,8 @@ def _timeline_node(node: dict[str, Any]) -> dict[str, Any]:
 
 def map_profile(user: dict[str, Any], post_count: tuple[int, bool] | None = None) -> dict[str, Any]:
     """Merged xig_user_by_username -> SC's data.user (GraphQL-style profile)."""
-    timeline = user.get("polaris_ordered_timeline_connection") or {}
-    page_info = timeline.get("page_info") or {}
+    timeline = traverse_obj(user, ("polaris_ordered_timeline_connection", {dict})) or {}
+    page_info = traverse_obj(timeline, ("page_info", {dict})) or {}
     return compact({
         "biography": user.get("biography"),
         "bio_links": [compact({k: link.get(k) for k in ("title", "lynx_url", "url", "link_type")})
@@ -862,7 +875,7 @@ def map_popular(query: str, data: dict[str, Any], html: str) -> dict[str, Any]:
     posts = []
     for node in topic_nodes(data):
         video = _is_video_node(node)
-        user = node.get("user") or {}
+        user = traverse_obj(node, ("user", {dict})) or {}
         posts.append(compact({
             "id": node.get("id"),
             "shortcode": node.get("code"),
@@ -889,7 +902,7 @@ def map_popular(query: str, data: dict[str, Any], html: str) -> dict[str, Any]:
 def map_hashtag_post(node: dict[str, Any]) -> dict[str, Any]:
     """Tag-page media node -> SC search/hashtag post."""
     video = _is_video_node(node)
-    user = node.get("user") or {}
+    user = traverse_obj(node, ("user", {dict})) or {}
     return compact({
         "id": str_or_none(node.get("pk")),
         "__typename": "XDTGraphVideo" if video else "XDTGraphImage",
@@ -915,6 +928,13 @@ def video_items(product: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
 
 
 # --- routes ---------------------------------------------------------------------------
+
+
+def _post_code(product: dict[str, Any], shortcode: str) -> str:
+    """The shortcode of the post fetch_post returned, else the URL's ('' for a share link)."""
+    if code := traverse_obj(product, ("code", {str})) or shortcode:
+        return code
+    raise UpstreamError("Instagram returned the post without its shortcode")
 
 
 def _no_pagination(value: str | None, name: str) -> None:
@@ -957,7 +977,7 @@ async def instagram_post_comments(url: str = Query(...), cursor: str | None = No
                            "threads and yt-dlp makes no replies request")
     product, media = await fetch_post(canonical)
     if media is None:
-        data = await with_ydl(PLATFORM, _comments_api_flow(product.get("code") or shortcode))
+        data = await with_ydl(PLATFORM, _comments_api_flow(_post_code(product, shortcode)))
         return {"comments": [map_comment(n) for n in traverse_obj(data, ("comments", ..., {dict}))]}
     return {"comments": [map_comment(n) for n in comment_nodes(media)]}
 
@@ -974,8 +994,9 @@ async def instagram_transcript(url: str = Query(...), allow_long_transcription: 
     shortcode, canonical = post_url(url)
     transcribe.require_enabled()  # 501 before any Instagram request
     product, _ = await fetch_post(canonical)
+    code = _post_code(product, shortcode)
     if not shortcode:  # a share link: yt-dlp downloads the post fetch_post found behind it
-        canonical = f"{WEB}/p/{product['code']}/"
+        canonical = f"{WEB}/p/{code}/"
     videos = video_items(product)
     if not videos:
         raise NotFound("This post has no video to transcribe", code="no_video")
@@ -983,7 +1004,7 @@ async def instagram_transcript(url: str = Query(...), allow_long_transcription: 
     carousel = bool(product.get("carousel_media"))
     transcripts = []
     for index, item in videos:
-        entry = {"id": str_or_none(item.get("pk")), "shortcode": item.get("code") or product.get("code"), "text": None}
+        entry = {"id": str_or_none(item.get("pk")), "shortcode": item.get("code") or code, "text": None}
         transcripts.append(entry)
         if item.get("has_audio") is False:  # video-only stream: nothing to transcribe (ffmpeg finds no audio)
             continue
