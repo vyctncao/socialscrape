@@ -444,6 +444,11 @@ def test_post_count_from_meta():
     assert ig.post_count_from_meta('<meta content="1M Followers, 5 Following, 12K Posts - x" '
                                    'property="og:description" />') == (12000, True)
     assert ig.post_count_from_meta("<html></html>") is None
+    # a count past a float's range ('999…9K Posts') or past the 4300 digits int() reads was a 500
+    big = f'<meta content="1M Followers, 5 Following, {"9" * 400}K Posts - x" property="og:description" />'
+    assert ig.post_count_from_meta(big) is None
+    assert ig._total_media_count(f'"total_media_count_intl":"{"9" * 5000}"') is None
+    assert ig._total_media_count(f'"total_media_count_intl":"{"9" * 400}M"') is None
 
 
 def test_map_profile():

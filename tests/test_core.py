@@ -110,6 +110,16 @@ def test_util():
     assert util.clock(348, always_hours=True) == "00:05:48"
 
 
+def test_parse_count_reads_a_number_too_big_to_hold_as_missing():
+    """A count past a float's range ('999…9K views') or past the 4300 digits int() reads was a 500 (OverflowError,
+    ValueError) wherever a listing or a post reads one. It reads as missing, and so do NaN and ±Infinity."""
+    for junk in ("9" * 400 + "K views", "9" * 400 + ".5M", "9" * 5000, "9" * 5000 + " videos", "9" * 5000 + "M",
+                 float("nan"), float("inf"), float("-inf")):
+        assert util.parse_count(junk) is None, str(junk)[:20]
+    assert util.parse_count("9" * 400 + " views") == int("9" * 400) and util.parse_count(10 ** 400) == 10 ** 400
+    assert util.parse_count(1e308) == int(1e308) and util.parse_count(2.7) == 2
+
+
 def test_clean_param_drops_what_a_copied_value_carries_along():
     link = "https://youtu.be/jNQXAC9IVRw"
     for pasted in (f"\ufeff{link}", f"\u200b{link}\u200b", f"\u200e {link} \u200f", f"\u2068{link}\u2069",

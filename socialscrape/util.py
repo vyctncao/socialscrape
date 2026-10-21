@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -13,22 +14,25 @@ _COUNT = re.compile(r"([\d.,]+)\s*([kmb])?", re.I)
 
 
 def parse_count(text: Any) -> int | None:
-    """'1.2M views' -> 1200000, '9,221 videos' -> 9221, 42 -> 42, None -> None."""
+    """'1.2M views' -> 1200000, '9,221 videos' -> 9221, 42 -> 42, None -> None; None for NaN, infinity or a number
+    too long to hold ('9999…K', or past int()'s 4300 digits)."""
     if text is None or isinstance(text, bool):
         return None
-    if isinstance(text, (int, float)):
-        return int(text)
+    if isinstance(text, int):
+        return text
+    if isinstance(text, float):
+        return int(text) if math.isfinite(text) else None
     m = _COUNT.search(str(text))
     if not m:
         return None
     number, suffix = m.group(1), (m.group(2) or "").lower()
-    if suffix:
-        try:
+    try:
+        if suffix:
             return int(round(float(number.replace(",", "")) * _SUFFIX[suffix]))
-        except ValueError:
-            return None
-    digits = re.sub(r"[^\d]", "", number)
-    return int(digits) if digits else None
+        digits = re.sub(r"[^\d]", "", number)
+        return int(digits) if digits else None
+    except (ValueError, OverflowError):
+        return None
 
 
 # ISO 639-3 codes of the standard variety of a macrolanguage, which ISO639Utils (639-1/639-2 only) doesn't know.

@@ -796,6 +796,17 @@ def test_mappers_read_a_field_of_another_type_as_missing():
     assert P.lockup_video(vm)["owner"] is None
 
 
+def test_mappers_read_a_count_too_big_to_hold_as_missing():
+    """A count past a float's range ('999…9M views') or past the 4300 digits int() reads was a 500 (OverflowError,
+    ValueError) in the mappers every listing goes through. It reads as missing."""
+    assert P.view_count("9" * 400 + "K views") is None and P.count("9" * 5000 + " subscribers") is None
+    assert P.view_count("9" * 400 + " views") == int("9" * 400)  # a long one that still holds is kept
+    vm = copy.deepcopy(LOCKUP_VIDEO)
+    rows = vm["metadata"]["lockupMetadataViewModel"]["metadata"]["contentMetadataViewModel"]["metadataRows"]
+    rows[1]["metadataParts"][0] = {"text": {"content": "9" * 400 + "M views"}, "accessibilityLabel": "many views"}
+    assert P.lockup_video(vm)["viewCountInt"] is None
+
+
 # --- offline: routes ---------------------------------------------------------------------
 
 

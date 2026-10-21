@@ -729,6 +729,37 @@ def test_watch_next_video_years_long_stream():
         assert P.badge_length(junk) == (None, None), junk
 
 
+def test_counts_too_big_to_hold_read_as_missing(ies):
+    """A count past the 4300 digits int() reads or past a float's range ('999…9K views') was a 500 (ValueError,
+    OverflowError) in a comment count, a related video's views, a comment's likes and a post's likes. It reads as
+    missing; a related video or a comment that yt-dlp can't read for one is skipped."""
+    assert P.exact_count("9" * 5000 + " Comments") is None and P.compact_count("9" * 5000) is None
+    assert P.compact_count("9" * 400 + "K") is None and P.compact_count("9" * 400) == int("9" * 400)
+    video = P.watch_next_video(ui_tab("en"), lockup("9" * 5000, "9" * 5000 + " views", "", "4:05"))
+    assert video["viewCountInt"] is None and video["lengthInSeconds"] == 245
+    big = "9" * 400 + "K"  # yt-dlp's own reading of it overflows too: the related video is skipped
+    assert P.watch_next_video(ui_tab("en"), lockup(big, f"{big} views", "", "4:05")) is None
+    liked = {"interactionType": {"type": "LikeAction"}, "userInteractionCount": float("inf")}
+    assert P.post_likes({}, {"interactionStatistic": [liked]}) is None
+    assert P.post_likes({"voteCount": {"simpleText": big}}, {}) is None
+    label = {"accessibilityData": {"accessibilityData": {"label": f"Like along with {'9' * 5000} other people"}}}
+    button = {"commentActionButtonsRenderer": {"likeButton": {"toggleButtonRenderer": label}}}
+    assert P.post_likes({"actionButtons": button, "voteCount": {"simpleText": "1.2K"}}, {}) == 1200
+    for likes, age in (("1.2K", "2 days ago"), (big, "2 days ago"), ("5", f"{'9' * 400} years ago")):
+        payload = {"properties": {"commentId": "UgxA", "content": {"content": "Hi"}, "publishedTime": age},
+                   "toolbar": {"likeCountA11y": f"{likes} likes"}}
+        entities = [{"entityKey": "K", "payload": {"commentEntityPayload": payload}}]
+        reply = P.map_comment(ies[0], {"commentViewModel": {"commentKey": "K"}}, entities, level=1,
+                              with_replies_token=False)
+        renderer = {"commentRenderer": {"commentId": "UgxB", "voteCount": {"simpleText": likes},
+                                        "publishedTimeText": {"simpleText": age}}}
+        old_reply = P.map_comment(ies[0], renderer, [], level=1, with_replies_token=False)  # the older shape
+        if likes == "1.2K":
+            assert reply["engagement"]["likes"] == old_reply["engagement"]["likes"] == 1200
+        else:
+            assert reply is None and old_reply is None, (likes[:5], age[:5])
+
+
 def test_relative_time_words_of_more_ui_languages():
     now, day = P.relative_ts("now 0 seconds"), 86400
     for lang, text, seconds in (

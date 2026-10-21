@@ -8,13 +8,14 @@ helpers are used (relative-time parsing, comment and lockup parsing).
 from __future__ import annotations
 
 import base64
+import math
 import re
 import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
-from yt_dlp.utils import datetime_from_str, parse_duration, parse_iso8601, traverse_obj
+from yt_dlp.utils import datetime_from_str, int_or_none, parse_duration, parse_iso8601, traverse_obj
 
 from ..util import clock, format_count, iso_utc, parse_count
 
@@ -200,7 +201,15 @@ def exact_count(text: str | None) -> int | None:
     m = _EXACT.search(text or "")
     if not m or _clean(text[:m.start()]).rpartition(" ")[2].lower() in _SCALES:
         return None
-    return int(re.sub(r"\D", "", m.group(1)))
+    return _digits(m.group(1))
+
+
+def _digits(number: str) -> int | None:
+    """The number a run of digits and separators spells; None past the 4300 digits int() reads."""
+    try:
+        return int(re.sub(r"\D", "", number))
+    except ValueError:
+        return None
 
 
 _COMPACT = re.compile(r"(?:([^\d\s]+)\s*)?(\d+(?:[.,\s']\d+)*)(?:\s*([^\d\s]+(?: [^\d\s]+)?))?")
@@ -214,11 +223,12 @@ def compact_count(text: str | None, lang: str | None = None) -> int | None:
         return None
     word, number = unicodedata.normalize("NFC", (m.group(1) or m.group(3) or "").lower().rstrip(".")), m.group(2)
     if not word:
-        return int(re.sub(r"\D", "", number)) if re.fullmatch(rf"{_GROUPED}|\d+", number) else None
+        return _digits(number) if re.fullmatch(rf"{_GROUPED}|\d+", number) else None
     power = (_SCALES_BY_LANG.get(lang or "") or {}).get(word, _SCALES.get(word))
     if power is None or not (num := re.fullmatch(r"(\d+)(?:[.,](\d{1,2}))?", number)):
         return None
-    return round(float(f"{num.group(1)}.{num.group(2) or 0}") * 10 ** power)
+    value = float(f"{num.group(1)}.{num.group(2) or 0}") * 10 ** power
+    return round(value) if math.isfinite(value) else None  # not past a float's range ('999…9K')
 
 
 def iso_ts(text: str | None) -> float | None:
@@ -466,11 +476,20 @@ def _readable_sources(lockup: dict[str, Any]) -> dict[str, Any]:
     return {**lockup, "contentImage": {**content, "thumbnailViewModel": {**view, "image": image}}}
 
 
+def _unless_overflow(extract: Any, node: Any) -> dict[str, Any] | None:
+    """extract(node), one of yt-dlp's readers, or None where it overflows on a number too big to hold: it rounds a
+    count past a float's range ('999…9K views') to an int, and takes an age ('999…9 years ago') from today."""
+    try:
+        return extract(node)
+    except OverflowError:
+        return None
+
+
 def watch_next_video(tab_ie: Any, lockup: dict[str, Any]) -> dict[str, Any] | None:
     """One related video from the watch page's lockupViewModel."""
     if lockup.get("contentType") != "LOCKUP_CONTENT_TYPE_VIDEO":
         return None
-    entry = tab_ie._extract_lockup_view_model(_readable_sources(lockup))
+    entry = _unless_overflow(tab_ie._extract_lockup_view_model, _readable_sources(lockup))
     if not entry or not entry.get("id"):
         return None
     meta = traverse_obj(lockup, ("metadata", "lockupMetadataViewModel", {dict})) or {}
@@ -692,14 +711,14 @@ def map_comment(ie: Any, item: dict[str, Any], entities: list[dict[str, Any]], *
         keys = {k for k in (view_model.get("commentKey"), view_model.get("toolbarStateKey"))
                 if k and isinstance(k, str)}
         own = [e for e in entities if traverse_obj(e, ("entityKey", {str})) in keys]
-        comment = ie._extract_comment(own) if own else None
+        comment = _unless_overflow(ie._extract_comment, own) if own else None
         payload = traverse_obj(own, (..., "payload", "commentEntityPayload", {dict}, any)) or {}
         replies = parse_count(traverse_obj(payload, ("toolbar", "replyCount", {str}))) or 0
         raw_level = traverse_obj(payload, ("properties", "replyLevel", {int}))
     else:
         renderer = (traverse_obj(thread, ("comment", "commentRenderer", {dict}))
                     or traverse_obj(item, ("commentRenderer", {dict})))
-        comment = ie._extract_comment_old(renderer) if renderer else None
+        comment = _unless_overflow(ie._extract_comment_old, renderer) if renderer else None
         replies = (renderer or {}).get("replyCount") or 0
     if not comment:
         return None
@@ -789,7 +808,7 @@ def post_likes(post: dict[str, Any], posting: dict[str, Any]) -> int | None:
     """Exact like count (schema.org LikeAction or the like button's label), else the rounded voteCount."""
     exact = traverse_obj(posting, (
         "interactionStatistic", lambda _, v: traverse_obj(v, ("interactionType", "type")) == "LikeAction",
-        "userInteractionCount", {lambda n: int(n)}, any))
+        "userInteractionCount", {int_or_none}, any))
     if exact is None:
         label = traverse_obj(post, (
             "actionButtons", "commentActionButtonsRenderer", "likeButton", "toggleButtonRenderer",
