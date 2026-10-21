@@ -46,6 +46,11 @@ def handle_of(path: str | None) -> str | None:
     return unquote(m.group(1)) if m else None
 
 
+# A handle as a collab dialog's entry shows it, between bidi isolates:
+# '\u200e\u2068@sauceplusofficial\u2069 • \u2068244K subscribers\u2069'.
+_SHOWN_HANDLE = re.compile(r"@([^\s\u2068\u2069•]+)")
+
+
 def channel_block(channel_id: str | None, title: str | None, path: str | None) -> dict[str, Any]:
     """SC's {id, url, handle, title} channel object from a browse path."""
     handle = handle_of(path)
@@ -326,7 +331,7 @@ def collaborators(initial_data: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for item in items:
         browse = traverse_obj(item, ("title", "commandRuns", ..., "onTap", "innertubeCommand", "browseEndpoint", {dict}, any)) or {}
-        handle = traverse_obj(item, ("subtitle", "content", {lambda s: re.search(r"@([\w.\-]+)", s)}, {lambda m: m.group(1)}))
+        handle = traverse_obj(item, ("subtitle", "content", {_SHOWN_HANDLE.search}, {lambda m: m.group(1)}))
         block = channel_block(browse.get("browseId"), traverse_obj(item, ("title", "content", {str})),
                               f"/@{handle}" if handle else browse.get("canonicalBaseUrl"))
         if block["id"] or block["title"]:
@@ -419,8 +424,7 @@ def lockup_channel(meta: dict[str, Any], row_title: str | None) -> dict[str, Any
             "dialogViewModel", "customContent", "listViewModel", "listItems", 0, "listItemViewModel", {dict})) or {}
         command = traverse_obj(first, (*_TAP, {dict})) or {}
         title = traverse_obj(first, ("title", "content", {str})) or row_title
-        handle = traverse_obj(first, ("subtitle", "content", {lambda s: re.search(r"@([^\s⁨⁩•]+)", s)},
-                                      {lambda m: m.group(1)}))
+        handle = traverse_obj(first, ("subtitle", "content", {_SHOWN_HANDLE.search}, {lambda m: m.group(1)}))
         if handle:
             command = {**command, "browseEndpoint": {
                 **(command.get("browseEndpoint") or {}), "canonicalBaseUrl": f"/@{handle}"}}
@@ -501,8 +505,22 @@ def chapters(info: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def video_channel(info: dict[str, Any]) -> dict[str, Any]:
-    handle = (info.get("uploader_id") or "").lstrip("@") or None
+def owner_handle(initial_data: dict[str, Any], player_responses: list[dict[str, Any]]) -> str | None:
+    """The uploader's handle, from the owner links yt-dlp reads uploader_id from. yt-dlp's handle pattern
+    ('@[\\w.-]{3,30}') stops at a middle dot or a combining mark, such as a vowel sign of Thai, Gujarati or
+    Malayalam, so its uploader_id cuts such a handle short ('TVമലയാളം' -> 'TVമലയ') or, with fewer than three
+    characters before the mark, has none ('ช่องทําอาหาร')."""
+    owner = traverse_obj(_renderer(initial_data, "videoSecondaryInfoRenderer"), ("owner", "videoOwnerRenderer", {dict}))
+    profiles = (..., "microformat", "playerMicroformatRenderer", "ownerProfileUrl", {str})
+    links = (("navigationEndpoint", ("title", "runs", ..., "navigationEndpoint")),
+             (("commandMetadata", "webCommandMetadata", "url"), ("browseEndpoint", "canonicalBaseUrl")), {str})
+    urls = [*traverse_obj(player_responses, profiles), *traverse_obj(owner, links)]
+    return next((handle for url in urls if (handle := handle_of(url))), None)
+
+
+def video_channel(info: dict[str, Any], initial_data: dict[str, Any],
+                  player_responses: list[dict[str, Any]]) -> dict[str, Any]:
+    handle = owner_handle(initial_data, player_responses) or (info.get("uploader_id") or "").lstrip("@") or None
     return {
         "id": info.get("channel_id"),
         "url": f"{YT}/@{handle}" if handle else info.get("channel_url"),
@@ -562,7 +580,7 @@ def video_payload(info: dict[str, Any], initial_data: dict[str, Any], player_res
         "viewCountInt": view_count,
         "publishDateText": publish_date_text(initial_data) or date_text(info.get("timestamp")),
         "collaborators": collaborators(initial_data),
-        "channel": video_channel(info),
+        "channel": video_channel(info, initial_data, player_responses),
         "chapters": chapters(info),
         "watchNextVideos": watch_next_videos(tab_ie, initial_data),
         "keywords": info.get("tags") or [],

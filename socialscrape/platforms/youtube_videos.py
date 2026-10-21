@@ -496,8 +496,11 @@ async def youtube_community_post(url: str = Query(...)):
     return await run(go)
 
 
-def sponsors_payload(info: dict[str, Any], paid: bool, transcript: subtitles.Transcript | None) -> dict[str, Any]:
-    channel = P.video_channel(info)
+def sponsors_payload(info: dict[str, Any], raw: dict[str, Any],
+                     transcript: subtitles.Transcript | None) -> dict[str, Any]:
+    """raw: extract_watch's watch-page data."""
+    channel = P.video_channel(info, raw["initial_data"], raw["player_responses"])
+    paid = P.is_paid_promotion(raw["player_responses"])
     own = {P._brand_key(v) for v in (channel["title"], channel["handle"]) if v} - {""}
     text = transcript.text if transcript and transcript.segments else None
     sponsors, methods = P.detect_sponsors(info.get("description"), text, own=own, paid_promotion=paid)
@@ -538,6 +541,6 @@ async def youtube_video_sponsors(url: str = Query(...), language: str | None = N
                 transcript = None  # best effort: the description alone still counts
             if transcript and transcript.segments:
                 break
-        return sponsors_payload(info, P.is_paid_promotion(raw["player_responses"]), transcript)
+        return sponsors_payload(info, raw, transcript)
 
     return await run(go)

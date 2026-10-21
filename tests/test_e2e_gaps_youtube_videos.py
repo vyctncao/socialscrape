@@ -14,6 +14,7 @@ from __future__ import annotations
 import concurrent.futures as cf
 import re
 import socket
+import unicodedata
 
 import httpx2
 import pytest
@@ -168,6 +169,26 @@ def test_collaborators(client, rick):
     for c in collabs:
         assert c["id"].startswith("UC") and c["url"] == f"https://www.youtube.com/@{c['handle']}" and c["title"]
     assert rick["collaborators"] == []
+
+
+@pytest.mark.live
+def test_video_channel_handle_with_combining_marks(client):
+    """yt-dlp's uploader_id stops at a handle's first combining mark, so the video route cut such a handle short
+    ('TVമലയാളം' -> 'TVമലയ') or, for most Thai, Bengali, Gujarati or Kannada ones, gave none. Gujarati handles have
+    a vowel sign in nearly every word; a video of such a channel must name it in full, on the sponsors route too."""
+    channels = ok(client, "/v1/youtube/search", query="ગુજરાતી", type="channels")["channels"]
+    marked = [ch for ch in channels if any(unicodedata.category(c)[0] == "M" for c in ch["handle"] or "")]
+    for ch in marked[:3]:
+        videos = ok(client, "/v1/youtube/channel-videos", channelId=ch["id"])["videos"]
+        if videos:
+            break
+    else:
+        pytest.skip(f"no video from a channel with a combining mark in its handle: {[c['handle'] for c in channels]}")
+    want = {"id": ch["id"], "url": f"https://www.youtube.com/@{ch['handle']}", "handle": ch["handle"]}
+    channel = ok(client, "/v1/youtube/video", url=watch(videos[0]["id"]))["channel"]
+    assert {k: channel[k] for k in want} == want, videos[0]["id"]
+    channel = ok(client, "/v1/youtube/video/sponsors", url=watch(videos[0]["id"]))["video"]["channel"]
+    assert {k: channel[k] for k in want} == want, videos[0]["id"]
 
 
 @pytest.mark.live

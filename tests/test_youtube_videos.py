@@ -6,6 +6,7 @@ import base64
 import json
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 import yt_dlp
@@ -557,6 +558,62 @@ def test_video_payload_live_stream_title():
     assert P.video_payload({"id": "abcdefghijk", "title": "Old"}, {}, [], ui_tab("en"))["title"] == "Old"
 
 
+def owner_page(path: str, *, in_title: bool = False) -> dict:
+    """A watch page whose videoOwnerRenderer links the channel at path, from its title run when in_title."""
+    endpoint = {"browseEndpoint": {"browseId": "UCx", "canonicalBaseUrl": path}}
+    owner = {"title": {"runs": [{"text": "A channel", "navigationEndpoint": endpoint}]}} if in_title else {
+        "navigationEndpoint": endpoint}
+    return {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [
+        {"videoSecondaryInfoRenderer": {"owner": {"videoOwnerRenderer": owner}}}]}}}}}
+
+
+def owner_profile(url: str) -> list[dict]:
+    """Player responses whose microformat links the channel at url."""
+    return [{}, {"microformat": {"playerMicroformatRenderer": {"ownerProfileUrl": url}}}]
+
+
+def test_video_channel_handle_with_combining_marks():
+    """yt-dlp's uploader_id stops at a handle's first middle dot or combining mark (the vowel signs of Thai,
+    Bengali, Malayalam...): 'TVമലയാളം' came out 'TVമലയ', and 'ช่องทําอาหาร', with a mark in its first three
+    characters, as no handle. The handle is read from the owner links yt-dlp reads it from."""
+    info = {"id": "abcdefghijk", "channel_id": "UCx", "channel": "TV മലയാളം", "uploader_id": "@TVമലയ",
+            "channel_url": "https://www.youtube.com/channel/UCx"}
+    players = owner_profile("http://www.youtube.com/@" + quote("TVമലയാളം"))
+    assert P.video_payload(info, {}, players, ui_tab("en"))["channel"] == {
+        "id": "UCx", "url": "https://www.youtube.com/@TVമലയാളം", "handle": "TVമലയാളം", "title": "TV മലയാളം"}
+    no_id = {**info, "uploader_id": None}
+    for page in (owner_page("/@" + quote("ช่องทําอาหาร")), owner_page("/@" + quote("ช่องทําอาหาร"), in_title=True)):
+        assert P.video_channel(no_id, page, [{}])["handle"] == "ช่องทําอาหาร"
+    assert P.video_channel(no_id, {}, owner_profile("http://www.youtube.com/@l%C2%B7l"))["handle"] == "l·l"
+    # no link names a handle: yt-dlp's uploader_id, else the channel URL
+    no_handle = owner_page("/channel/UCx"), owner_profile("http://www.youtube.com/channel/UCx")
+    assert P.video_channel({**info, "uploader_id": "@tvmalayalam"}, *no_handle)["handle"] == "tvmalayalam"
+    assert P.video_channel(no_id, *no_handle) == {
+        "id": "UCx", "url": "https://www.youtube.com/channel/UCx", "handle": None, "title": "TV മലയാളം"}
+
+
+def test_collaborators_handle_with_combining_marks():
+    """A collab entry's handle comes from its subtitle, which was read only as far as \\w goes: 'TVമലയ' for
+    'TVമലയാളം', 'ช' for 'ช่องทําอาหาร'."""
+    def entry(title: str, handle: str, channel_id: str) -> dict:
+        browse = {"browseId": channel_id, "canonicalBaseUrl": f"/channel/{channel_id}"}
+        return {"listItemViewModel": {
+            "title": {"content": title, "commandRuns": [{"onTap": {"innertubeCommand": {"browseEndpoint": browse}}}]},
+            "subtitle": {"content": f"\u200e\u2068@{handle}\u2069 • \u2068790 subscribers\u2069"}}}
+
+    items = [entry("TV മലയാളം", "TVമലയാളം", "UCa"), entry("ช่องทำอาหาร", "ช่องทําอาหาร", "UCb"),
+             entry("l·l", "l·l", "UCc")]
+    dialog = {"customContent": {"listViewModel": {"listItems": items}}}
+    owner = {"attributedTitle": {"commandRuns": [{"onTap": {"innertubeCommand": {"showDialogCommand": {
+        "panelLoadingStrategy": {"inlineContent": {"dialogViewModel": dialog}}}}}}]}}
+    page = {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [
+        {"videoSecondaryInfoRenderer": {"owner": {"videoOwnerRenderer": owner}}}]}}}}}
+    assert [(c["id"], c["handle"], c["url"]) for c in P.collaborators(page)] == [
+        ("UCa", "TVമലയാളം", "https://www.youtube.com/@TVമലയാളം"),
+        ("UCb", "ช่องทําอาหาร", "https://www.youtube.com/@ช่องทําอาหาร"),
+        ("UCc", "l·l", "https://www.youtube.com/@l·l")]
+
+
 def test_watch_next_videos_in_other_ui_languages():
     indonesian = P.watch_next_video(ui_tab("id"), lockup("5,5 jt", "5,5 jt x ditonton", "3 minggu yang lalu", "18.32"))
     assert indonesian["viewCountInt"] == 5500000 and indonesian["lengthText"] == "18:32"
@@ -879,6 +936,21 @@ def test_sponsors_route_transcript_fallback(client, monkeypatch):
     monkeypatch.setattr(M, "download_transcript", blocked)
     r = client.get("/v1/youtube/video/sponsors", params={"url": watch(SPONSORED)})
     assert r.status_code == 503 and r.json()["error"] == "upstream_blocked"
+
+
+def test_sponsors_route_channel_handle_with_combining_marks(client, monkeypatch):
+    """The sponsors route reads the uploader's handle as the video route does, and its brand keys don't count the
+    channel's own site as a sponsor; yt-dlp had no handle for 'ครัวป้าแดง-PaDaengKitchen'."""
+    handle = "ครัวป้าแดง-PaDaengKitchen"
+    info = {"id": "abcdefghijk", "title": "A video", "channel_id": "UCx", "channel": "ครัวป้าแดง", "uploader_id": None,
+            "description": "Use code PADAENG10 at https://padaengkitchen.com for 10% off."}
+    raw = {"initial_data": owner_page("/@" + quote(handle)), "player_responses": [{}]}
+    monkeypatch.setattr(M, "extract_watch", lambda ydl, v, process=True: (info, raw))
+    monkeypatch.setattr(M, "download_transcript", lambda *a, **k: None)
+    body = client.get("/v1/youtube/video/sponsors", params={"url": watch("abcdefghijk")}).json()
+    assert body["video"]["channel"] == {"id": "UCx", "url": f"https://www.youtube.com/@{handle}", "handle": handle,
+                                        "title": "ครัวป้าแดง"}
+    assert body["suspectedSponsors"] == [] and body["sponsorDetection"]["status"] == "not_found"
 
 
 def test_community_post_route(client, monkeypatch):
