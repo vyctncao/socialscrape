@@ -139,20 +139,37 @@ def playlist_id_of(value: str) -> str:
     return value
 
 
+# Compatibility forms YouTube's hashtags keep, where NFKC would rewrite them ('CO₂' -> 'CO2', '½' -> '1⁄2').
+_KEPT_FORMS = ("<super>", "<sub>", "<circle>", "<vertical>", "<fraction>")
+
+
+def _decompose(c: str) -> str:
+    """c decomposed as NFKC decomposes it, short of the characters YouTube's hashtags keep: superscript,
+    subscript, circled, vertical and fraction forms, Roman numerals ('Ⅳ', only lower-cased), Thai SARA AM
+    ('ทำ', which NFKC splits into 'ทํา') and the Hangul compatibility jamo keyboards type ('ㅋㅋ', which NFKC
+    makes conjoining jamo, 'ᄏᄏ'; half-width ones become them). Other compatibility characters go as NFKC has
+    them, the Lao AM ('ຳ') and Armenian 'և' among them."""
+    parts = unicodedata.decomposition(c).split()
+    if (not parts or parts[0] in _KEPT_FORMS or c == "\u0e33" or "\u2160" <= c <= "\u217f"
+            or "\u3131" <= c <= "\u318e"):
+        return c
+    return "".join(_decompose(chr(int(x, 16))) for x in parts if not x.startswith("<"))
+
+
 def hashtag_of(value: str) -> tuple[str, bool]:
     """'#Funny' / '…/hashtag/funny' / '…/hashtag/funny/shorts' -> ('funny', whether it named the Shorts tab).
 
     The tag is YouTube's canonical form, the one its own /hashtag/<tag> page puts in the feed params (any other
-    spelling is a valid but empty feed): NFKC ('ﬁ' -> 'fi', decomposed 'ü' composed), lower case per character
-    ('İ' -> 'i', not 'i' + U+0307), final sigma folded ('κόσμος' -> 'κόσμοσ'), ZWNJ/ZWJ dropped. 'ß' and the
-    dotless 'ı' stay."""
+    spelling is another feed, usually empty): NFKC ('ﬁ' -> 'fi', decomposed 'ü' composed) short of the
+    characters YouTube keeps (see _decompose), lower case per character ('İ' -> 'i', not 'i' + U+0307), final
+    sigma folded ('κόσμος' -> 'κόσμοσ'), ZWNJ/ZWJ dropped. 'ß' and the dotless 'ı' stay."""
     value, shorts = value.strip(), False
     if parsed := _yt_url(value):
         m = re.fullmatch(r"/hashtag/([^/]+)(/shorts)?/?", parsed.path)
         if not m:
             raise BadRequest(f"Not a YouTube hashtag URL: {value}")
         value, shorts = urllib.parse.unquote(m.group(1)), bool(m.group(2))
-    tag = unicodedata.normalize("NFKC", value.lstrip("#"))
+    tag = unicodedata.normalize("NFC", "".join(map(_decompose, value.lstrip("#"))))
     canonical = re.sub("[\u200c\u200d]", "", "".join("i" if c == "İ" else c.lower() for c in tag).replace("ς", "σ"))
     if not canonical or not _word(tag):
         raise BadRequest(f"Invalid hashtag: {value}")
@@ -683,7 +700,8 @@ async def youtube_search(query: str = Query(...),
 
 
 @sc_get(router, "/v1/youtube/search/hashtag", source=f"{_SRC} (/hashtag/<tag> browse tabs + continuations)",
-        notes="The tag is matched in YouTube's canonical form (NFKC, lower case, final sigma as σ, ZWNJ/ZWJ "
+        notes="The tag is matched in YouTube's canonical form (NFKC short of the superscripts, Roman numerals, "
+              "Thai SARA AM and Hangul compatibility jamo YouTube keeps, lower case, final sigma as σ, ZWNJ/ZWJ "
               "dropped), as on its own /hashtag/ pages. type=all starts with the hashtag page's 'All' tab (exact "
               "view counts; YouTube's hashtag items carry no description snippet, so description is null). "
               "When the web client offers no further page (the usual case for anonymous visitors), later pages "

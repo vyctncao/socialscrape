@@ -240,6 +240,21 @@ def test_playlist_and_hashtag_inputs():
             M.hashtag_of(bad)
 
 
+def test_hashtag_keeps_the_compatibility_characters_youtube_keeps():
+    """NFKC short of what YouTube's own /hashtag/<tag> pages keep in their feed params (probed): Thai SARA AM,
+    Hangul compatibility jamo (half-width ones become them), superscripts, subscripts, circled and fraction forms,
+    Roman numerals (lower-cased). The Lao AM, Armenian 'և', ligatures, full-width and half-width forms, Arabic
+    presentation forms and math letters still go as NFKC has them."""
+    for given, canonical in (("#ทำอาหาร", "ทำอาหาร"), ("น้ำตก", "น้ำตก"), ("ㅋㅋㅋ", "ㅋㅋㅋ"), ("ﾻﾻ", "ㅋㅋ"),
+                             ("\u0e17\u0e4d\u0e32", "\u0e17\u0e4d\u0e32"),  # typed NIKHAHIT + SARA AA stays too
+                             ("CO₂", "co₂"), ("1º", "1º"), ("a½", "a½"), ("Ⅳ", "ⅳ"), ("①", "①"), ("ᵃʰ", "ᵃʰ"),
+                             ("ລຳວົງ", "\u0ea5\u0ecd\u0eb2\u0ea7\u0ebb\u0e87"), ("Երևան", "երեւան"),
+                             ("ｶﾞﾝﾀﾞﾑ", "ガンダム"), ("ＣＯＯＫＩＮＧ", "cooking"), ("𝐁𝐋𝐀𝐂𝐊𝐏𝐈𝐍𝐊", "blackpink"),
+                             ("ﺍﻟﻌﺮﺑﻴﺔ", "العربية"), ("ﬅǈ", "stlj")):
+        assert M.hashtag_of(given) == (canonical, False), given
+        assert unicodedata.is_normalized("NFC", canonical), given
+
+
 def test_search_and_hashtag_params():
     assert P.search_params(None, None, None, None) is None
     assert P.search_params(None, "relevance", "shorts", None) == "EgIQCQ=="

@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import io
 import unicodedata
+from urllib.parse import quote, unquote
 
 import pytest
 import yt_dlp
@@ -276,11 +277,29 @@ def test_upstream_5xx_is_upstream_error(client, upstream_status):
     ("#Cooking", "cooking"),
     ("https://www.youtube.com/hashtag/Cooking", "cooking"),
     ("coo‍king", "cooking"),  # ZWJ dropped
+    ("ทำอาหาร", "ทำอาหาร"),  # Thai SARA AM stays (NFKC splits it into NIKHAHIT + SARA AA)
+    ("ㅋㅋㅋ", "ㅋㅋㅋ"),  # Hangul compatibility jamo stay (NFKC makes them conjoining jamo)
 ])
 def test_hashtag_canonical_form(client, given, canonical):
     body = ok(client, f"{YT}/search/hashtag", hashtag=given)
     assert body["videos"], given
     assert _state(body["continuationToken"])["p"] == canonical
+
+
+@pytest.mark.live
+@pytest.mark.parametrize("given", ["ทำอาหาร", "ㅋㅋㅋ", "ﾻﾻ", "CO₂", "Ⅳ", "a½", "ລຳວົງ", "Երևան"])
+def test_hashtag_canonical_form_is_youtube_pages(given):
+    """YouTube's own /hashtag/<given> page holds the feed params of our canonical tag, both where YouTube keeps
+    what NFKC would rewrite (SARA AM, compatibility jamo, subscripts, Roman numerals, fractions) and where it
+    rewrites as NFKC does (the Lao AM, Armenian 'և')."""
+    from socialscrape.platforms import _youtube_listings_parse as p
+    from socialscrape.platforms.youtube_listings import hashtag_of
+
+    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True}) as ydl:
+        webpage = ydl.get_info_extractor("YoutubeTab")._download_webpage(
+            f"https://www.youtube.com/hashtag/{quote(given)}", given)
+    tag = hashtag_of(given)[0]
+    assert p.hashtag_params(tag, False) in unquote(webpage), (given, tag)  # the page has '=' as '%3D'
 
 
 def test_pre_binding_hashtag_cursor_is_bad_cursor(client):
