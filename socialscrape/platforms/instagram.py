@@ -932,7 +932,10 @@ def video_items(product: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
 
 def _post_code(product: dict[str, Any], shortcode: str) -> str:
     """The shortcode of the post fetch_post returned, else the URL's ('' for a share link)."""
-    if code := traverse_obj(product, ("code", {str})) or shortcode:
+    code = traverse_obj(product, ("code", {str})) or ""
+    if not _SHORTCODE_CHARS.fullmatch(code):  # _id_to_pk can't read it
+        code = shortcode
+    if code:
         return code
     raise UpstreamError("Instagram returned the post without its shortcode")
 

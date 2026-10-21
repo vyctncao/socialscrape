@@ -1067,6 +1067,38 @@ def test_post_routes_without_a_shortcode_of_their_own(client, stubbed, monkeypat
     assert body["transcripts"] == [{"id": REEL_PK, "shortcode": REEL_CODE, "text": "hello"}]  # the URL's
 
 
+def test_post_code_outside_the_shortcode_alphabet_is_missing(client, stubbed, monkeypatch):
+    # fix14 (ig-code-alphabet-500): a post code with a character _id_to_pk can't read (half an emoji, a "!") made
+    # /v2/instagram/post/comments a 500 "Internal server error", and a share link's transcript asked for /p/<it>/
+    requests: list[str] = []
+    ie = SimpleNamespace(_API_BASE_URL="https://i.instagram.com/api/v1", _api_headers={}, _is_logged_in=True,
+                         _download_webpage_handle=None,
+                         _download_json=lambda url, *a, **kw: requests.append(url) or {"comments": [COMMENT]})
+
+    async def with_ydl(platform, fn, **opts):
+        return fn(SimpleNamespace(get_info_extractor=lambda name: ie, urlopen=None))
+
+    monkeypatch.setattr(ig, "with_ydl", with_ydl)
+    message = "Instagram returned the post without its shortcode"
+    for code in (CAROUSEL_CODE + "\ud83d", "Cx!y"):
+        monkeypatch.setattr(ig, "fetch_post", lambda url, code=code: _async(({**CAROUSEL, "code": code}, None)))
+        body = client.get("/v2/instagram/post/comments", params={"url": CAROUSEL_CODE}).json()
+        assert [c["id"] for c in body["comments"]] == [COMMENT["pk"]]
+        assert f"/media/{ig._id_to_pk(CAROUSEL_CODE)}/comments/" in requests[-1]  # the URL's
+        assert _err(client.get("/v2/instagram/post/comments", params={"url": SHARE}), 500, "upstream_error")[
+            "message"] == message
+    assert len(requests) == 2
+
+    seen: list[str] = []
+    monkeypatch.setattr(ig, "fetch_post", lambda url: _async(({**REEL, "code": "Cx!y"}, None)))
+    monkeypatch.setattr(transcribe, "enabled", lambda: True)
+    monkeypatch.setattr(transcribe, "transcribe", lambda url, **kwargs: seen.append(url) or _async(
+        SimpleNamespace(text="hello")))
+    assert _err(client.get("/v2/instagram/media/transcript", params={"url": SHARE}), 500, "upstream_error")[
+        "message"] == message
+    assert seen == []
+
+
 def test_rejected_session_envelope(client, monkeypatch):
     async def rejected(*args, **kwargs):
         raise ig.SessionRejected()
