@@ -1208,6 +1208,56 @@ def test_video_routes_read_formats_of_another_type_as_missing(client, monkeypatc
     assert video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
+CAPTIONS = ("captions", "playerCaptionsTracklistRenderer")
+TRACK, LANGUAGE = (*CAPTIONS, "captionTracks", 0), (*CAPTIONS, "translationLanguages", 0)
+
+
+@pytest.mark.parametrize("path,value,picked", [
+    ((*TRACK, "baseUrl"), 7, ("en-orig", True)),
+    ((*TRACK, "baseUrl"), "https://[x/api/timedtext?v=x&lang=en", ("en-orig", True)),
+    ((*TRACK, "baseUrl"), "https://www.youtube.com/api/timedtext?v=x&lang=en&x=\ud83d", ("en-orig", True)),
+    ((*TRACK, "baseUrl"), "https://www.you tube.com/api/timedtext?v=x&lang=en", ("en-orig", True)),
+    ((*TRACK, "vssId"), 7, ("en", False)), ((*TRACK, "vssId"), ["x"], ("en", False)),
+    (TRACK, {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en", "languageCode": ["x"]}, ("en-orig", True)),
+    ((*LANGUAGE, "languageCode"), {"x": 1}, ("en", False)), ((*LANGUAGE, "languageCode"), 7, ("en", False)),
+    ((*LANGUAGE, "languageCode"), "\ud83d", ("en", False)),
+], ids=["url_number", "url_unclosed_bracket", "url_half_emoji", "url_host_with_space", "vss_id_number",
+        "vss_id_list", "language_code_list", "translation_language_object", "translation_language_number",
+        "translation_language_half_emoji"])
+def test_video_routes_read_captions_of_another_type_as_missing(client, monkeypatch, path, value, picked):
+    """yt-captions-type-500: yt-dlp reads a player response's caption tracks' URLs as ones it can split and quote
+    (and then request), and their vssIds and language codes and its translation languages' codes as strings: they
+    key its subtitles, which it puts in URLs and our track picking reads as strings. So a value of another type
+    was a 500 (AttributeError, TypeError, ValueError or UnicodeEncodeError) before any of our code ran or in it,
+    and a URL it couldn't request failed the transcript. It reads as missing: a track without a URL or a language
+    is skipped, one without a vssId is keyed by its language code, and the other tracks are still read."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        pr = {"playabilityStatus": {"status": "OK"},
+              "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                               "channelId": "UC" + "x" * 22},
+              "captions": {"playerCaptionsTracklistRenderer": {
+                  "captionTracks": [
+                      {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en", "vssId": ".en",
+                       "languageCode": "en", "isTranslatable": True},
+                      {"baseUrl": "https://www.youtube.com/api/timedtext?v=x&lang=en&kind=asr", "vssId": "a.en",
+                       "languageCode": "en", "kind": "asr", "isTranslatable": True}],
+                  "translationLanguages": [{"languageCode": "de", "languageName": {"simpleText": "German"}},
+                                           {"languageCode": "en", "languageName": {"simpleText": "English"}}]}}}
+        node = pr
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+        return pr
+
+    downloads = []
+    stub_player(monkeypatch, player)
+    monkeypatch.setattr(subtitles, "_download_track", lambda ydl, info, key, auto, tmp: downloads.append((key, auto)))
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd" and downloads == [picked]
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []

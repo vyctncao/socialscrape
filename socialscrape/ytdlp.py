@@ -20,7 +20,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, partial
 from typing import Any, Callable, TypeVar
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError, YoutubeDLCookieJar
@@ -250,6 +250,14 @@ def _cipher(value: Any) -> bool:
     return _text(value) and all(_url(url) for url in parse_qs(value).get("url", [])[:1])
 
 
+def _caption_url(value: Any) -> bool:
+    """A caption track's baseUrl, which yt-dlp joins to YouTube's: then one it can request (see _url)."""
+    try:
+        return _text(value) and _url(urljoin("https://www.youtube.com", value))
+    except ValueError:  # an unclosed '['
+        return False
+
+
 _FORMAT = {
     "url": _url, "signatureCipher": _cipher, "mimeType": str, "quality": str, "qualityLabel": str, "audioQuality": str,
     "audioTrack": {"id": str, "displayName": str},
@@ -265,6 +273,9 @@ _PLAYER_RESPONSE = {
         "liveBroadcastDetails": {"startTimestamp": _date, "endTimestamp": _date}}},
     "streamingData": {
         "formats": [_FORMAT], "adaptiveFormats": [_FORMAT], "hlsManifestUrl": _url, "dashManifestUrl": _url},
+    "captions": {"playerCaptionsTracklistRenderer": {  # the languages key its subtitles, read as strings here too
+        "captionTracks": [{"baseUrl": _caption_url, "vssId": _text, "languageCode": _text}],
+        "translationLanguages": [{"languageCode": _text}]}},
 }
 
 
