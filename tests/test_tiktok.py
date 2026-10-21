@@ -358,6 +358,22 @@ def test_caption_track_chinese():
     assert M.caption_track(item, "zh")["url"] == "https://cdn/zh.vtt"  # the first Chinese track
 
 
+def test_caption_track_other_codes_and_norwegian():
+    # 'per', Persian's ISO 639-2/B code, read as 'pe'; Nynorsk and Bokmål found no track in the other
+    item = _web_item(video={"subtitleInfos": [
+        {"LanguageCodeName": "fas-IR", "Url": "https://cdn/fa.vtt", "Format": "webvtt"},
+        {"LanguageCodeName": "deu-DE", "Url": "https://cdn/de.vtt", "Format": "webvtt"},
+        {"LanguageCodeName": "nno-NO", "Url": "https://cdn/nn.vtt", "Format": "webvtt"}]})
+    for lang, track in (("per", "fa"), ("fa", "fa"), ("ger", "de"), ("nn", "nn"), ("no", "nn"), ("nob", "nn")):
+        assert M.caption_track(item, lang)["url"] == f"https://cdn/{track}.vtt", lang
+    assert M.caption_track(item, "pe") is None and M.caption_track(item, "da") is None
+    item["video"]["subtitleInfos"].append({"LanguageCodeName": "nob-NO", "Url": "https://cdn/no.vtt"})
+    assert M.caption_track(item, "no")["url"] == "https://cdn/no.vtt"  # a track in the language itself first
+    assert M.caption_track(item, "nn")["url"] == "https://cdn/nn.vtt"
+    item["video"]["subtitleInfos"].pop(2)
+    assert M.caption_track(item, "nn")["url"] == "https://cdn/no.vtt"
+
+
 def test_short_lang():
     from socialscrape.util import short_lang
 
@@ -370,6 +386,12 @@ def test_short_lang():
                         ("yid", "yi"), ("jw", "jv"), ("jav", "jv"), ("mo", "ro"), ("ron", "ro"), ("nb", "no"),
                         ("nob-NO", "no"), ("nor", "no"), ("nn", "nn"), (" fil ", "tl"), ("fil-PH", "tl"),
                         ("tgl", "tl")):
+        assert short_lang(given) == code, given
+    # ISO 639-2/B codes, as MKV and ffmpeg tag languages: 'per' was 'pe' (ISO639Utils' own table), 'ger' was 'ger'
+    for given, code in (("per", "fa"), ("PER-IR", "fa"), ("fas", "fa"), ("ger", "de"), ("fre-CA", "fr"),
+                        ("chi", "zh"), ("cze", "cs"), ("dut", "nl"), ("gre", "el"), ("may", "ms"), ("wel", "cy"),
+                        ("alb", "sq"), ("arm", "hy"), ("baq", "eu"), ("bur", "my"), ("geo", "ka"), ("ice", "is"),
+                        ("mac", "mk"), ("mao", "mi"), ("rum", "ro"), ("slo", "sk"), ("tib", "bo")):
         assert short_lang(given) == code, given
 
 
@@ -909,12 +931,13 @@ def _ai(client, **params):
 
 def test_ai_fallback_language(client, fake_transcribe):
     # tt_video-2: 'eng' went to Whisper as-is and crashed it (plain-text 500); the core's rules are in test_core
-    for given, code in (("eng", "en"), ("zho", "zh"), ("cmn", "zh"), (None, None)):
+    # ISO 639-2/B codes ('ger', and 'per', which was read as 'pe') were a 400 'not supported'
+    for given, code in (("eng", "en"), ("zho", "zh"), ("cmn", "zh"), ("ger", "de"), ("per", "fa"), (None, None)):
         r = _ai(client, **({"language": given} if given else {}))
         assert r.status_code == 200 and r.json()["transcript"] == "hello there", (given, r.text[:200])
         assert fake_transcribe[-1]["whisper"] == code
     fake_transcribe.clear()
-    for bad in ("zz", "ger"):
+    for bad in ("zz", "pe"):
         r = _ai(client, language=bad)
         assert r.status_code == 400 and r.json()["error"] == "bad_request", (bad, r.text[:200])
         assert "not supported" in r.json()["message"]

@@ -127,8 +127,8 @@ def require_enabled() -> str:
 
 
 def whisper_language(language: str | None) -> str | None:
-    """'en' / 'EN' / 'eng' / 'spa-ES' / 'cmn' -> the code Whisper takes ('en', 'es', 'zh'); None if Whisper has no
-    such language.
+    """'en' / 'EN' / 'eng' / 'ger' / 'spa-ES' / 'cmn' -> the code Whisper takes ('en', 'de', 'es', 'zh'); None if
+    Whisper has no such language.
 
     The backends raise ValueError on anything else, ISO 639-2 codes included.
     """

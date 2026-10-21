@@ -38,16 +38,29 @@ _MACROLANGUAGE_OF = {"cmn": "zh", "arb": "ar", "zsm": "ms", "pes": "fa", "swh": 
 # reports 'iw', 'in' and 'ji'), Bokmål, which YouTube and Whisper call Norwegian ('no'), and Filipino, standard
 # Tagalog, which YouTube calls 'fil' and Whisper 'tl'.
 _SAME_LANGUAGE = {"iw": "he", "in": "id", "ji": "yi", "jw": "jv", "mo": "ro", "nb": "no", "fil": "tl"}
+# ISO 639-2/B codes (the ones MKV and ffmpeg language tags use) of the 20 languages whose 639-2/T code, the one
+# ISO639Utils knows, is another. ISO639Utils itself maps 'per' to 'pe', which is no language.
+_BIBLIOGRAPHIC = {"alb": "sq", "arm": "hy", "baq": "eu", "bur": "my", "chi": "zh", "cze": "cs", "dut": "nl",
+                  "fre": "fr", "geo": "ka", "ger": "de", "gre": "el", "ice": "is", "mac": "mk", "mao": "mi",
+                  "may": "ms", "per": "fa", "rum": "ro", "slo": "sk", "tib": "bo", "wel": "cy"}
+# Norwegian's two written standards, Nynorsk and Bokmål (which short_lang calls 'no', as YouTube and Whisper do)
+_SIBLING = {"nn": "no", "no": "nn"}
 
 
 def short_lang(code: str | None) -> str:
-    """'en' / 'EN' / 'eng' / 'spa-ES' / 'cmn-Hans-CN' / 'iw' -> 'en', 'en', 'en', 'es', 'zh', 'he': the language
-    part as an ISO 639-1 code, the same one for every code of a language. One without such a code ('yue', 'haw')
-    is returned lower-cased, None as ''."""
+    """'en' / 'EN' / 'eng' / 'ger' / 'spa-ES' / 'cmn-Hans-CN' / 'iw' -> 'en', 'en', 'en', 'de', 'es', 'zh', 'he':
+    the language part as an ISO 639-1 code, the same one for every code of a language. One without such a code
+    ('yue', 'haw') is returned lower-cased, None as ''."""
     base = (code or "").strip().split("-")[0].lower()
-    base = _MACROLANGUAGE_OF.get(base, base)
+    base = _MACROLANGUAGE_OF.get(base) or _BIBLIOGRAPHIC.get(base) or base
     base = ISO639Utils.long2short(base) or base
     return _SAME_LANGUAGE.get(base, base)
+
+
+def sibling_lang(code: str | None) -> str | None:
+    """The short_lang() code of the language a track in which is the next best thing when there's none in `code`'s
+    ('nn' -> 'no', 'nob' -> 'nn'), None for most."""
+    return _SIBLING.get(short_lang(code))
 
 
 def format_count(n: int | None, unit: str = "") -> str | None:

@@ -17,7 +17,7 @@ from typing import Any
 
 import yt_dlp
 
-from .util import short_lang
+from .util import short_lang, sibling_lang
 
 FORMAT_PREFERENCE = "json3/vtt/srt/srv3/best"
 
@@ -78,6 +78,8 @@ def pick_track(
                     language beats a machine translation ('en-US' over a translated 'en').
                     Short of an exact match, a track in another script comes last (zh-HK
                     takes zh-TW or zh-Hant over zh-CN, sr-Cyrl takes sr over sr-Latn).
+                    With no track in the language, one in its sibling (sibling_lang: Nynorsk
+                    for Norwegian Bokmål and the other way round) is taken the same way.
     original        prefer the track in the spoken language (yt-dlp marks the
                     untranslated ASR track with an '-orig' suffix on YouTube).
     video_language  the original audio language, if known. An auto-dubbed video has
@@ -117,10 +119,11 @@ def pick_track(
         # Fall through to default choice.
 
     if language and not original:
-        if key := match(subtitles, language):
-            return key, False
-        if key := match(automatic, language, translated):
-            return key, True
+        for want in filter(None, (language, sibling_lang(language))):
+            if key := match(subtitles, want):
+                return key, False
+            if key := match(automatic, want, translated):
+                return key, True
         return None
 
     if key := match(subtitles, "en"):

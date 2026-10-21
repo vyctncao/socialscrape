@@ -420,12 +420,12 @@ async def tiktok_video(url: str = Query(...), get_transcript: str | None = None,
 
 @sc_get(router, "/v1/tiktok/video/transcript",
         source="yt-dlp TikTokIE (web itemStruct video.subtitleInfos, as TikTokIE._get_subtitles)",
-        notes="Native captions as WEBVTT; `language` is an ISO 639-1/639-2T code matched via claInfo (en or eng -> "
-              "eng-US; zh, zho or cmn -> cmn-Hans-CN), default is the original-language track. use_ai_as_fallback "
-              "runs local Whisper on the yt-dlp audio download (501 if SOCIALSCRAPE_TRANSCRIBE is off) and returns "
-              "plain text, usually null when there is no speech (best effort); a `language` the configured Whisper "
-              "model can't transcribe is a 400. Media over 120 s needs allow_long_transcription=true (that literal "
-              "value only).")
+        notes="Native captions as WEBVTT; `language` is an ISO 639-1/639-2 code matched via claInfo (en or eng -> "
+              "eng-US; zh, zho, chi or cmn -> cmn-Hans-CN; Nynorsk and Bokmål stand in for each other), default "
+              "is the original-language track. use_ai_as_fallback runs local Whisper on the yt-dlp audio download "
+              "(501 if SOCIALSCRAPE_TRANSCRIBE is off) and returns plain text, usually null when there is no speech "
+              "(best effort); a `language` the configured Whisper model can't transcribe is a 400. Media over 120 s "
+              "needs allow_long_transcription=true (that literal value only).")
 async def tiktok_transcript(url: str = Query(...), language: str | None = None,
                             use_ai_as_fallback: str | None = None,
                             allow_long_transcription: str | None = None) -> dict[str, Any]:

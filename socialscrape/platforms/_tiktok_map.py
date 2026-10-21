@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..util import compact, iso_utc, short_lang
+from ..util import compact, iso_utc, short_lang, sibling_lang
 
 _IMAGE_URI = re.compile(r"^https?://[^/]+/(tos-[\w-]+/[\w.-]+)~")
 _CODEC = re.compile(r"_(h264|bytevc1|bytevc2)_")
@@ -361,7 +361,8 @@ def caption_track(item: dict[str, Any], language: str | None = None) -> dict[str
 
     TikTok names tracks like 'eng-US' or 'cmn-Hans-CN'; claInfo.captionInfos maps those names to
     ISO 639-1 codes ('en', 'zh-Hans'). Both are compared by their language part, so 'zh', 'zho'
-    and 'cmn' all pick 'cmn-Hans-CN' (3-letter codes are shortened first). Without a language
+    and 'cmn' all pick 'cmn-Hans-CN' (3-letter codes are shortened first). With no track in the
+    language, one in its sibling (sibling_lang: 'nno-NO' for 'no') is taken. Without a language
     the original-audio track wins.
     """
     v = item.get("video") or {}
@@ -375,8 +376,9 @@ def caption_track(item: dict[str, Any], language: str | None = None) -> dict[str
                   for c in cla.get("captionInfos") or [] if c.get("url")]
     tracks = [t for t in tracks if (t["format"] or "webvtt").lower() == "webvtt"]
     if language:
-        lang = short_lang(language)  # 'eng' -> 'en', 'cmn' -> 'zh'
-        return next((t for t in tracks if lang in {short_lang(codes.get(t["name"])), short_lang(t["name"])}), None)
+        langs = [{short_lang(codes.get(t["name"])), short_lang(t["name"])} for t in tracks]  # 'eng-US' -> 'en'
+        return next((t for want in filter(None, (short_lang(language), sibling_lang(language)))
+                     for t, lang in zip(tracks, langs) if want in lang), None)
     return next((t for t in tracks if t["name"] == original), tracks[0] if tracks else None)
 
 

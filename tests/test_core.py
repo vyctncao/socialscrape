@@ -307,6 +307,19 @@ def test_pick_track_finds_a_track_under_youtubes_own_code():
         assert subtitles.pick_track({}, {"iw": [{}], "jv": [{}], "yi": [{}]}, language=want) == (key, True), want
 
 
+def test_pick_track_takes_the_other_norwegian():
+    """Nynorsk ('nn') and Bokmål ('no', 'nb') found no track in the other; Persian's 'per' found none either."""
+    tracks = lambda *keys: {k: [{}] for k in keys}  # noqa: E731
+    for want in ("no", "nb", "nob", "nor"):
+        assert subtitles.pick_track(tracks("en", "nn"), {}, language=want) == ("nn", False), want
+        assert subtitles.pick_track({}, tracks("nn-NO"), language=want) == ("nn-NO", True), want
+    assert subtitles.pick_track(tracks("en", "no"), {}, language="nn") == ("no", False)
+    assert subtitles.pick_track(tracks("nn", "nb"), {}, language="no") == ("nb", False)  # its own first
+    assert subtitles.pick_track(tracks("no"), tracks("nn"), language="nn") == ("nn", True)  # even auto-generated
+    assert subtitles.pick_track(tracks("en"), tracks("da"), language="nn") is None
+    assert subtitles.pick_track(tracks("en", "fa"), {}, language="per") == ("fa", False)
+
+
 def test_parse_vtt_dedupes_rolling_captions():
     raw = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nhello\n\n00:00:01.000 --> 00:00:02.000\nhello\nworld\n"
     segs = subtitles.parse(raw, "vtt")
@@ -1263,7 +1276,10 @@ def test_whisper_language():
     # fix3: Whisper's codes for Hebrew, Indonesian, Bokmål and Filipino under the other codes they go by
     for given, code in (("iw", "he"), ("in", "id"), ("nb", "no"), ("fil", "tl"), ("fil-PH", "tl"), ("jw", "jw")):
         assert whisper_language(given) == code, given
-    for unknown in ("zz", "zzz", "ger", "", None):  # unknown or ISO 639-2/B
+    # ISO 639-2/B codes were None, and 'per' (Persian) a 'pe' that is no language
+    for given, code in (("ger", "de"), ("fre", "fr"), ("per", "fa"), ("chi", "zh"), ("nno", "nn")):
+        assert whisper_language(given) == code, given
+    for unknown in ("zz", "zzz", "pe", "", None):
         assert whisper_language(unknown) is None, unknown
 
 
