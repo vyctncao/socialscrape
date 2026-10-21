@@ -1009,6 +1009,26 @@ def test_video_route_age_restricted_is_403(client, monkeypatch):
     assert r.status_code == 403 and r.json()["error"] == "age_restricted", r.text
 
 
+def stub_player(monkeypatch, player) -> None:
+    """Make YoutubeIE take `player`'s answers for the player API's, with no watch page and no other request."""
+    monkeypatch.setattr(YoutubeIE, "_extract_player_response", player)
+    for name, value in (("_download_initial_webpage", None), ("_download_initial_data", {}), ("_download_ytcfg", {}),
+                        ("_download_player_url", None)):
+        monkeypatch.setattr(YoutubeIE, name, lambda self, *args, value=value, **kwargs: value)
+
+
+@pytest.mark.parametrize("answer", [[{"playabilityStatus": {"status": "OK"}}], "OK", 7, True],
+                         ids=["list", "string", "number", "true"])
+def test_video_routes_read_a_player_response_that_is_not_an_object_as_an_upstream_error(client, monkeypatch, answer):
+    """yt-player-not-object-500: yt-dlp writes its client's details into each player API answer
+    (pr.setdefault('streamingData', {})), so JSON that wasn't an object was a 500 (AttributeError) before any of our
+    code ran. It fails as an answer that isn't JSON does: no player response, an upstream_error."""
+    stub_player(monkeypatch, lambda self, *args, **kwargs: answer)
+    for path in ("/v1/youtube/video", "/v1/youtube/video/transcript"):
+        r = client.get(path, params={"url": watch(ZOO)})
+        assert (r.status_code, r.json()["error"]) == (500, "upstream_error"), r.text
+
+
 @pytest.mark.parametrize("status,expected", [
     ({"status": 5}, 200), ({"status": "OK", "reason": 7}, 200), ({"status": "LOGIN_REQUIRED", "reason": ["x"]}, 200),
     ({"status": "ERROR", "reason": {"simpleText": "Video unavailable"}}, 200),
@@ -1023,10 +1043,7 @@ def test_video_routes_read_a_playability_status_of_another_type_as_none(client, 
         return {"playabilityStatus": dict(status), "videoDetails": {
             "videoId": video_id, "title": "Odd", "lengthSeconds": "10", "author": "a", "channelId": "UCx"}}
 
-    monkeypatch.setattr(YoutubeIE, "_extract_player_response", player)
-    for name, value in (("_download_initial_webpage", None), ("_download_initial_data", {}), ("_download_ytcfg", {}),
-                        ("_download_player_url", None)):  # no watch page, no other request
-        monkeypatch.setattr(YoutubeIE, name, lambda self, *args, value=value, **kwargs: value)
+    stub_player(monkeypatch, player)
     video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
     transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
     assert (video.status_code, transcript.status_code) == (expected, expected), (video.text, transcript.text)
@@ -1049,10 +1066,7 @@ def test_video_routes_read_a_thumbnail_that_is_not_an_object_as_none(client, mon
             "videoId": video_id, "title": "Odd", "lengthSeconds": "10", "author": "a", "channelId": "UCx",
             "thumbnail": {"thumbnails": [*thumbnails, kept]}}}
 
-    monkeypatch.setattr(YoutubeIE, "_extract_player_response", player)
-    for name, value in (("_download_initial_webpage", None), ("_download_initial_data", {}), ("_download_ytcfg", {}),
-                        ("_download_player_url", None)):  # no watch page, no other request
-        monkeypatch.setattr(YoutubeIE, name, lambda self, *args, value=value, **kwargs: value)
+    stub_player(monkeypatch, player)
     video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
     transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
     assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)

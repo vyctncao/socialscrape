@@ -18,7 +18,7 @@ import re
 import stat
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Callable, TypeVar
 
 import yt_dlp
@@ -132,7 +132,9 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             for key in ("Youtube", "YoutubeTab"):
                 ie = ydl.get_info_extractor(key)
                 ie._extract_alerts, ie._extract_thumbnails = _youtube_alerts, _youtube_thumbnails
-            ydl.get_info_extractor("Youtube")._is_agegated = youtube_agegated
+            ie = ydl.get_info_extractor("Youtube")
+            ie._is_agegated = youtube_agegated
+            ie._extract_player_response = partial(_youtube_player_api, ie._extract_player_response)
         try:
             return fn(ydl)
         finally:
@@ -164,6 +166,15 @@ def youtube_agegated(player_response: Any) -> bool:
     status = traverse_obj(player_response, ("playabilityStatus", {dict})) or {}
     return YoutubeIE._is_agegated({"playabilityStatus": {
         k: v for k, v in status.items() if k not in ("status", "reason") or isinstance(v, str)}})
+
+
+def _youtube_player_api(extract: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """YoutubeIE._extract_player_response, but an answer that isn't an object fails as one that isn't JSON does:
+    yt-dlp writes its client's details into the answer (an AttributeError, so a 500 here)."""
+    player_response = extract(*args, **kwargs)
+    if player_response is not None and not isinstance(player_response, dict):
+        raise ExtractorError("The player API's response is not an object", expected=True)
+    return player_response
 
 
 def cookie_file_problem(path: str) -> str | None:
