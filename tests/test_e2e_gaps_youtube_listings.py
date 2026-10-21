@@ -279,6 +279,7 @@ def test_upstream_5xx_is_upstream_error(client, upstream_status):
     ("coo‍king", "cooking"),  # ZWJ dropped
     ("ทำอาหาร", "ทำอาหาร"),  # Thai SARA AM stays (NFKC splits it into NIKHAHIT + SARA AA)
     ("ㅋㅋㅋ", "ㅋㅋㅋ"),  # Hangul compatibility jamo stay (NFKC makes them conjoining jamo)
+    ("＃ゲーム", "ゲーム"),  # the full-width '#' of Japanese and Chinese keyboards
 ])
 def test_hashtag_canonical_form(client, given, canonical):
     body = ok(client, f"{YT}/search/hashtag", hashtag=given)
@@ -287,11 +288,11 @@ def test_hashtag_canonical_form(client, given, canonical):
 
 
 @pytest.mark.live
-@pytest.mark.parametrize("given", ["ทำอาหาร", "ㅋㅋㅋ", "ﾻﾻ", "CO₂", "Ⅳ", "a½", "ລຳວົງ", "Երևան"])
+@pytest.mark.parametrize("given", ["ทำอาหาร", "ㅋㅋㅋ", "ﾻﾻ", "CO₂", "Ⅳ", "a½", "ລຳວົງ", "Երևան", "＃ゲーム"])
 def test_hashtag_canonical_form_is_youtube_pages(given):
     """YouTube's own /hashtag/<given> page holds the feed params of our canonical tag, both where YouTube keeps
     what NFKC would rewrite (SARA AM, compatibility jamo, subscripts, Roman numerals, fractions) and where it
-    rewrites as NFKC does (the Lao AM, Armenian 'և')."""
+    rewrites as NFKC does (the Lao AM, Armenian 'և', the full-width '＃' it then drops)."""
     from socialscrape.platforms import _youtube_listings_parse as p
     from socialscrape.platforms.youtube_listings import hashtag_of
 

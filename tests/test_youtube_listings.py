@@ -220,6 +220,9 @@ def test_playlist_and_hashtag_inputs():
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny") == ("funny", False)
     assert M.hashtag_of("https://www.youtube.com/hashtag/funny/shorts") == ("funny", True)
     assert M.hashtag_of("#गाना") == ("गाना", False)
+    # the full-width '#' of Japanese and Chinese keyboards (and the small one): '＃ゲーム' was a 400
+    assert M.hashtag_of("＃ゲーム") == M.hashtag_of("﹟ゲーム") == M.hashtag_of("#＃ゲーム") == ("ゲーム", False)
+    assert M.hashtag_of(f"https://www.youtube.com/hashtag/{quote('＃游戏')}/shorts") == ("游戏", True)
     assert M.hashtag_of(f"https://www.youtube.com/hashtag/{quote('தமிழ்')}") == ("தமிழ்", False)
     # ZWNJ / ZWJ (Persian, Sinhala spelling) are accepted but dropped, as YouTube's own /hashtag/ pages do
     assert M.hashtag_of("#می\u200cخواهم") == ("میخواهم", False)
@@ -235,7 +238,7 @@ def test_playlist_and_hashtag_inputs():
         with pytest.raises(BadRequest):
             M.playlist_id_of(bad)
     for bad in ("##", "two words", "https://www.tiktok.com/tag/funny", "https://www.youtube.com/@MrBeast", "#\u200d",
-                "http://[::1", "https://www.youtube.com／hashtag/funny"):
+                "http://[::1", "https://www.youtube.com／hashtag/funny", "＃", "ゲーム＃実況"):
         with pytest.raises(BadRequest):
             M.hashtag_of(bad)
 

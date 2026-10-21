@@ -157,7 +157,8 @@ def _decompose(c: str) -> str:
 
 
 def hashtag_of(value: str) -> tuple[str, bool]:
-    """'#Funny' / '…/hashtag/funny' / '…/hashtag/funny/shorts' -> ('funny', whether it named the Shorts tab).
+    """'#Funny' / '…/hashtag/funny' / '…/hashtag/funny/shorts' -> ('funny', whether it named the Shorts tab). The
+    '#' may be the full-width '＃' of Japanese and Chinese keyboards ('＃ゲーム' is 'ゲーム' on YouTube's pages too).
 
     The tag is YouTube's canonical form, the one its own /hashtag/<tag> page puts in the feed params (any other
     spelling is another feed, usually empty): NFKC ('ﬁ' -> 'fi', decomposed 'ü' composed) short of the
@@ -169,7 +170,7 @@ def hashtag_of(value: str) -> tuple[str, bool]:
         if not m:
             raise BadRequest(f"Not a YouTube hashtag URL: {value}")
         value, shorts = urllib.parse.unquote(m.group(1)), bool(m.group(2))
-    tag = unicodedata.normalize("NFC", "".join(map(_decompose, value.lstrip("#"))))
+    tag = unicodedata.normalize("NFC", "".join(map(_decompose, value))).lstrip("#")  # '＃' is '#' by now
     canonical = re.sub("[\u200c\u200d]", "", "".join("i" if c == "İ" else c.lower() for c in tag).replace("ς", "σ"))
     if not canonical or not _word(tag):
         raise BadRequest(f"Invalid hashtag: {value}")
@@ -702,7 +703,8 @@ async def youtube_search(query: str = Query(...),
 @sc_get(router, "/v1/youtube/search/hashtag", source=f"{_SRC} (/hashtag/<tag> browse tabs + continuations)",
         notes="The tag is matched in YouTube's canonical form (NFKC short of the superscripts, Roman numerals, "
               "Thai SARA AM and Hangul compatibility jamo YouTube keeps, lower case, final sigma as σ, ZWNJ/ZWJ "
-              "dropped), as on its own /hashtag/ pages. type=all starts with the hashtag page's 'All' tab (exact "
+              "dropped), as on its own /hashtag/ pages; a leading '#' (or the full-width '＃') is optional. type=all "
+              "starts with the hashtag page's 'All' tab (exact "
               "view counts; YouTube's hashtag items carry no description snippet, so description is null). "
               "When the web client offers no further page (the usual case for anonymous visitors), later pages "
               "come from the same FEhashtag feed on yt-dlp's mweb client, whose items have abbreviated view "

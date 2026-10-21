@@ -256,6 +256,9 @@ def test_clean_topic():
     # only the lower-case /explore/tags/ and /popular/ paths exist (mixed case -> login redirect / 404 page)
     assert ig.clean_topic("  Golden  Retriever") == "golden retriever"
     assert ig.clean_topic("#FunnyDogs", single_word=True) == "funnydogs"
+    # the full-width '#' of Japanese and Chinese keyboards: '＃ねこ' was a 400 ('＃' isn't a letter)
+    assert ig.clean_topic("＃ねこ", single_word=True) == ig.clean_topic("#ねこ", single_word=True) == "ねこ"
+    assert ig.clean_topic("＃Golden Retriever") == "golden retriever"
     assert ig.clean_topic("CAFÉ") == "café"
     # str.lower() turns 'İ' into 'i' + U+0307 (a 404 tag path, and not \w for the single-word check)
     assert ig.clean_topic("İstanbul") == ig.clean_topic("ISTANBUL") == "istanbul"

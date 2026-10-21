@@ -148,14 +148,15 @@ def clean_highlight_id(value: str | None) -> str:
 
 
 def clean_topic(query: str | None, *, single_word: bool = False) -> str:
-    """Popular-topic query or hashtag ('#' optional), lower-cased. 400 if it can't be a /explore/tags/ path.
+    """Popular-topic query or hashtag ('#', or the full-width '＃' Japanese and Chinese keyboards type, optional),
+    lower-cased. 400 if it can't be a /explore/tags/ path.
 
     Tags are case-insensitive, but only the lower-case /explore/tags/ and /popular/ paths exist
     (/explore/tags/FunnyDogs/ redirects to login, /popular/FunnyDogs/ is a 404 page). 'İ' becomes 'i':
     str.lower() makes it 'i' + U+0307, a path that doesn't exist. Words may hold combining marks (Devanagari
     vowel signs, Tamil virama), which \\w doesn't match. Decomposed (NFD) spellings are composed first: only
     /explore/tags/espa%C3%B1a/ exists, not /explore/tags/espan%CC%83a/."""
-    value = unicodedata.normalize("NFC", re.sub(r"\s+", " ", (query or "").strip().lstrip("#")).strip())
+    value = unicodedata.normalize("NFC", re.sub(r"\s+", " ", (query or "").strip().lstrip("#＃﹟")).strip())
     value = value.replace("İ", "i").lower()
     if not value or len(value) > 100 or re.search(r"[/?#&%\\]", value):
         raise BadRequest("Not a valid Instagram topic/hashtag", code="bad_query")
