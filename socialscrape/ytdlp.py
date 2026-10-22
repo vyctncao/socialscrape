@@ -142,6 +142,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             ie._extract_player_response = partial(_youtube_player_api, ie._extract_player_response)
             ie._invalid_player_response = partial(_youtube_player_response, ie._invalid_player_response)
             ie._download_initial_data = partial(_youtube_initial_data, ie, ie._download_initial_data)
+            ie._html_search_meta = partial(_youtube_meta, ie._html_search_meta)
         try:
             return fn(ydl)
         finally:
@@ -357,14 +358,19 @@ def _count_text(value: Any) -> bool:
     return _count(YoutubeBaseInfoExtractor._get_text(value))
 
 
-def _length_text(value: Any) -> bool:
-    """YouTube text of a length yt-dlp can read: it reads a chapter's ('1.5 hours') as a number without checking it is
-    one (a ValueError on '1.2.3 hours', so a 500 here)."""
+def _length(value: Any) -> bool:
+    """A length yt-dlp can read: it reads one ('1.5 hours') as a number without checking it is one (a ValueError on
+    '1.2.3 hours'), and a video's as a number (see _number) it formats as h:mm:ss and multiplies by a format's
+    bitrate (a ValueError or an OverflowError past a float's range), so a 500 here."""
     try:
-        parse_duration(YoutubeBaseInfoExtractor._get_text(value))
+        return _number(parse_duration(value) or 0)
     except ValueError:
         return False
-    return True
+
+
+def _length_text(value: Any) -> bool:
+    """YouTube text of a length (a chapter's), as _length."""
+    return _length(YoutubeBaseInfoExtractor._get_text(value))
 
 
 def _at(*path: Any) -> Any:
@@ -423,6 +429,19 @@ def _youtube_initial_data(ie: YoutubeIE, download: Callable[..., Any], *args: An
         except (ValueError, OverflowError):
             del info["dateText"]
     return initial_data
+
+
+# The watch page's meta tags yt-dlp reads, where a player response has no length (a live stream's is '0') or no upload
+# date, as these without checking.
+_META = {"duration": _length, "uploadDate": _date}
+
+
+def _youtube_meta(search: Callable[..., Any], name: Any, *args: Any, **kwargs: Any) -> Any:
+    """YoutubeIE._html_search_meta, but a watch page's meta tag that doesn't fit _META is missing: yt-dlp fails on it
+    (a ValueError or an OverflowError, so a 500 here)."""
+    content = search(name, *args, **kwargs)
+    check = _META.get(name) if isinstance(name, str) else None
+    return None if content is not None and check and not check(content) else content
 
 
 def cookie_file_problem(path: str) -> str | None:

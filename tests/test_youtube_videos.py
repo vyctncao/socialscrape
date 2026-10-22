@@ -1449,6 +1449,43 @@ def test_video_routes_read_watch_data_numbers_yt_dlp_cant_read_as_missing(client
     assert body == expected and video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
+FORMAT = {"itag": 18, "url": "https://rr1---sn-a.googlevideo.com/videoplayback?id=x", "bitrate": 500000,
+          "mimeType": 'video/mp4; codecs="avc1.42001E, mp4a.40.2"'}  # no size: yt-dlp estimates it from the length
+
+
+@pytest.mark.parametrize("name,content,field,expected", [
+    ("duration", "PT0M19S", "durationMs", 19000), ("duration", "1.2.3 hours", "durationMs", None),
+    ("duration", "9" * 400 + " hours", "durationMs", None), ("duration", "PT" + "9" * 306 + "S", "durationMs", None),
+    ("uploadDate", "2005-04-23T20:31:52-07:00", "publishDate", "2005-04-24T03:31:52.000Z"),
+    ("uploadDate", "0001-01-01T00:00:00+14:00", "publishDate", None),
+    ("uploadDate", "9999-12-31T23:00:00-14:00", "publishDate", None),
+    ("uploadDate", "20 Nov 99999999999999999999 10:00:00", "publishDate", None),
+], ids=["length", "length_not_a_number", "length_past_a_float", "length_past_a_size", "date",
+        "date_before_year_1_in_utc", "date_after_year_9999_in_utc", "year_past_a_c_long"])
+def test_video_routes_read_watch_page_meta_tags_yt_dlp_cant_read_as_missing(client, monkeypatch, name, content,
+                                                                            field, expected):
+    """yt-watch-meta-500: where a player response has no length (a live stream's is '0') or no upload date, yt-dlp
+    reads the watch page's meta tags for them without checking it can: a length as a number it formats as h:mm:ss
+    and multiplies by a format's bitrate, a date as one a date holds. So a length that isn't a number ('1.2.3
+    hours') or is past a float's range on its own or times a bitrate, or a date that its offset puts out of a date's
+    range or whose year is past a C long, was a 500 (ValueError or OverflowError) in a video's details, transcript
+    and sponsors before any of our code ran. It reads as missing, and the meta tags yt-dlp can read are still read."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer, with no microformat
+        return {"playabilityStatus": {"status": "OK"}, "streamingData": {"formats": [dict(FORMAT)]},
+                "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "0", "author": "a",
+                                 "channelId": "UC" + "x" * 22}}
+
+    stub_player(monkeypatch, player)
+    page = f'<html><head><meta itemprop="{name}" content="{content}"></head></html>'
+    monkeypatch.setattr(YoutubeIE, "_download_initial_webpage", lambda self, *args, **kwargs: page)
+    monkeypatch.setattr(M, "exact_comment_count", lambda ydl, vid: None)  # offline: no comments-header request
+    for path in ("/v1/youtube/video/transcript", "/v1/youtube/video/sponsors"):
+        r = client.get(path, params={"url": watch(ZOO)})
+        assert r.status_code == 200 and r.json()["success"], (path, r.text)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    assert video.status_code == 200 and (video.json()[field], video.json()["title"]) == (expected, "Odd"), video.text
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []
