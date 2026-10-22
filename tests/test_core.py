@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sqlite3
 import time
 
 import pytest
@@ -709,7 +710,12 @@ def test_unusable_cache_path_stops_startup(env, tmp_path):
 
     (tmp_path / "garbage").write_bytes(b"not a database\n" * 100)
     (tmp_path / "file").write_text("x")
-    bad = [tmp_path, tmp_path / "garbage", tmp_path / "file" / "c.sqlite3"]
+    # Another program's responses table (requests-cache's) started, then failed every read and write with a warning
+    foreign = sqlite3.connect(tmp_path / "http_cache.sqlite")
+    foreign.execute("CREATE TABLE responses (key TEXT PRIMARY KEY, value BLOB, expires INTEGER)")
+    foreign.commit()
+    foreign.close()
+    bad = [tmp_path, tmp_path / "garbage", tmp_path / "file" / "c.sqlite3", tmp_path / "http_cache.sqlite"]
     read_only, ro_dir = tmp_path / "ro.sqlite3", tmp_path / "ro-dir"
     ResponseCache(str(read_only)).close()
     ro_dir.mkdir()

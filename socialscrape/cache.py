@@ -44,7 +44,8 @@ def parse_max_age(value: str) -> float:
 class ResponseCache:
     def __init__(self, path: str):
         """Open (or create) the SQLite file, and check that it can be written: ConfigError naming
-        SOCIALSCRAPE_CACHE_PATH if not (a directory, a file that isn't SQLite, a read-only file or directory)."""
+        SOCIALSCRAPE_CACHE_PATH if not (a directory, a file that isn't SQLite, a read-only file or directory, one
+        whose responses table is another program's)."""
         self.path = path
         self._lock = threading.Lock()
         try:
@@ -54,6 +55,9 @@ class ResponseCache:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("CREATE TABLE IF NOT EXISTS responses "
                                "(key TEXT PRIMARY KEY, stored_at REAL NOT NULL, body TEXT NOT NULL)")
+            # One that was there already may be another program's (requests-cache names its table responses too),
+            # which every read and write would fail on.
+            self._conn.execute("SELECT key, stored_at, body FROM responses LIMIT 0")
             # A write that changes nothing: an existing read-only file passes the statements above, and so does one
             # in a read-only directory (where WAL mode can't create its -wal file).
             self._conn.execute("DELETE FROM responses WHERE key = ''")
