@@ -1246,6 +1246,47 @@ def test_request_never_rewrites_cookie_file(env, tmp_path):
     assert cookie.read_text() == _COOKIES
 
 
+@pytest.mark.parametrize("name,value", [("qa_b", "日本"), ("日", "qa")], ids=["value", "name"])
+def test_cookie_past_latin_1_is_left_out(env, tmp_path, caplog, name, value):
+    # yt-dlp's requests and urllib handlers failed every request carrying it, a 500 upstream_error "'latin-1' codec
+    # can't encode characters ...", while /health said the file was fine
+    import http.server
+    import threading
+
+    from yt_dlp.networking import Request
+
+    from socialscrape import ytdlp
+
+    sent = []
+
+    class Upstream(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            sent.append(self.headers.get("Cookie"))
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    cookie = tmp_path / "cookies.txt"
+    cookie.write_text("# Netscape HTTP Cookie File\n" + "".join(
+        f"127.0.0.1\tFALSE\t/\tFALSE\t2147483647\t{n}\t{v}\n" for n, v in (("qa_a", "café"), (name, value))),
+        encoding="utf-8")
+    before = cookie.read_bytes()
+    env(SOCIALSCRAPE_COOKIES_TIKTOK=str(cookie))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/"
+        status = ytdlp._run("tiktok", lambda ydl: ydl.urlopen(Request(url)).status, {"proxy": ""})  # no proxy
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert (status, sent) == (200, ["qa_a=café"])  # a Latin-1 cookie still goes
+    assert cookie.read_bytes() == before and "that yt-dlp can't send" in caplog.text
+
+
 @pytest.mark.parametrize("make,says", [
     (lambda p: None, "does not exist"),
     (lambda p: p.write_text("not a cookie file\n"), "not a valid Netscape cookies.txt"),

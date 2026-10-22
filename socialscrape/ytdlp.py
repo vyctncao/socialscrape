@@ -19,6 +19,7 @@ import stat
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, partial
+from http.cookiejar import Cookie
 from typing import Any, Callable, TypeVar
 from urllib.parse import parse_qs, urljoin
 
@@ -161,6 +162,9 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             ie._download_initial_data = partial(_youtube_initial_data, ie, ie._download_initial_data)
             ie._html_search_meta = partial(_youtube_meta, ie._html_search_meta)
         try:
+            # Left out, as yt-dlp leaves out a cookies.txt line it can't read (_cookie_parse_problem logs which).
+            for cookie in [c for c in ydl.cookiejar if not _cookie_sendable(c)]:
+                ydl.cookiejar.clear(cookie.domain, cookie.path, cookie.name)
             return fn(ydl)
         finally:
             # The operator's cookies.txt is input only. Without this, close() saves the session's jar over it
@@ -466,12 +470,26 @@ def cookie_file_problem(path: str) -> str | None:
 
 @lru_cache(maxsize=16)
 def _cookie_parse_problem(path: str, *_version: int) -> str | None:
+    jar = YoutubeDLCookieJar(path)
     try:
-        YoutubeDLCookieJar(path).load()
+        jar.load()
     except Exception as exc:  # LoadError, UnicodeDecodeError, ...: the detail (and the path) stays in the log
         log.warning("cookie file %s can't be loaded: %s", path, exc)
         return "is not a valid Netscape cookies.txt file"
+    if unsendable := sorted({c.domain for c in jar if not _cookie_sendable(c)}):  # the rest of the file still works
+        log.warning("cookie file %s has cookies for %s that yt-dlp can't send (a name or value that isn't Latin-1 "
+                    "text): they are left out", path, ", ".join(unsendable))
     return None
+
+
+def _cookie_sendable(cookie: Cookie) -> bool:
+    """Whether yt-dlp can send the cookie. Its requests and urllib handlers write headers as Latin-1 and fail on a
+    cookie whose name or value has a character past it, so every request carrying one did (a 500 upstream_error)."""
+    try:
+        f"{cookie.name}={cookie.value or ''}".encode("latin-1")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], **ydl_opts: Any) -> T:
