@@ -1258,6 +1258,46 @@ def test_video_routes_read_captions_of_another_type_as_missing(client, monkeypat
     assert video.json()["title"] == "Odd" and downloads == [picked]
 
 
+STORYBOARD, LENGTH = ("storyboards", "playerStoryboardSpecRenderer", "spec"), ("videoDetails", "lengthSeconds")
+SPEC = "https://i.ytimg.com/sb/x/storyboard3_L$L/$N.jpg|48#27#19#10#10#0#default#rs$x|80#45#19#10#10#2000#M$M#rs$y"
+AIRED = "2026-01-01T00:00:00+00:00"
+
+
+@pytest.mark.parametrize("changes", [
+    {STORYBOARD: 7}, {STORYBOARD: SPEC.replace("80#45#19", "80#45#" + "9" * 400)},
+    {STORYBOARD: SPEC.replace("80#45#19", "9" * 400 + "#45#19")},
+    {STORYBOARD: SPEC.replace("80#45#19#10#10", "80#45#1#" + "9" * 200 + "#" + "9" * 200)},
+    {STORYBOARD: SPEC.replace("i.ytimg.com", "[i.ytimg.com")}, {STORYBOARD: SPEC.replace("/x/", "/x\ud83d/")},
+    {STORYBOARD: SPEC.replace("i.ytimg.com", "a" * 64 + ".ytimg.com")}, {LENGTH: "0"},
+    {LENGTH: "0", ("microformat", "playerMicroformatRenderer", "liveBroadcastDetails"): {
+        "startTimestamp": AIRED, "endTimestamp": AIRED}},
+], ids=["spec_number", "count_overflowing", "width_overflowing", "fragments_vanishing", "url_unclosed_bracket",
+        "url_half_emoji", "url_label_too_long", "no_length", "live_of_no_length"])
+def test_video_routes_read_no_storyboards(client, monkeypatch, changes):
+    """yt-storyboards-500: yt-dlp divides by a player response's storyboard spec's numbers and the video's length
+    without checking them, and reads the spec's URL as one it can request, so a spec that wasn't a string, huge
+    numbers, a URL it couldn't request or a video of no length (none, or a broadcast that ended as it started) was a
+    500 (AttributeError, OverflowError, ZeroDivisionError, TypeError, ValueError or UnicodeError) before any of our
+    code ran. We read no formats, so a video has no storyboards, and its other details are still read."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        pr = {"playabilityStatus": {"status": "OK"},
+              "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                               "channelId": "UC" + "x" * 22},
+              "storyboards": {"playerStoryboardSpecRenderer": {"spec": SPEC}}}
+        for path, value in changes.items():
+            node = pr
+            for key in path[:-1]:
+                node = node.setdefault(key, {})
+            node[path[-1]] = value
+        return pr
+
+    stub_player(monkeypatch, player)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd" and transcript.json()["success"]
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []

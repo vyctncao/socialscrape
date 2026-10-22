@@ -136,7 +136,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
                 ie = ydl.get_info_extractor(key)
                 ie._extract_alerts, ie._extract_thumbnails = _youtube_alerts, _youtube_thumbnails
             ie = ydl.get_info_extractor("Youtube")
-            ie._is_agegated = youtube_agegated
+            ie._is_agegated, ie._extract_storyboard = youtube_agegated, _youtube_storyboards
             ie._extract_player_response = partial(_youtube_player_api, ie._extract_player_response)
             ie._invalid_player_response = partial(_youtube_player_response, ie._invalid_player_response)
         try:
@@ -170,6 +170,15 @@ def youtube_agegated(player_response: Any) -> bool:
     status = traverse_obj(player_response, ("playabilityStatus", {dict})) or {}
     return YoutubeIE._is_agegated({"playabilityStatus": {
         k: v for k, v in status.items() if k not in ("status", "reason") or isinstance(v, str)}})
+
+
+def _youtube_storyboards(player_responses: Any, duration: Any) -> list[dict[str, Any]]:
+    """YoutubeIE._extract_storyboard, but a video has no storyboards (we read no formats): yt-dlp divides by a
+    storyboard spec's numbers and the video's length without checking them, and reads the spec's URL as one it can
+    request (an AttributeError, an OverflowError, a ZeroDivisionError, a TypeError, a ValueError or a UnicodeError on
+    a spec that isn't a string, huge numbers, a URL it can't request or a video of no length, so a 500 here), and it
+    lists a fragment for each that a spec counts, however many."""
+    return []
 
 
 def _youtube_player_api(extract: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
