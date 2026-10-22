@@ -411,6 +411,20 @@ def test_parse_timed_text():
     assert subtitles.parse("9" * 5000 + ":00:00.000 --> 00:00:01.000\nlong", "vtt")[0].text == "long"
 
 
+def test_parse_captions_reads_a_long_character_reference():
+    """A decimal character reference of over 4300 digits failed html.unescape in VTT, SRT, srv and TTML captions: it
+    int()s the digits, and int() refuses that many (a ValueError, so a 500). The digits that count are read."""
+    seg = subtitles.Segment
+    text = "A&#" + "0" * 5000 + "38;B &#" + "9" * 5000 + ";"
+    for raw, ext in ((f"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n{text}", "vtt"),
+                     (f"1\n00:00:01,000 --> 00:00:02,000\n{text}", "srt"),
+                     (f'<text start="1" dur="1">{text}</text>', "srv1"), (f'<p t="1000" d="1000">{text}</p>', "srv3"),
+                     (f'<p begin="00:00:01.000" end="00:00:02.000">{text}</p>', "ttml")):
+        assert subtitles.parse(raw, ext) == [seg(1.0, 2.0, "A&B \ufffd")], ext
+    odd = "&#38; &#0038 &#x26; &#1114112; &#128; &#0; &#x0041; &#٣٨;"  # as html.unescape reads them
+    assert subtitles._unescape(odd) == "& & & \ufffd \u20ac \ufffd A &#٣٨;"
+
+
 def test_parse_json3_skips_what_isnt_a_caption():
     """JSON that isn't an object, null events or segments, and times that aren't numbers were a 500 (or lost the
     whole transcript). So was JSON nested deeper than Python reads it (a RecursionError, not a ValueError)."""

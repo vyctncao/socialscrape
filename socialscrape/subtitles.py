@@ -151,6 +151,9 @@ def machine_translated(automatic: dict[str, Any]) -> set[str]:
 
 _TS = re.compile(r"(?:(\d{1,9}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})")  # int() refuses over 4300 digits
 _TAG = re.compile(r"<[^>]+>")
+# A decimal character reference cut to the digits that count, as html.unescape int()s them all and int() refuses
+# past 4300 (a ValueError): '&#00…38;' still reads '&', and a number past Unicode's last character U+FFFD.
+_DECIMAL_REF = re.compile(r"&#0*([0-9]{1,8})[0-9]*")  # unescape's own [0-9], not \d
 
 
 def _ts(value: str) -> float:
@@ -173,6 +176,10 @@ def _seconds(value: Any, scale: float = 1) -> float | None:
     except OverflowError:  # an int past a float's range
         return None
     return seconds if math.isfinite(seconds) else None
+
+
+def _unescape(text: str) -> str:
+    return html.unescape(_DECIMAL_REF.sub(r"&#\1", text))
 
 
 def parse_json3(raw: str) -> list[Segment]:
@@ -205,7 +212,7 @@ def parse_cues(raw: str) -> list[Segment]:
         start_s, _, end_s = lines[idx].partition("-->")
         text_lines = []
         for ln in lines[idx + 1 :]:
-            clean = html.unescape(_TAG.sub("", ln)).strip()
+            clean = _unescape(_TAG.sub("", ln)).strip()
             if clean and clean != last_line:
                 text_lines.append(clean)
                 last_line = clean
@@ -244,7 +251,7 @@ def parse_timed_text(raw: str) -> list[Segment]:
             start_ms = "start" not in attrs  # srv1 counts seconds, srv2 and srv3 milliseconds
             start = _seconds(attrs.get("t" if start_ms else "start"), 1000 if start_ms else 1) or 0.0
             end = start + (_seconds(attrs.get("d" if start_ms else "dur"), 1000 if start_ms else 1) or 0.0)
-        text = html.unescape(_TAG.sub("", m[3])).strip()
+        text = _unescape(_TAG.sub("", m[3])).strip()
         if text:
             segs.append(Segment(start, end, text))
     return segs
