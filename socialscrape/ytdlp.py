@@ -33,6 +33,8 @@ from yt_dlp.utils import (
     UnsupportedError,
     UserNotLive,
     YoutubeDLError,
+    parse_count,
+    parse_duration,
     parse_iso8601,
     traverse_obj,
     unified_strdate,
@@ -139,7 +141,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             ie._is_agegated, ie._extract_storyboard = youtube_agegated, _youtube_storyboards
             ie._extract_player_response = partial(_youtube_player_api, ie._extract_player_response)
             ie._invalid_player_response = partial(_youtube_player_response, ie._invalid_player_response)
-            ie._download_initial_data = partial(_youtube_initial_data, ie._download_initial_data)
+            ie._download_initial_data = partial(_youtube_initial_data, ie, ie._download_initial_data)
         try:
             return fn(ydl)
         finally:
@@ -298,10 +300,23 @@ def _youtube_player_response(invalid: Callable[[Any, str], Any], player_response
     return str(other_id) if other_id else other_id
 
 
-def _text_object(value: Any) -> bool:
-    """YouTube text (a simpleText, or runs) that has some, or nothing: yt-dlp searches a video's super title (its
-    series and episode) without checking it has any (a TypeError, so a 500 here)."""
-    return not value or bool(YoutubeBaseInfoExtractor._get_text(value))
+# Where yt-dlp reads a video's series, season and episode in its super title.
+_EPISODE = re.compile(r"(.+?)\s*S(\d+)\s*•?\s*E(\d+)")
+
+
+def _super_title(value: Any) -> bool:
+    """A video's super title: YouTube text (a simpleText, or runs) that has some, or nothing. yt-dlp searches it (see
+    _EPISODE) without checking it has any (a TypeError), and reads the season and the episode it finds without
+    checking int() can (a ValueError past 4300 digits), so a 500 here."""
+    if not value:
+        return True
+    text = YoutubeBaseInfoExtractor._get_text(value)
+    episode = _EPISODE.search(text) if text else None
+    try:
+        episode and (int(episode[2]), int(episode[3]))
+    except ValueError:
+        return False
+    return bool(text)
 
 
 # Where yt-dlp reads each toggle button's label, in which it matches a like count (a TypeError on a label that isn't a
@@ -327,24 +342,86 @@ def _badge(value: Any) -> bool:
     return all(isinstance(style, str) for style in traverse_obj(value, (..., "style")))
 
 
+def _count(value: Any) -> bool:
+    """Not a count yt-dlp can't hold: it reads one past a float's range ('999…9K likes') as a float it rounds to an
+    int (an OverflowError, so a 500 here)."""
+    try:
+        isinstance(value, str) and parse_count(value)
+    except OverflowError:
+        return False
+    return True
+
+
+def _count_text(value: Any) -> bool:
+    """YouTube text (a simpleText, or runs) of a count, as _count."""
+    return _count(YoutubeBaseInfoExtractor._get_text(value))
+
+
+def _length_text(value: Any) -> bool:
+    """YouTube text of a length yt-dlp can read: it reads a chapter's ('1.5 hours') as a number without checking it is
+    one (a ValueError on '1.2.3 hours', so a 500 here)."""
+    try:
+        parse_duration(YoutubeBaseInfoExtractor._get_text(value))
+    except ValueError:
+        return False
+    return True
+
+
+def _at(*path: Any) -> Any:
+    """The schema (see _conform) of one value deep in a response, the path's last item: _at("a", ..., "b", str) is
+    {"a": [{"b": str}]}."""
+    *keys, schema = path
+    for key in reversed(keys):
+        schema = [schema] if key is ... else {key: schema}
+    return schema
+
+
+_WATCH = ("contents", "twoColumnWatchNextResults", "results", "results", "contents")  # a watch page's renderers
 # The parts of a YouTube watch page's data (ytInitialData) yt-dlp reads as these types without checking. Anything else
-# is deleted, as missing (see _conform): yt-dlp fails on it (an AttributeError or a TypeError, so a 500 here).
-_INITIAL_DATA = {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [{
-    "videoPrimaryInfoRenderer": {
-        "superTitleLink": _text_object, "viewCount": {"videoViewCountRenderer": dict}, "badges": [_badge],
-        "videoActions": {"menuRenderer": {"topLevelButtons": [{
-            "toggleButtonRenderer": _toggles, "segmentedLikeDislikeButtonRenderer": _segmented_toggles}]}}},
-    "videoSecondaryInfoRenderer": {
-        "owner": {"videoOwnerRenderer": {"badges": [_badge]}},
-        "metadataRowContainer": {"metadataRowContainerRenderer": {"rows": [{"metadataRowRenderer": dict}]}}},
-}]}}}}}
+# is deleted, as missing (see _conform): yt-dlp fails on it (an AttributeError, a TypeError, a ValueError or an
+# OverflowError, so a 500 here).
+_INITIAL_DATA = {
+    **_at(*_WATCH, ..., {
+        "videoPrimaryInfoRenderer": {
+            "superTitleLink": _super_title, "viewCount": {"videoViewCountRenderer": {"viewCount": _count_text}},
+            "badges": [_badge],
+            "videoActions": {"menuRenderer": {"topLevelButtons": [{
+                "toggleButtonRenderer": _toggles, "segmentedLikeDislikeButtonRenderer": _segmented_toggles,
+                "segmentedLikeDislikeButtonViewModel": _at(
+                    "likeButtonViewModel", "likeButtonViewModel", "toggleButtonViewModel", "toggleButtonViewModel",
+                    "defaultButtonViewModel", "buttonViewModel", "accessibilityText", _count)}]}}},
+        "videoSecondaryInfoRenderer": {
+            "owner": {"videoOwnerRenderer": {
+                "badges": [_badge], "subscriberCountText": _count_text,
+                "attributedTitle": _at(  # a collab's channels: yt-dlp reads the first one's subscribers
+                    "commandRuns", ..., "onTap", "innertubeCommand", "showDialogCommand", "panelLoadingStrategy",
+                    "inlineContent", "dialogViewModel", "customContent", "listViewModel", "listItems", ...,
+                    "listItemViewModel", "rendererContext", "accessibilityContext", "label", _count)}},
+            "metadataRowContainer": {"metadataRowContainerRenderer": {"rows": [{"metadataRowRenderer": dict}]}}},
+        "itemSectionRenderer": _at("contents", ..., "commentsEntryPointHeaderRenderer", "commentCount", _count_text),
+    }),
+    "engagementPanels": [{"engagementPanelSectionListRenderer": {
+        "header": {"engagementPanelTitleHeaderRenderer": {"contextualInfo": _count_text}},  # the comments'
+        "content": _at("macroMarkersListRenderer", "contents", ..., "macroMarkersListItemRenderer", "timeDescription",
+                       _length_text)}}],  # the chapters'
+    "frameworkUpdates": _at(  # the most replayed parts' (the heatmap's)
+        "entityBatchUpdate", "mutations", ..., "payload", "macroMarkersListEntity", "markersList", "markers", ...,
+        {"startMillis": _number, "durationMillis": _number}),
+}
 
 
-def _youtube_initial_data(download: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+def _youtube_initial_data(ie: YoutubeIE, download: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """YoutubeIE._download_initial_data, but the watch page's data (from the page, or the next API) is made to fit
-    _INITIAL_DATA."""
+    _INITIAL_DATA, and a date (dateText) yt-dlp can't read is deleted, as missing: it reads one (an age it takes from
+    today, '9 days ago', or a date) without checking a date holds it (an OverflowError, or a ValueError on a year past
+    9999, so a 500 here)."""
     initial_data = download(*args, **kwargs)
     _conform(initial_data, _INITIAL_DATA)
+    for info in traverse_obj(initial_data, (*_WATCH, ..., "videoPrimaryInfoRenderer", {dict})):
+        try:
+            ie._parse_time_text(ie._get_text(info, "dateText"), report_failure=False)
+        except (ValueError, OverflowError):
+            del info["dateText"]
     return initial_data
 
 

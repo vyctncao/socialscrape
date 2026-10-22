@@ -1301,10 +1301,66 @@ def test_video_routes_read_no_storyboards(client, monkeypatch, changes):
 
 WATCH = ("contents", "twoColumnWatchNextResults", "results", "results", "contents")
 PRIMARY, SECONDARY = (*WATCH, 0, "videoPrimaryInfoRenderer"), (*WATCH, 1, "videoSecondaryInfoRenderer")
-BUTTON = (*PRIMARY, "videoActions", "menuRenderer", "topLevelButtons", 0)
+BUTTONS = (*PRIMARY, "videoActions", "menuRenderer", "topLevelButtons")
+BUTTON = (*BUTTONS, 0)
 VIEWS, OWNER = (*PRIMARY, "viewCount", "videoViewCountRenderer"), (*SECONDARY, "owner", "videoOwnerRenderer")
 ROWS, LABEL = (*SECONDARY, "metadataRowContainer", "metadataRowContainerRenderer", "rows"), (
     "accessibility", "accessibilityData", "label")
+LIKE_LABEL = ("segmentedLikeDislikeButtonViewModel", "likeButtonViewModel", "likeButtonViewModel",
+              "toggleButtonViewModel", "toggleButtonViewModel", "defaultButtonViewModel", "buttonViewModel",
+              "accessibilityText")
+DIALOG = ("onTap", "innertubeCommand", "showDialogCommand", "panelLoadingStrategy", "inlineContent", "dialogViewModel",
+          "customContent", "listViewModel", "listItems")  # a collab's channels, in the dialog its title opens
+COLLABORATOR = (*OWNER, "attributedTitle", "commandRuns", 0, *DIALOG, 0, "listItemViewModel")
+COMMENTS = ("engagementPanels", 0, "engagementPanelSectionListRenderer", "header", "engagementPanelTitleHeaderRenderer")
+CHAPTERS = ("engagementPanels", 1, "engagementPanelSectionListRenderer", "content", "macroMarkersListRenderer",
+            "contents")
+MARKER = ("frameworkUpdates", "entityBatchUpdate", "mutations", 0, "payload", "macroMarkersListEntity", "markersList",
+          "markers", 0)  # the first of the most replayed parts (the heatmap)
+
+
+def odd_player(self, client, video_id, *args, **kwargs):
+    """The player API's answer: a video with no date of its own, so yt-dlp reads its watch page's."""
+    return {"playabilityStatus": {"status": "OK"},
+            "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                             "channelId": "UC" + "x" * 22}}
+
+
+def odd_watch_data(path: tuple, value: object) -> dict:
+    """A watch page's data (ytInitialData) with each part yt-dlp reads, and `value` at `path`."""
+    data = {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [
+        {"videoPrimaryInfoRenderer": {
+            "superTitleLink": {"runs": [{"text": "Show S1 E2"}]}, "dateText": {"simpleText": "Apr 23, 2005"},
+            "viewCount": {"videoViewCountRenderer": {"viewCount": {"simpleText": "100 views"}}},
+            "videoActions": {"menuRenderer": {"topLevelButtons": [
+                {"toggleButtonRenderer": {"defaultText": nest(LABEL, "5 likes")}},
+                nest(LIKE_LABEL, "like this video along with 5 other people")]}},
+            "badges": [{"metadataBadgeRenderer": {"style": "BADGE_STYLE_TYPE_SIMPLE", "label": "Unlisted"}}]}},
+        {"videoSecondaryInfoRenderer": {
+            "owner": {"videoOwnerRenderer": {
+                "badges": [{"metadataBadgeRenderer": {
+                    "icon": {"iconType": "CHECK_CIRCLE_THICK"}, "style": "BADGE_STYLE_TYPE_VERIFIED"}}],
+                "attributedTitle": {"commandRuns": [nest(DIALOG, [{"listItemViewModel": {
+                    "title": {"content": "jawed"},
+                    "rendererContext": {"accessibilityContext": {"label": "jawed 1K subscribers"}}}}])]}}},
+            "metadataRowContainer": {"metadataRowContainerRenderer": {"rows": [{"metadataRowRenderer": {
+                "title": {"simpleText": "License"}, "contents": [{"simpleText": "Creative Commons"}]}}]}}}},
+        {"itemSectionRenderer": {"contents": []}},  # the comments' section: its entry point may show their count
+    ]}}}}, "engagementPanels": [
+        {"engagementPanelSectionListRenderer": {
+            "panelIdentifier": "engagement-panel-comments-section",
+            "header": {"engagementPanelTitleHeaderRenderer": {"contextualInfo": {"runs": [{"text": "12"}]}}}}},
+        {"engagementPanelSectionListRenderer": {"content": {"macroMarkersListRenderer": {"contents": [
+            {"macroMarkersListItemRenderer": {"title": {"simpleText": title}, "timeDescription": {"simpleText": at}}}
+            for title, at in (("Intro", "0:00"), ("Elephants", "0:10"))]}}}}],
+        "frameworkUpdates": {"entityBatchUpdate": {"mutations": [{"payload": {"macroMarkersListEntity": {
+            "markersList": {"markerType": "MARKER_TYPE_HEATMAP", "markers": [
+                {"startMillis": "0", "durationMillis": "1900", "intensityScoreNormalized": 1}]}}}}]}}}
+    node = data
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    return data
 
 
 @pytest.mark.parametrize("path,value", [
@@ -1328,39 +1384,58 @@ def test_video_routes_read_watch_data_of_another_type_as_missing(client, monkeyp
     toggle buttons' labels as strings it matches and its badges' styles as keys it looks up. So a value of another
     type (or a super title with no text) was a 500 (AttributeError or TypeError) before any of our code ran. It reads
     as missing, and the data's other details are still read."""
-    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
-        return {"playabilityStatus": {"status": "OK"},
-                "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
-                                 "channelId": "UC" + "x" * 22}}
-
-    def initial_data(self, *args, **kwargs):  # the watch page's
-        data = {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [
-            {"videoPrimaryInfoRenderer": {
-                "superTitleLink": {"runs": [{"text": "Show S1 E2"}]},
-                "viewCount": {"videoViewCountRenderer": {"viewCount": {"simpleText": "100 views"}}},
-                "videoActions": {"menuRenderer": {"topLevelButtons": [{"toggleButtonRenderer": {
-                    "defaultText": nest(LABEL, "5 likes")}}]}},
-                "badges": [{"metadataBadgeRenderer": {"style": "BADGE_STYLE_TYPE_SIMPLE", "label": "Unlisted"}}]}},
-            {"videoSecondaryInfoRenderer": {
-                "owner": {"videoOwnerRenderer": {"badges": [{"metadataBadgeRenderer": {
-                    "icon": {"iconType": "CHECK_CIRCLE_THICK"}, "style": "BADGE_STYLE_TYPE_VERIFIED"}}]}},
-                "metadataRowContainer": {"metadataRowContainerRenderer": {"rows": [{"metadataRowRenderer": {
-                    "title": {"simpleText": "License"}, "contents": [{"simpleText": "Creative Commons"}]}}]}}}},
-        ]}}}}, "engagementPanels": [{"engagementPanelSectionListRenderer": {
-            "panelIdentifier": "engagement-panel-comments-section",
-            "header": {"engagementPanelTitleHeaderRenderer": {"contextualInfo": {"runs": [{"text": "12"}]}}}}}]}
-        node = data
-        for key in path[:-1]:
-            node = node[key]
-        node[path[-1]] = value
-        return data
-
-    stub_player(monkeypatch, player)
-    monkeypatch.setattr(YoutubeIE, "_download_initial_data", initial_data)
+    stub_player(monkeypatch, odd_player)
+    monkeypatch.setattr(YoutubeIE, "_download_initial_data", lambda self, *args, **kwargs: odd_watch_data(path, value))
     video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
     transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
     assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
     assert video.json()["title"] == "Odd" and video.json()["commentCountInt"] == 12 and transcript.json()["success"]
+
+
+BIG = "9" * 400 + "K"  # a count past a float's range
+
+
+@pytest.mark.parametrize("path,value,field,expected", [
+    ((*VIEWS, "viewCount"), {"simpleText": f"{BIG} views"}, ("viewCountInt",), None),
+    ((*OWNER, "subscriberCountText"), {"simpleText": f"{BIG} subscribers"}, ("collaborators", 0, "title"), "jawed"),
+    ((*BUTTONS, 1, *LIKE_LABEL), f"{BIG} likes", ("likeCountInt",), None),
+    ((*COLLABORATOR, "rendererContext", "accessibilityContext", "label"), f"{BIG} subscribers",
+     ("collaborators", 0, "title"), "jawed"),
+    ((*COMMENTS, "contextualInfo"), {"runs": [{"text": BIG}]}, ("commentCountInt",), None),
+    ((*WATCH, 2, "itemSectionRenderer", "contents"),
+     [{"commentsEntryPointHeaderRenderer": {"commentCount": {"simpleText": BIG}}}], ("commentCountInt",), 12),
+    ((*PRIMARY, "dateText"), {"simpleText": "99999999999 days ago"}, ("publishDateText",), None),
+    ((*PRIMARY, "dateText"), {"simpleText": "Premiered 0001-01-01T00:00:00+14:00"}, ("publishDateText",), None),
+    ((*PRIMARY, "dateText"), {"simpleText": "Mon, 01 Jan 10000 00:00:00 +0000"}, ("publishDateText",), None),
+    ((*CHAPTERS, 1, "macroMarkersListItemRenderer", "timeDescription"), {"simpleText": "1.2.3 hours"},
+     ("chapters", -1, "title"), "Intro"),
+    ((*MARKER, "startMillis"), 10 ** 400, ("most_replayed",), None),
+    ((*MARKER, "startMillis"), "9" * 400, ("most_replayed",), None),
+    ((*MARKER, "durationMillis"), 10 ** 400, ("most_replayed",), None),
+    ((*PRIMARY, "superTitleLink"), {"simpleText": f"Show S{'9' * 5000} E1"}, ("viewCountInt",), 100),
+], ids=["view_count", "subscriber_count", "like_count", "collaborator_subscriber_count", "comment_count",
+        "comment_entry_count", "age_before_year_1", "date_before_year_1_in_utc", "date_after_year_9999",
+        "chapter_time_not_a_number", "replayed_start", "replayed_start_string", "replayed_length",
+        "season_past_int_digits"])
+def test_video_routes_read_watch_data_numbers_yt_dlp_cant_read_as_missing(client, monkeypatch, path, value, field,
+                                                                          expected):
+    """yt-watch-data-number-500: yt-dlp reads a watch page's counts (its views, likes, subscribers and comments) as
+    numbers it rounds to ints, its date as one a date holds, its chapters' times as numbers, its most replayed parts'
+    times as numbers it sums and its super title's season and episode as ints, all without checking it can. So a
+    count past a float's range ('999…9K'), a date out of a date's range (an age reaching back before the year 1, a
+    date before it once in UTC or a year past 9999), a time that isn't a number ('1.2.3 hours') or is past a float's
+    range, or a season past the 4300 digits int() reads was a 500 (OverflowError or ValueError) before any of our
+    code ran. It reads as missing, and the data's other details are still read."""
+    stub_player(monkeypatch, odd_player)
+    monkeypatch.setattr(YoutubeIE, "_download_initial_data", lambda self, *args, **kwargs: odd_watch_data(path, value))
+    monkeypatch.setattr(M, "exact_comment_count", lambda ydl, vid: None)  # offline: no comments-header request
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    body = video.json()
+    for key in field:
+        body = body[key]
+    assert body == expected and video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
 def test_video_route_exact_comment_count(client, monkeypatch):
