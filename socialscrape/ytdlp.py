@@ -40,6 +40,7 @@ from yt_dlp.utils import (
     unified_strdate,
     variadic,
 )
+from yt_dlp.utils import _utils as yt_dlp_utils
 
 from .config import get_settings
 from .errors import (ApiError, BadRequest, Forbidden, Misconfigured, NotFound, UpstreamBlocked, UpstreamError,
@@ -57,6 +58,21 @@ ALLOWED_EXTRACTORS = {
     "tiktok": [r"tiktok(:.*)?"],
     "instagram": [r"instagram(:.*)?"],
 }
+
+
+def _html_entity(entity: str, read: Callable[[str], str] = yt_dlp_utils._htmlentity_transform) -> str:
+    """yt-dlp's reader of an HTML character reference ('#38;' -> '&'), but one of a number too large for a C int
+    ('&#2147483648;') is read as its text, as yt-dlp reads one past Unicode's last character ('&#1114112;'): yt-dlp's
+    own reader fails on it (an OverflowError, so a 500 here)."""
+    try:
+        return read(entity)
+    except OverflowError:
+        return f"&{entity}"
+
+
+# unescapeHTML looks its reader up as it runs, so this one reads each page text yt-dlp and we unescape, on every
+# platform: meta tags, elements, error screens.
+yt_dlp_utils._htmlentity_transform = _html_entity
 
 
 def _pool() -> ThreadPoolExecutor:

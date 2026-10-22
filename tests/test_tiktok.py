@@ -3,6 +3,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from yt_dlp.extractor.tiktok import TikTokBaseIE
 from yt_dlp.networking.exceptions import ProxyError
 from yt_dlp.utils import ExtractorError
 
@@ -1213,6 +1214,22 @@ def test_user_page_challenge_and_status_codes(fake_ydl):
         ydl.ies["TikTokUser"] = _FakeUserPage({"someone": _user_detail(status)})
         with pytest.raises(error):
             tiktok._user_page(ydl, "someone")
+
+
+@pytest.mark.parametrize("path,params", [("/v1/tiktok/profile", {"handle": "someone"}),
+                                         ("/v2/tiktok/video", {"url": STOOL_VIDEO})], ids=["profile", "video"])
+def test_a_challenge_page_with_a_character_reference_yt_dlp_cant_read_is_503(client, monkeypatch, path, params):
+    """yt-html-entity-500: yt-dlp reads the JS challenge page's data element as text, unescaped, and a character
+    reference in it past a C int ('&#2147483648;') was a 500 (OverflowError) wherever a tiktok.com page is read:
+    our user and live pages, yt-dlp's post page. It reads as its text, so the page is a challenge yt-dlp can't
+    solve: a 503, as one with a readable reference is."""
+    for text in ("&#2147483648;", "&#38;"):
+        page = f'<html><title>Please wait...</title><p id="cs" class="e30">{text}</p></html>'
+        monkeypatch.setattr(TikTokBaseIE, "_download_webpage_handle", lambda self, url, *args, page=page, **kwargs: (
+            page, SimpleNamespace(url=url, extensions={})))  # the page, not a redirect to /login
+        r = client.get(path, params=params)
+        assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), (text, r.text)
+        assert "Unable to extract challenge data" in r.json()["message"]
 
 
 def test_pages_and_feeds_of_another_shape(fake_ydl):

@@ -12,7 +12,7 @@ from socialscrape.errors import BadRequest, NotFound
 from socialscrape.ytdlp import translate_error
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor.common import InfoExtractor
-from yt_dlp.utils import DownloadError, ExtractorError
+from yt_dlp.utils import DownloadError, ExtractorError, clean_html, unescapeHTML
 
 
 def test_every_catalog_path_is_routed(client):
@@ -132,6 +132,15 @@ def test_times_too_big_to_hold_read_as_missing():
     assert subtitles.parse(raw, "json3") == [seg(0.0, 0.0, "far"), seg(1.5, 3.75, "hi")]
     for junk in (float("nan"), float("inf"), float("-inf")):
         assert util.clock(junk) is None and util.clock(junk, always_hours=True) is None, junk
+
+
+def test_character_references_too_big_to_read_read_as_their_text():
+    """yt-html-entity-500: yt-dlp reads a character reference in a page's text ('&#38;' -> '&') with chr(), and one
+    past Unicode's last character as its text, but not one past a C int ('&#2147483648;'): an OverflowError, so a
+    500 wherever a page's text was read. It reads as its text, as one past Unicode does."""
+    odd = "&#1114112; &#2147483648; &#99999999999999999999; &#x99999999999999999;"
+    assert unescapeHTML(f"&#38; &#x2022; &amp; {odd}") == f"& \u2022 & {odd}"
+    assert clean_html(f"<b>Odd</b> {odd}") == f"Odd {odd}"
 
 
 def test_clean_param_drops_what_a_copied_value_carries_along():

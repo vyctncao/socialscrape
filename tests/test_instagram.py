@@ -457,6 +457,9 @@ def test_post_count_from_meta():
     assert ig.post_count_from_meta(big) is None
     assert ig._total_media_count(f'"total_media_count_intl":"{"9" * 5000}"') is None
     assert ig._total_media_count(f'"total_media_count_intl":"{"9" * 400}M"') is None
+    # a character reference past a C int (an OverflowError in yt-dlp's unescapeHTML) was a 500: it reads as its text
+    odd = '<meta content="1M Followers, 5 Following, &#2147483648; 1,800 Posts - x" property="og:description" />'
+    assert ig.post_count_from_meta(odd) == (1800, False)
 
 
 def test_map_profile():
@@ -555,6 +558,9 @@ def test_topic_title():
     assert ig._topic_title(HUB_HTML) == "Basketball"
     assert ig._topic_title('<meta property="og:title" content="Funnydogs" />') == "Funnydogs"
     assert ig._topic_title("<html></html>") is None
+    # a character reference past a C int (an OverflowError in yt-dlp's unescapeHTML) was a 500: it reads as its text
+    odd = '<meta property="og:title" content="Golden &#2147483648; Retriever &#x2022; 203M reels on Instagram" />'
+    assert ig._topic_title(odd) == "Golden &#2147483648; Retriever"
 
 
 def test_map_popular_category_hub():

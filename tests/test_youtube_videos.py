@@ -1486,6 +1486,60 @@ def test_video_routes_read_watch_page_meta_tags_yt_dlp_cant_read_as_missing(clie
     assert video.status_code == 200 and (video.json()[field], video.json()["title"]) == (expected, "Odd"), video.text
 
 
+BIG_REF = "&#2147483648;"  # a character reference past a C int
+
+
+@pytest.mark.parametrize("details,meta,field,expected", [
+    ({}, f'<meta property="og:image" content="https://i.ytimg.com/vi/x/hq{BIG_REF}.jpg">', "thumbnail",
+     f"https://i.ytimg.com/vi/x/hq{BIG_REF}.jpg"),
+    ({"title": None}, f'<meta property="og:title" content="Odd {BIG_REF}">', "title", f"Odd {BIG_REF}"),
+    ({}, '<meta itemprop="genre" content="Pets &#99999999999999999999;">', "genre", "Pets &#99999999999999999999;"),
+    ({}, '<meta property="og:video:tag" content="zoo &#x99999999999999999;">', "keywords",
+     ["zoo &#x99999999999999999;"]),
+    ({}, '<meta property="og:image" content="https://i.ytimg.com/vi/x/hq&#38;.jpg">', "thumbnail",
+     "https://i.ytimg.com/vi/x/hq&.jpg"),
+], ids=["image", "title", "genre", "video_tag", "readable"])
+def test_video_routes_read_character_references_yt_dlp_cant_read_as_their_text(client, monkeypatch, details, meta,
+                                                                                field, expected):
+    """yt-html-entity-500: yt-dlp reads a character reference in a watch page's text ('&#38;' -> '&') with chr(), and
+    one past Unicode's last character as its text, but not one past a C int ('&#2147483648;': an OverflowError). So
+    one in a meta tag yt-dlp reads (og:image always is; the title, genre and others where a player response has
+    none) or in a video tag was a 500 in a video's details, transcript and sponsors before any of our code ran. It
+    reads as its text."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer, with no microformat
+        found = {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                 "channelId": "UC" + "x" * 22, **details}
+        return {"playabilityStatus": {"status": "OK"}, "streamingData": {"formats": [dict(FORMAT)]},
+                "videoDetails": {k: v for k, v in found.items() if v is not None}}
+
+    stub_player(monkeypatch, player)
+    page = f"<html><head>{meta}</head></html>"
+    monkeypatch.setattr(YoutubeIE, "_download_initial_webpage", lambda self, *args, **kwargs: page)
+    monkeypatch.setattr(M, "exact_comment_count", lambda ydl, vid: None)  # offline: no comments-header request
+    for path in ("/v1/youtube/video/transcript", "/v1/youtube/video/sponsors"):
+        r = client.get(path, params={"url": watch(ZOO)})
+        assert r.status_code == 200 and r.json()["success"], (path, r.text)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    assert video.status_code == 200 and video.json()[field] == expected, video.text
+
+
+def test_video_routes_read_a_character_reference_yt_dlp_cant_read_in_a_subreason_as_its_text(client, monkeypatch):
+    """yt-html-entity-500: likewise in an error screen's subreason, which yt-dlp reads as a page's text for a video
+    with no formats. The subreason still says why the video can't be played: a geo-block is still a 403."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        return {"playabilityStatus": {"status": "UNPLAYABLE", "reason": "Video unavailable", "errorScreen": {
+            "playerErrorMessageRenderer": {"subreason": {
+                "simpleText": f"The uploader has not made this video available in your country {BIG_REF}"}}}},
+            "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "10", "author": "a",
+                             "channelId": "UCx"}}
+
+    stub_player(monkeypatch, player)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 403), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd" and transcript.json()["error"] == "geo_restricted"
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []
