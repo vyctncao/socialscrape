@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import socket
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable
@@ -48,6 +49,22 @@ def _number(name: str, default: str, cast: Callable[[str], float], *, minimum: f
         raise ConfigError(f"{name} must be a finite number, got {raw!r}")
     if value < minimum or (value == minimum and not inclusive):
         raise ConfigError(f"{name} must be {'at least' if inclusive else 'greater than'} {minimum:g}, got {raw!r}")
+    return value
+
+
+def _socket_timeout() -> float:
+    """yt-dlp gives it to each socket it opens, so one longer than a socket can wait (about 292 years on Linux and
+    macOS) would start, then fail on every request in yt-dlp's requests and urllib handlers, and in curl_cffi's
+    too past about 1e16 seconds."""
+    name = "SOCIALSCRAPE_SOCKET_TIMEOUT"
+    value = _number(name, "20", float, minimum=0, inclusive=False)
+    try:
+        with socket.socket() as probe:
+            probe.settimeout(value)
+    except OverflowError:
+        raise ConfigError(f"{name} is longer than a socket can wait, got {_env(name)!r}") from None
+    except OSError:  # no IPv4 socket to ask (IPv4 turned off): the value stands
+        pass
     return value
 
 
@@ -112,7 +129,7 @@ def get_settings() -> Settings:
         cache_path=DEFAULT_CACHE_PATH if raw_cache is None else _path(raw_cache.strip()),
         max_workers=int(_number("SOCIALSCRAPE_MAX_WORKERS", "8", int, minimum=1)),
         request_timeout=_number("SOCIALSCRAPE_REQUEST_TIMEOUT", "180", float, minimum=0, inclusive=False),
-        socket_timeout=_number("SOCIALSCRAPE_SOCKET_TIMEOUT", "20", float, minimum=0, inclusive=False),
+        socket_timeout=_socket_timeout(),
         proxy=_proxy(),
         cookie_files={
             p: _path(path) for p in PLATFORMS if (path := _env(f"SOCIALSCRAPE_COOKIES_{p.upper()}"))

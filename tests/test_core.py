@@ -659,6 +659,10 @@ def env(monkeypatch):
     ("SOCIALSCRAPE_REQUEST_TIMEOUT", "0", "greater than 0"), ("SOCIALSCRAPE_REQUEST_TIMEOUT", "-5", "greater than 0"),
     ("SOCIALSCRAPE_REQUEST_TIMEOUT", "abc", "must be a number"), ("SOCIALSCRAPE_SOCKET_TIMEOUT", "nan", "finite"),
     ("SOCIALSCRAPE_SOCKET_TIMEOUT", "inf", "finite"), ("SOCIALSCRAPE_TRANSCRIBE", "off", "must be one of"),
+    # longer than a socket can wait: every request failed in two of yt-dlp's network handlers before curl_cffi took
+    # it, and from 1e16 in all three, as a 500 saying to check SOCIALSCRAPE_PROXY
+    *[("SOCIALSCRAPE_SOCKET_TIMEOUT", value, "longer than a socket can wait") for value in (
+        "9999999999", "1e16", "1e300")],
     ("SOCIALSCRAPE_TRANSCRIBE", "whisper", "must be one of"), ("SOCIALSCRAPE_PROXY", "bogus://u:secret@h:1", "scheme"),
     # retest-runtime-proxy-url-leak: an allowed scheme with an unusable host/port started, then every request
     # failed with the URL (password included) in the response
@@ -682,11 +686,23 @@ def test_settings_accept_and_normalise(env):
     s = env(SOCIALSCRAPE_MAX_WORKERS=" 3 ", SOCIALSCRAPE_REQUEST_TIMEOUT="0.5", SOCIALSCRAPE_TRANSCRIBE="MLX-Whisper",
             SOCIALSCRAPE_PROXY="127.0.0.1:8080", SOCIALSCRAPE_SOCKET_TIMEOUT="")()
     assert (s.max_workers, s.request_timeout, s.socket_timeout) == (3, 0.5, 20.0)
+    assert env(SOCIALSCRAPE_SOCKET_TIMEOUT="1e6")().socket_timeout == 1e6  # 11.6 days: long, but a socket can wait
     assert s.transcribe_backend == "mlx-whisper" and s.proxy == "127.0.0.1:8080"  # scheme-less proxy: http
     assert env(SOCIALSCRAPE_PROXY="SOCKS5H://127.0.0.1:1080")().proxy == "SOCKS5H://127.0.0.1:1080"
     for proxy in ("http://[::1]:8080", "u:p@proxy.example:3128", "//127.0.0.1:8080", "http://u:p@h:1/x",
                   "1.2.3", "http://proxy.example", "socks5h://tor"):  # no port: the scheme's default, as documented
         assert env(SOCIALSCRAPE_PROXY=proxy)().proxy == proxy
+
+
+def test_socket_timeout_stands_where_there_is_no_socket_to_ask(env, monkeypatch):
+    # IPv4 turned off (systemd's RestrictAddressFamilies=AF_INET6, say): yt-dlp can still use IPv6
+    import socket
+
+    def no_socket(*args, **kwargs):
+        raise OSError(97, "Address family not supported by protocol")
+
+    monkeypatch.setattr(socket, "socket", no_socket)
+    assert env(SOCIALSCRAPE_SOCKET_TIMEOUT="30")().socket_timeout == 30
 
 
 @pytest.mark.parametrize("value", ["", "   "])
