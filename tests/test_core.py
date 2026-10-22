@@ -760,6 +760,55 @@ def test_cache_failure_after_startup_serves_live(tmp_path, caplog):
     assert "cache read failed" in caplog.text and "cache write failed" in caplog.text
 
 
+def test_cache_rows_it_did_not_write_are_served_live(tmp_path, caplog):
+    # A row another program or a hand edit left in the table was a 500 on every request for it with cache_max_age:
+    # it's skipped with a warning, as a failing cache is, and the live response replaces it
+    from fastapi import APIRouter, FastAPI
+
+    from socialscrape.cache import CacheMiddleware, ResponseCache
+    from socialscrape.registry import sc_get
+
+    router = APIRouter()
+    calls = {"n": 0}
+
+    @sc_get(router, "/v9/test/foreign-row", source="test")
+    async def thing():
+        calls["n"] += 1
+        return {"n": calls["n"]}
+
+    cache = ResponseCache(str(tmp_path / "c.sqlite3"))
+    app = FastAPI()
+    app.add_middleware(CacheMiddleware, cache=cache)
+    app.include_router(router)
+    c = TestClient(app)
+
+    def seed(body, stored_at=None):
+        cache._conn.execute("REPLACE INTO responses VALUES ('/v9/test/foreign-row?', ?, ?)",
+                            (time.time() if stored_at is None else stored_at, body))
+        cache._conn.commit()
+
+    unreadable = [("[1, 2]",), ('"text"',), ("7",), ("null",), ("{",), (b'{"a": "\xff"}',),  # not UTF-8
+                  ('{"a": ' + "9" * 5000 + "}",),  # more digits than Python reads
+                  ("[" * 100_000 + "]" * 100_000,),  # nested deeper than Python reads
+                  ('{"a": 1}', "an hour ago"), ('{"a": 1}', b"\x00"),  # stored_at: text, a blob
+                  ('{"a": 1}', 1e20), ('{"a": 1}', float("inf"))]  # past what a datetime holds
+    for row in unreadable:
+        seed(*row)
+        n = calls["n"]
+        r = c.get("/v9/test/foreign-row?cache_max_age=1d")
+        assert r.status_code == 200 and r.json()["n"] == n + 1 and r.headers["x-cache"] == "miss", repr(row)[:60]
+        again = c.get("/v9/test/foreign-row?cache_max_age=1d")
+        assert again.headers["x-cache"] == "hit" and again.json()["n"] == n + 1, repr(row)[:60]
+    assert "the row for /v9/test/foreign-row? isn't a stored response" in caplog.text
+    # A JSON object is replayed, what JSON can't write in it written as the routes write it
+    replayed = {'{"a": NaN, "b": -Infinity}': {"a": None, "b": None}, '{"a": "\\ud83d"}': {"a": "\ufffd"}}
+    for body, written in replayed.items():
+        seed(body)
+        r = c.get("/v9/test/foreign-row?cache_max_age=1d")
+        assert r.status_code == 200 and r.headers["x-cache"] == "hit" and r.json()["cached"] is True, body
+        assert {k: r.json()[k] for k in written} == written, body
+
+
 @pytest.mark.parametrize("cache_path", ["", "cache.sqlite3"])
 def test_bad_cache_max_age_is_400_with_or_without_the_cache(env, cache_path, tmp_path):
     # Only CacheMiddleware checked cache_max_age, so with the cache off cache_max_age=abc was ignored (200)

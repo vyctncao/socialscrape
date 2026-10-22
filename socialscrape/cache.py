@@ -24,6 +24,7 @@ from starlette.responses import JSONResponse, Response
 
 from .config import ConfigError
 from .errors import BadRequest
+from .responses import LenientJSONResponse
 from .util import clean_param
 
 log = logging.getLogger("socialscrape.cache")
@@ -65,16 +66,27 @@ class ResponseCache:
 
     # A cache that fails after startup (disk full, I/O error) is skipped with a warning: the request is served live
     # and its response is still sent.
-    def get(self, key: str, max_age: float) -> tuple[dict[str, Any], float] | None:
+    def get(self, key: str, max_age: float) -> tuple[dict[str, Any], datetime] | None:
         try:
             with self._lock:
                 row = self._conn.execute("SELECT body, stored_at FROM responses WHERE key = ?", (key,)).fetchone()
         except sqlite3.Error as exc:
             log.warning("cache read failed (%s): %s", self.path, exc)
             return None
-        if not row or time.time() - row[1] > max_age:
+        if not row:
             return None
-        return json.loads(row[0]), row[1]
+        try:
+            if time.time() - row[1] > max_age:
+                return None
+            body, stored_at = json.loads(row[0]), datetime.fromtimestamp(row[1], timezone.utc)
+        except (TypeError, ValueError, OverflowError, OSError, RecursionError):
+            body = None
+        if not isinstance(body, dict):
+            # A row put() didn't write (another program's, or edited by hand: text that isn't a JSON object, a
+            # stored_at that isn't a time) is skipped too: the request is served live, and its response replaces it.
+            log.warning("cache read failed (%s): the row for %s isn't a stored response", self.path, key)
+            return None
+        return body, stored_at
 
     def put(self, key: str, body: str) -> None:
         try:
@@ -115,8 +127,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
         if max_age is not None and (hit := self.cache.get(key, max_age)):
             body, stored_at = hit
             body["cached"] = True
-            body["cached_at"] = datetime.fromtimestamp(stored_at, timezone.utc).isoformat().replace("+00:00", "Z")
-            return JSONResponse(body, headers={"x-cache": "hit"})
+            body["cached_at"] = stored_at.isoformat().replace("+00:00", "Z")
+            # Lenient: a row put() didn't write can hold what JSON can't write (a NaN, half an emoji)
+            return LenientJSONResponse(body, headers={"x-cache": "hit"})
 
         response = await call_next(request)
         if response.status_code != 200 or "application/json" not in response.headers.get("content-type", ""):
