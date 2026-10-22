@@ -158,6 +158,18 @@ def test_clean_param_drops_what_a_copied_value_carries_along():
     assert time.perf_counter() - started < 1
 
 
+def test_requestable_url():
+    """URLs yt-dlp can request: it fails on the others before asking, with errors that aren't its own (a ValueError, a
+    UnicodeError) or a RequestError that isn't a network error, which fatal=False lets through."""
+    for url in ("https://v16-webapp.tiktok.com/a/b.vtt?x=1&y=%20", "http://127.0.0.1:8080/x", "https://[::1]/x",
+                "https://\u00e9.example/x", "HTTPS://x.com/a b"):
+        assert util.requestable_url(url), url
+    for url in ("http://[", "https://[::1", f"https://{'a' * 64}.com/x", "https://x.com/\ud83d", "https://x:abc/",
+                "https://x:99999/", "https:///x", "https://a b/c", "javascript:alert(1)", "file:///x.vtt", "x", "",
+                None, 7, ["https://x.com/"]):
+        assert not util.requestable_url(url), url
+
+
 def test_sc_get_cleans_every_string_param(monkeypatch):
     from fastapi import APIRouter, FastAPI
 

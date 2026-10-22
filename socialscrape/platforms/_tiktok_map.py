@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..util import compact, iso_utc, short_lang, sibling_lang
+from ..util import compact, iso_utc, requestable_url, short_lang, sibling_lang
 
 _IMAGE_URI = re.compile(r"^https?://[^/]+/(tos-[\w-]+/[\w.-]+)~")
 _CODEC = re.compile(r"_(h264|bytevc1|bytevc2)_")
@@ -383,7 +383,8 @@ def caption_track(item: dict[str, Any], language: str | None = None) -> dict[str
     ISO 639-1 codes ('en', 'zh-Hans'). Both are compared by their language part, so 'zh', 'zho'
     and 'cmn' all pick 'cmn-Hans-CN' (3-letter codes are shortened first). With no track in the
     language, one in its sibling (sibling_lang: 'nno-NO' for 'no') is taken. Without a language
-    the original-audio track wins.
+    the original-audio track wins. A track at a URL yt-dlp can't request (requestable_url) is
+    left out, as if it weren't listed: yt-dlp fails on one before asking, a 500 here.
     """
     v = obj(item.get("video"))
     cla = obj(v.get("claInfo"))
@@ -391,10 +392,10 @@ def caption_track(item: dict[str, Any], language: str | None = None) -> dict[str
     codes = {c["language"]: text(c.get("languageCode")) for c in captions if text(c.get("language"))}
     original = obj(cla.get("originalLanguageInfo")).get("language")
     tracks = [{"name": text(t.get("LanguageCodeName")), "url": t["Url"], "format": text(t.get("Format"))}
-              for t in objs(v.get("subtitleInfos")) if text(t.get("Url"))]
+              for t in objs(v.get("subtitleInfos")) if requestable_url(t.get("Url"))]
     if not tracks:  # fall back to the caption list itself
         tracks = [{"name": text(c.get("language")), "url": c["url"], "format": text(c.get("captionFormat"))}
-                  for c in captions if text(c.get("url"))]
+                  for c in captions if requestable_url(c.get("url"))]
     tracks = [t for t in tracks if (t["format"] or "webvtt").lower() == "webvtt"]
     if language:
         langs = [{short_lang(codes.get(t["name"])), short_lang(t["name"])} for t in tracks]  # 'eng-US' -> 'en'

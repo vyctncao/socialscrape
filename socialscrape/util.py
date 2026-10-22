@@ -6,6 +6,7 @@ import math
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from yt_dlp.utils import ISO639Utils
 
@@ -136,3 +137,20 @@ def truthy(value: str | bool | None) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def requestable_url(value: Any) -> bool:
+    """An http(s) URL yt-dlp can request. It quotes each one as UTF-8 (a UnicodeEncodeError on half an emoji), splits
+    it (a ValueError on an unclosed '[') and encodes its host as IDNA (a UnicodeError on a label of more than 63
+    characters), none of them a yt-dlp error, and it refuses another scheme, or a host or port that isn't one, with a
+    RequestError that fatal=False doesn't catch: it isn't a network error."""
+    if not isinstance(value, str):
+        return False
+    try:
+        value.encode()
+        parts = urlsplit(value)
+        parts.netloc.encode("idna")
+        host, _ = (parts.hostname or "").encode("idna").decode(), parts.port
+    except (ValueError, UnicodeError):
+        return False
+    return parts.scheme in ("http", "https") and bool(re.fullmatch(r"[\w.-]+|[\da-f.]*:[\da-f:.%\w]*", host))

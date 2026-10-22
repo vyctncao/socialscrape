@@ -410,6 +410,41 @@ def test_caption_track_other_codes_and_norwegian():
     assert M.caption_track(item, "nn")["url"] == "https://cdn/no.vtt"
 
 
+# Caption URLs yt-dlp fails on before asking: with a ValueError (an unclosed '['), a UnicodeError (a host label of 64
+# characters, half an emoji) or a RequestError that isn't a network error (a port that isn't one, no host, another
+# scheme), none of which fatal=False catches
+_UNREQUESTABLE = ("http://[", f"https://{'a' * 64}.tiktokcdn.com/x.vtt", "https://cdn/\ud83d.vtt",
+                  "https://cdn:abc/x.vtt", "https:///x.vtt", "javascript:alert(1)", "file:///x.vtt")
+
+
+def test_caption_track_at_a_url_yt_dlp_cant_request_is_left_out():
+    item = _web_item()
+    item["video"]["subtitleInfos"][:0] = [{"LanguageCodeName": "eng-US", "Url": bad, "Format": "webvtt"}
+                                          for bad in _UNREQUESTABLE]
+    assert M.caption_track(item)["url"] == M.caption_track(item, "en")["url"] == "https://cdn/en.vtt"
+    del item["video"]["subtitleInfos"][len(_UNREQUESTABLE):]
+    assert M.caption_track(item, "en")["url"] == "https://cdn/cap.vtt"  # none left: the caption list's
+    item["video"]["claInfo"]["captionInfos"][0]["url"] = "http://["
+    assert M.caption_track(item) is None and M.caption_track(item, "en") is None
+
+
+def test_captions_at_a_url_yt_dlp_cant_request_are_none(client, monkeypatch):
+    """A post's only caption track at a URL yt-dlp can't request (see _UNREQUESTABLE) was a 500 for its transcript:
+    "Internal server error", an upstream_error, or for another scheme a server misconfigured. It reads as no track.
+    The real with_ydl and TikTokIE run here, on the post's web data."""
+    from yt_dlp.extractor.tiktok import TikTokIE
+
+    url = M.web_url("someone", "7300000000000000001")
+    monkeypatch.setattr(tiktok, "_app_aweme", lambda ydl, item: None)
+    for bad in _UNREQUESTABLE:
+        item = _web_item()
+        item["video"].update(claInfo={}, subtitleInfos=[{"LanguageCodeName": "eng-US", "Url": bad, "Format": "webvtt"}])
+        monkeypatch.setattr(TikTokIE, "_extract_web_data_and_status", lambda self, page, aweme_id, item=item: (item, 0))
+        assert ok(client, "/v1/tiktok/video/transcript", url=url)["transcript"] is None, bad
+        body = ok(client, "/v2/tiktok/video", url=url, get_transcript="true")
+        assert body["transcript"] is None and body["aweme_detail"]["aweme_id"] == "7300000000000000001", bad
+
+
 def test_short_lang():
     from socialscrape.util import short_lang
 
