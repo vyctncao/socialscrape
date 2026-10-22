@@ -202,6 +202,9 @@ def _region(value: str | None) -> str | None:
 # --- cursors -----------------------------------------------------------------
 
 _FIELDS = {"t": str, "c": list, "g": str, "y": str, "v": str, "s": str, "p": str, "m": dict, "n": int, "x": str}
+# A visitor ('v') yt-dlp can send back: it goes in the X-Goog-Visitor-Id header, which a line break or a character
+# past latin-1 fails before any request. YouTube's visitorData (base64url, its '=' as %3D) is visible ASCII.
+_VISITOR = re.compile(r"[!-~]*")
 
 
 def _bad_cursor(message: str = "Invalid cursor/continuation token") -> BadRequest:
@@ -236,7 +239,8 @@ def _state(token: str | None, kind: str) -> dict[str, Any] | None:
     if (not state.get("t") or any(state.get(k) is not None and not isinstance(state[k], t) for k, t in _FIELDS.items())
             or (ctx is not None and (len(ctx) != 3 or not all(x is None or isinstance(x, str) for x in ctx)))
             or (n is not None and not _count_ok(n)) or (meta is not None and not _meta_ok(meta))
-            or state.get("x") not in (None, "mweb") or state.get("y") not in (None, *p.SEARCH_TYPES)):
+            or state.get("x") not in (None, "mweb") or state.get("y") not in (None, *p.SEARCH_TYPES)
+            or not _VISITOR.fullmatch(state.get("v") or "")):
         raise _bad_cursor()
     try:
         _region(state.get("g"))
@@ -349,7 +353,9 @@ def _api(ie: Any, query: dict[str, Any], ep: str = "browse", *, client: str = "w
 
 
 def _visitor(resp: dict[str, Any]) -> str | None:
-    return traverse_obj(resp, ("responseContext", "visitorData", {str}))
+    """A response's visitorData, unless it can't be sent back (see _VISITOR): then the visitor before it goes on."""
+    visitor = traverse_obj(resp, ("responseContext", "visitorData", {str}))
+    return visitor if visitor is not None and _VISITOR.fullmatch(visitor) else None
 
 
 def _continue(ie: Any, token: str, ep: str = "browse", *, again: bool = False, **kw: Any) -> dict[str, Any]:

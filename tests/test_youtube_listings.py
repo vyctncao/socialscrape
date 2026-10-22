@@ -345,6 +345,8 @@ def test_seen_ids_take_half_an_emoji():
     # playlist meta is echoed on later pages, so it must keep playlist_meta's shape
     {"m": {"totalVideos": "abc"}}, {"m": {"totalVideos": -1}}, {"m": {"totalVideos": True}}, {"m": {"title": 5}},
     {"m": {"owner": "str"}}, {"m": {"owner": {"id": 5}}}, {"m": {"owner": {"x": "y"}}}, {"m": {"x": 1}},
+    # the visitor is sent back as a header, which can't hold a line break or a character past latin-1
+    {"v": "a\nb"}, {"v": "a\rb"}, {"v": "€uro"}, {"v": "😀"}, {"v": "\ud83d"}, {"v": "a b"}, {"v": "a\x00b"},
 ])
 def test_cursor_field_types_are_checked(extra):
     with pytest.raises(BadRequest) as err:
@@ -1293,6 +1295,36 @@ def test_search_reads_past_a_page_of_repeats(client, upstream):
         ("search", {"query": {"continuation": "S2"}, "client": "web", "region": "GB", "visitor": "VISITOR2"})]
     assert [v["id"] for v in body["videos"]] == ["plN7JMbadRg"] and body["shorts"] == []
     assert body["continuationToken"] is None
+
+
+@pytest.mark.parametrize("path, params, extra", [
+    ("/v1/youtube/search", {"query": "funny"}, {}),
+    ("/v1/youtube/search/hashtag", {"hashtag": "funny"}, {"p": "funny"}),
+], ids=["search", "hashtag"])
+def test_cursor_visitor_that_cant_be_sent_is_bad_cursor(client, upstream, path, params, extra):
+    """A crafted cursor whose visitor had a line break or a character past latin-1 was a 500 upstream_error: yt-dlp
+    sends the visitor back in the X-Goog-Visitor-Id header, and fails such a header before asking YouTube. It is a
+    bad cursor, as a field of another type is, and nothing is asked."""
+    kind = path.rpartition("/")[2]
+    for visitor in ("a\nb", "a\rb", "€uro", "😀"):
+        token = M._cursor(kind, "T1", v=visitor, **extra)
+        r = client.get(path, params={**params, "continuationToken": token})
+        assert (r.status_code, r.json()["error"]) == (400, "bad_cursor"), visitor
+    assert upstream.calls == []
+
+
+def test_response_visitor_that_cant_be_sent_is_not_kept(client, upstream):
+    """Nor is such a visitorData from YouTube sent on, to the page read past a page of repeats, or kept in the
+    cursor, where it would make the next page a bad cursor: the visitor before it is."""
+    odd = {"responseContext": {"visitorData": "a\nb"}}
+    assert M._visitor(odd) is None and M._visitor(appended([])) == "VISITOR2" and M._visitor({}) is None
+    cursor = served_cursor("search", "S1", v="VISITOR1")
+    upstream.answers = [{**appended([*SERVED, cont("S2")]), **odd},
+                        {**appended([{"lockupViewModel": LOCKUP_VIDEO}, cont("S3")]), **odd}]
+    body = client.get("/v1/youtube/search", params={"query": "funny", "continuationToken": cursor}).json()
+    assert [call["visitor"] for _, call in upstream.calls] == ["VISITOR1", "VISITOR1"]
+    state = M._state(body["continuationToken"], "search")
+    assert (state["t"], state["v"]) == ("S3", "VISITOR1")
 
 
 class FakeIE:
