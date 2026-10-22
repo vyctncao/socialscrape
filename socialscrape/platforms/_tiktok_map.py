@@ -96,6 +96,11 @@ def clean_handle(handle: str) -> str | None:
     return handle if _HANDLE.fullmatch(handle) else None
 
 
+def is_handle(value: Any) -> bool:
+    """A bare handle, as a uniqueId is. One that isn't (a '/', a '?', half an emoji) can't go in a page's address."""
+    return isinstance(value, str) and bool(_HANDLE.fullmatch(value))
+
+
 def web_url(handle: str | None, aweme_id: str) -> str:
     return f"https://www.tiktok.com/@{text(handle) or '_'}/video/{aweme_id}"
 

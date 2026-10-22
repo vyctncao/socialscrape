@@ -58,6 +58,8 @@ _ID = re.compile(r"[0-9]{1,25}")  # ASCII only: str.isdigit()/\d also accept '²
 _OFFSET = re.compile(r"[0-9]{1,9}")
 _REGION = re.compile(r"[A-Za-z]{2}")
 _LANG = re.compile(r"[A-Za-z]{2,3}")
+# A secUid yt-dlp can send in a query: visible ASCII, as TikTok's (base64url) is. Half an emoji fails before asking.
+_SEC_UID = re.compile(r"[!-~]+")
 _RETRY_DELAY = 1.5  # s before re-asking after a 10204 post or an empty app-API body
 _PROFILE_TTL = 600.0  # s a handle's secUid & co. are reused across feed pages
 _PROFILE_MAX = 512
@@ -284,7 +286,7 @@ def _profile(ydl: yt_dlp.YoutubeDL, name: str) -> dict[str, Any]:
         return hit[1]
     info = _user_page(ydl, name)
     user = info["user"]
-    if not user.get("secUid"):
+    if not _SEC_UID.fullmatch(M.text(user.get("secUid")) or ""):
         raise UpstreamError("TikTok profile has no secUid")
     prof = {"id": str(user.get("id") or ""), "secUid": user["secUid"], "nickname": user.get("nickname"),
             "private": info["statusCode"] == 10222 or bool(user.get("privateAccount")),
@@ -559,8 +561,8 @@ async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
         info, profile = _live_page(ie, name), None
         if info is None:
             profile = _user_page(ydl, name)
-            unique = M.text(profile["user"].get("uniqueId"))
-            if unique and unique != name:  # 'WeatherNewsLive' or a numeric id: retry with the real uniqueId
+            unique = profile["user"].get("uniqueId")
+            if M.is_handle(unique) and unique != name:  # 'WeatherNewsLive' or a numeric id: retry with the uniqueId
                 info = _live_page(ie, unique)
         if info:
             room = M.obj(info.get("liveRoom"))
@@ -568,9 +570,10 @@ async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
             return compact({"is_live": live, "liveRoomUserInfo": M.live_user(info["user"], info.get("stats")),
                             "liveRoom": room or None})
         user, live = profile["user"], False
-        if user.get("roomId"):
-            resp = ie._download_json(_ROOM_INFO, user["roomId"], "Downloading room info", fatal=False,
-                                     query={"aid": "1988", "room_id": user["roomId"]})
+        room_id = str(user.get("roomId") or "")
+        if _ID.fullmatch(room_id):  # "" when not live; a roomId that isn't an id can't be asked about
+            resp = ie._download_json(_ROOM_INFO, room_id, "Downloading room info", fatal=False,
+                                     query={"aid": "1988", "room_id": room_id})
             live = M.to_int(M.obj(M.obj(resp).get("data")).get("status")) == 2
         return {"is_live": live, "liveRoomUserInfo": M.live_user(user, profile.get("stats"))}
 

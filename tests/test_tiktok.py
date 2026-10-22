@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from yt_dlp.extractor.tiktok import TikTokBaseIE
+from yt_dlp.networking import Request
 from yt_dlp.networking.exceptions import ProxyError
 from yt_dlp.utils import ExtractorError
 
@@ -478,7 +479,8 @@ def test_live_mappers():
 
 
 class _FakeFeed:
-    """Stand-in for TikTokUserIE's item_list: inclusive cursor, ~1-week look-back, newest first."""
+    """Stand-in for TikTokUserIE's item_list: inclusive cursor, ~1-week look-back, newest first. The request is built
+    as yt-dlp builds it, so a query it can't send fails as it does there: before anything is asked."""
 
     _API_BASE_URL = "https://www.tiktok.com/api/creator/item_list/"
 
@@ -489,6 +491,7 @@ class _FakeFeed:
         return {"secUid": sec_uid, "cursor": cursor, "region": "US"}
 
     def _download_json(self, url, display, note, query):
+        Request(url, query=query)
         self.calls += 1
         cur = query["cursor"]
         hits = [t for t in self.times if cur - tiktok._WEEK_MS < t * 1000 <= cur][: self.page]
@@ -1095,13 +1098,15 @@ class _FakeWaf:
 
 
 class _FakeLive(_FakeWaf):
-    """TikTokLiveIE stand-in: /@name/live pages keyed by name, room/info answers recorded."""
+    """TikTokLiveIE stand-in: /@name/live pages keyed by name, room/info answers recorded. Requests are built as
+    yt-dlp builds them (see _FakeFeed)."""
 
     def __init__(self, pages, room=None, **waf):
         super().__init__(**waf)
         self.pages, self.room, self.fetched = pages, room, []
 
     def _download_webpage(self, url, name, note, fatal=True):
+        Request(url)
         self.fetched.append(url)
         return self._page(url, name)
 
@@ -1112,6 +1117,7 @@ class _FakeLive(_FakeWaf):
         return {} if page == _CHALLENGE else {"webapp.app-context": {}}
 
     def _download_json(self, url, room_id, note, fatal=True, query=None):
+        Request(url, query=query)
         self.fetched.append(url)
         return self.room
 
@@ -1185,6 +1191,39 @@ def test_user_live_route_solves_the_live_pages_js_challenge(client, fake_ydl, mo
     ydl.ies["TikTokLive"] = _FakeLive({})
     r = client.get("/v1/tiktok/user/live", params={"handle": "a-b"})
     assert (r.status_code, r.json()["error"]) == (404, "not_found"), r.text
+
+
+def test_user_live_route_asks_only_for_a_handle_and_a_room_id(client, fake_ydl, monkeypatch):
+    # The profile page's uniqueId and roomId went into the next request as they were: half an emoji in either failed
+    # as yt-dlp built it, a 500, and a uniqueId with a '/' or a '?' asked for some other page
+    ydl, _ = fake_ydl
+    for unique in ("\ud83d", "a\ud83d", "a/b", "a?x=1", "a#b", "a b", "x" * 65, {"a": 1}, ["a"]):
+        ydl.ies["TikTokLive"] = live = _FakeLive({}, room={"data": {"status": 2}})
+        monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name, unique=unique: _user_info(unique, roomId="77"))
+        body = ok(client, "/v1/tiktok/user/live", handle="someone")
+        assert body["is_live"] is True and "liveRoom" not in body, unique
+        assert live.fetched == ["https://www.tiktok.com/@someone/live", tiktok._ROOM_INFO], unique
+    for room_id in ("\ud83d", "7\ud83d", "a/b", "77 ", True, {"a": 1}, ["77"], 7.5, "", None, 0):
+        ydl.ies["TikTokLive"] = live = _FakeLive({}, room={"data": {"status": 2}})
+        monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name, room_id=room_id: _user_info(name, roomId=room_id))
+        body = ok(client, "/v1/tiktok/user/live", handle="someone")
+        assert body["is_live"] is False and live.fetched == ["https://www.tiktok.com/@someone/live"], room_id
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: _user_info(name, roomId=77))  # a number is an id
+    assert ok(client, "/v1/tiktok/user/live", handle="someone")["is_live"] is True and tiktok._ROOM_INFO in live.fetched
+
+
+def test_profile_feeds_without_a_sec_uid_yt_dlp_can_send_are_an_upstream_error(client, fake_ydl, monkeypatch):
+    # Half an emoji in the profile's secUid failed as yt-dlp built the feed's request: a 500 "Internal server error"
+    ydl, _ = fake_ydl
+    ydl.ies["TikTokUser"] = feed = _FakeFeed([int(time.time()) - 60])
+    for sec_uid in ("\ud83d", "MS4w\ud83d", "MS4w LjAB", "MS4w\n", "", {"a": 1}, ["MS4w"], 7, True):
+        monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name, sec_uid=sec_uid: _user_info(name, secUid=sec_uid))
+        for path in ("/v3/tiktok/profile/videos", "/v1/tiktok/profile/region"):
+            tiktok._profiles.clear()
+            r = client.get(path, params={"handle": "someone"})
+            assert (r.status_code, r.json()["error"], r.json()["message"]) == (
+                500, "upstream_error", "TikTok profile has no secUid"), (sec_uid, path)
+    assert feed.calls == 0
 
 
 def test_user_live_route_drops_the_live_pages_waf_token(client, fake_ydl):
