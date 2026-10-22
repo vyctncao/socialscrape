@@ -69,7 +69,7 @@ def approx_time(value: str | None) -> str | None:
     try:
         when = YoutubeTabIE.extract_relative_time(value.lower())
         return iso_utc(calendar.timegm(when.timetuple()) if when else unified_timestamp(value))
-    except OverflowError:  # an age or a year past what a date holds ('999…9 days ago', '20 Nov 999…9')
+    except (ValueError, OverflowError):  # a time past what a date holds ('999…9 days ago', '1 Jan 10000 00:00')
         return None
 
 

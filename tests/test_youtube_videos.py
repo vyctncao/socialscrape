@@ -789,14 +789,25 @@ def test_lengths_too_big_to_hold_read_as_missing(ies):
 
 def test_ages_and_dates_past_what_a_date_holds_read_as_missing(ies):
     """An age reaching back before the year 1 ('9999 years ago', '999…9 days ago') or past the 4300 digits int()
-    reads, and a date before the year 1 once in UTC, was a 500 (ValueError, OverflowError) in a related video's
-    and a community post's time. It reads as missing."""
+    reads, and a date before the year 1 once in UTC or past the year 9999, was a 500 (ValueError, OverflowError) in
+    a related video's, a community post's and a comment's time. It reads as missing; a comment that yt-dlp can't
+    read for one is skipped."""
+    far = "Mon, 01 Jan 10000 00:00:00 +0000"
     for age in ("9999 years ago", "999999999999 days ago", "9" * 400 + " years ago", "9" * 5000 + " years ago",
-                "hace 99999999999 años", "vor " + "9" * 5000 + " Tagen"):
+                "hace 99999999999 años", "vor " + "9" * 5000 + " Tagen", far, "Streamed " + far):
         assert P.relative_ts(age) is None and P.approx_iso(ies[1], age) is None, age[:20]
-    for age in ("9999 years ago", "999999999999 days ago"):
+    for age in ("9999 years ago", "999999999999 days ago", far, "Streamed " + far):
         video = P.watch_next_video(ui_tab("en"), lockup("5", "5 views", age, "4:05"))
         assert (video["publishedTimeText"], video["publishedTime"], video["lengthInSeconds"]) == (age, None, 245)
+        post = P.post_payload(ies[1], {"postId": "UgkxA", "publishedTimeText": {"runs": [{"text": age}]}})
+        assert (post["publishedTimeText"], post["publishedTime"]) == (age, None)
+    payload = {"properties": {"commentId": "UgxA", "content": {"content": "Hi"}, "publishedTime": far},
+               "toolbar": {"likeCountA11y": "5 likes"}}
+    entities = [{"entityKey": "K", "payload": {"commentEntityPayload": payload}}]
+    assert P.map_comment(ies[0], {"commentViewModel": {"commentKey": "K"}}, entities, level=1,
+                         with_replies_token=False) is None
+    renderer = {"commentRenderer": {"commentId": "UgxB", "publishedTimeText": {"simpleText": far}}}  # the older shape
+    assert P.map_comment(ies[0], renderer, [], level=1, with_replies_token=False) is None
     assert P.iso_ts("0001-01-01T00:00:00.5.5+01:00") is None
     assert P.iso_ts("2024-02-20T10:00:00.5.5+01:00") == 1708419600 and P.relative_ts("2 years ago") is not None
 

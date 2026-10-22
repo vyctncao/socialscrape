@@ -410,13 +410,17 @@ def test_length():
 
 
 def test_ages_and_dates_past_what_a_date_holds_read_as_missing():
-    """An age or a date past what a date holds ('999…9 days ago', '20 Nov 999…9') was a 500 (OverflowError) in a
-    video's or a community post's time. It reads as missing."""
+    """An age or a date past what a date holds ('999…9 days ago', '20 Nov 999…9', '1 Jan 10000 00:00') was a 500
+    (OverflowError, ValueError) in a video's or a community post's time. It reads as missing."""
     for when in ("999999999999 days ago", "9" * 400 + " years ago", "Streamed " + "9" * 400 + " hours ago",
-                 "20 Nov 99999999999999999999 10:00:00", "9999 years ago", "9" * 5000 + " years ago"):
+                 "20 Nov 99999999999999999999 10:00:00", "9999 years ago", "9" * 5000 + " years ago",
+                 "1 Jan 10000 00:00", "Mon, 01 Jan 10000 00:00:00 +0000"):
         assert P.approx_time(when) is None, when[:20]
         v = P.video_renderer({"videoId": "abcdefghijk", "publishedTimeText": {"simpleText": when}})
         assert (v["publishedTimeText"], v["publishedTime"]) == (when, None), when[:20]
+        post = P.post({"post": {"backstagePostRenderer": {"postId": "UgkxA", "publishedTimeText": {"runs": [
+            {"text": when}]}}}})
+        assert (post["publishedTimeText"], post["publishedTime"]) == (when, None), when[:20]
     assert P.approx_time("Feb 20, 2024") == "2024-02-20T00:00:00.000Z" and P.approx_time("2 days ago")
 
 

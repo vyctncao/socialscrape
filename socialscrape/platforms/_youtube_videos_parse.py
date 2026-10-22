@@ -162,7 +162,7 @@ def approx_iso(ie: Any, time_text: str | None) -> str | None:
         return None
     try:
         ts = ie._parse_time_text(time_text, report_failure=False)
-    except OverflowError:  # yt-dlp's reading of an age past what a date holds ('999…9 days ago')
+    except (ValueError, OverflowError):  # a time past what a date holds ('999…9 days ago', '1 Jan 10000 00:00')
         return None
     return iso_utc(ts if ts is not None else relative_ts(time_text, ui_lang(ie)))
 
@@ -488,12 +488,14 @@ def _readable_sources(lockup: dict[str, Any]) -> dict[str, Any]:
     return {**lockup, "contentImage": {**content, "thumbnailViewModel": {**view, "image": image}}}
 
 
-def _unless_overflow(extract: Any, node: Any) -> dict[str, Any] | None:
-    """extract(node), one of yt-dlp's readers, or None where it overflows on a number too big to hold: it rounds a
-    count past a float's range ('999…9K views') to an int, and takes an age ('999…9 years ago') from today."""
+def _unless_out_of_range(extract: Any, node: Any) -> dict[str, Any] | None:
+    """extract(node), one of yt-dlp's readers, or None where it fails on a number or a time too big to hold: it rounds
+    a count past a float's range ('999…9K views') to an int, takes an age ('999…9 years ago') from today, and reads a
+    date past the year 9999 ('Mon, 01 Jan 10000 00:00:00 +0000') without checking a date holds it (an OverflowError,
+    or a ValueError)."""
     try:
         return extract(node)
-    except OverflowError:
+    except (ValueError, OverflowError):
         return None
 
 
@@ -501,7 +503,7 @@ def watch_next_video(tab_ie: Any, lockup: dict[str, Any]) -> dict[str, Any] | No
     """One related video from the watch page's lockupViewModel."""
     if lockup.get("contentType") != "LOCKUP_CONTENT_TYPE_VIDEO":
         return None
-    entry = _unless_overflow(tab_ie._extract_lockup_view_model, _readable_sources(lockup))
+    entry = _unless_out_of_range(tab_ie._extract_lockup_view_model, _readable_sources(lockup))
     if not entry or not entry.get("id"):
         return None
     meta = traverse_obj(lockup, ("metadata", "lockupMetadataViewModel", {dict})) or {}
@@ -731,14 +733,14 @@ def map_comment(ie: Any, item: dict[str, Any], entities: list[dict[str, Any]], *
         keys = {k for k in (view_model.get("commentKey"), view_model.get("toolbarStateKey"))
                 if k and isinstance(k, str)}
         own = [e for e in entities if traverse_obj(e, ("entityKey", {str})) in keys]
-        comment = _unless_overflow(ie._extract_comment, own) if own else None
+        comment = _unless_out_of_range(ie._extract_comment, own) if own else None
         payload = traverse_obj(own, (..., "payload", "commentEntityPayload", {dict}, any)) or {}
         replies = parse_count(traverse_obj(payload, ("toolbar", "replyCount", {str}))) or 0
         raw_level = traverse_obj(payload, ("properties", "replyLevel", {int}))
     else:
         renderer = (traverse_obj(thread, ("comment", "commentRenderer", {dict}))
                     or traverse_obj(item, ("commentRenderer", {dict})))
-        comment = _unless_overflow(ie._extract_comment_old, renderer) if renderer else None
+        comment = _unless_out_of_range(ie._extract_comment_old, renderer) if renderer else None
         replies = (renderer or {}).get("replyCount") or 0
     if not comment:
         return None
