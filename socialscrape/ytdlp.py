@@ -139,6 +139,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             ie._is_agegated, ie._extract_storyboard = youtube_agegated, _youtube_storyboards
             ie._extract_player_response = partial(_youtube_player_api, ie._extract_player_response)
             ie._invalid_player_response = partial(_youtube_player_response, ie._invalid_player_response)
+            ie._download_initial_data = partial(_youtube_initial_data, ie._download_initial_data)
         try:
             return fn(ydl)
         finally:
@@ -295,6 +296,56 @@ def _youtube_player_response(invalid: Callable[[Any, str], Any], player_response
     _conform(player_response, _PLAYER_RESPONSE)
     other_id = invalid(player_response, video_id)
     return str(other_id) if other_id else other_id
+
+
+def _text_object(value: Any) -> bool:
+    """YouTube text (a simpleText, or runs) that has some, or nothing: yt-dlp searches a video's super title (its
+    series and episode) without checking it has any (a TypeError, so a 500 here)."""
+    return not value or bool(YoutubeBaseInfoExtractor._get_text(value))
+
+
+# Where yt-dlp reads each toggle button's label, in which it matches a like count (a TypeError on a label that isn't a
+# string, so a 500 here).
+_LABELS = (("defaultText", "accessibility", "accessibilityData"), "accessibility",
+           ("accessibilityData", "accessibilityData"))
+
+
+def _toggles(value: Any) -> bool:
+    """A toggleButtonRenderer whose toggle buttons' labels (see _LABELS) are strings. yt-dlp reads the renderer's
+    values as its toggle buttons."""
+    return all(isinstance(label, str) for label in traverse_obj(value, (..., _LABELS, "label")) if label)
+
+
+def _segmented_toggles(value: Any) -> bool:
+    """A segmentedLikeDislikeButtonRenderer whose toggle buttons' labels (see _LABELS) are strings."""
+    return _toggles(traverse_obj(value, (..., "toggleButtonRenderer")))
+
+
+def _badge(value: Any) -> bool:
+    """A badge whose renderers' styles are strings: yt-dlp looks each one up in a dict (a TypeError on a list or an
+    object, so a 500 here)."""
+    return all(isinstance(style, str) for style in traverse_obj(value, (..., "style")))
+
+
+# The parts of a YouTube watch page's data (ytInitialData) yt-dlp reads as these types without checking. Anything else
+# is deleted, as missing (see _conform): yt-dlp fails on it (an AttributeError or a TypeError, so a 500 here).
+_INITIAL_DATA = {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [{
+    "videoPrimaryInfoRenderer": {
+        "superTitleLink": _text_object, "viewCount": {"videoViewCountRenderer": dict}, "badges": [_badge],
+        "videoActions": {"menuRenderer": {"topLevelButtons": [{
+            "toggleButtonRenderer": _toggles, "segmentedLikeDislikeButtonRenderer": _segmented_toggles}]}}},
+    "videoSecondaryInfoRenderer": {
+        "owner": {"videoOwnerRenderer": {"badges": [_badge]}},
+        "metadataRowContainer": {"metadataRowContainerRenderer": {"rows": [{"metadataRowRenderer": dict}]}}},
+}]}}}}}
+
+
+def _youtube_initial_data(download: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """YoutubeIE._download_initial_data, but the watch page's data (from the page, or the next API) is made to fit
+    _INITIAL_DATA."""
+    initial_data = download(*args, **kwargs)
+    _conform(initial_data, _INITIAL_DATA)
+    return initial_data
 
 
 def cookie_file_problem(path: str) -> str | None:

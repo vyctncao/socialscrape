@@ -1298,6 +1298,71 @@ def test_video_routes_read_no_storyboards(client, monkeypatch, changes):
     assert video.json()["title"] == "Odd" and transcript.json()["success"]
 
 
+
+WATCH = ("contents", "twoColumnWatchNextResults", "results", "results", "contents")
+PRIMARY, SECONDARY = (*WATCH, 0, "videoPrimaryInfoRenderer"), (*WATCH, 1, "videoSecondaryInfoRenderer")
+BUTTON = (*PRIMARY, "videoActions", "menuRenderer", "topLevelButtons", 0)
+VIEWS, OWNER = (*PRIMARY, "viewCount", "videoViewCountRenderer"), (*SECONDARY, "owner", "videoOwnerRenderer")
+ROWS, LABEL = (*SECONDARY, "metadataRowContainer", "metadataRowContainerRenderer", "rows"), (
+    "accessibility", "accessibilityData", "label")
+
+
+@pytest.mark.parametrize("path,value", [
+    (PRIMARY, "x"), (PRIMARY, [{"x": 1}]), (PRIMARY, 7), ((*PRIMARY, "superTitleLink"), "Show S1 E2"),
+    ((*PRIMARY, "superTitleLink"), {"runs": [{"x": 1}]}),
+    ((*BUTTON, "toggleButtonRenderer"), [{"accessibility": {"label": 7}}]),
+    ((*BUTTON, "toggleButtonRenderer"), {"x": {"defaultText": nest(LABEL, ["x"])}}),
+    (BUTTON, nest(("segmentedLikeDislikeButtonRenderer", "likeButton", "toggleButtonRenderer", "accessibility"),
+                  {"label": 7})),
+    (VIEWS, "x"), (VIEWS, [1]), (VIEWS, 7), ((*PRIMARY, "badges", 0, "metadataBadgeRenderer", "style"), ["x"]),
+    ((*PRIMARY, "badges"), {"x": {"metadataBadgeRenderer": {"style": {"x": 1}}}}),
+    ((*OWNER, "badges", 0, "metadataBadgeRenderer"), {"icon": {"iconType": "X"}, "style": ["x"]}),
+    (ROWS, [7]), ((*ROWS, 0, "metadataRowRenderer"), "x"), ((*ROWS, 0, "metadataRowRenderer"), ["x"]),
+], ids=["primary_info_string", "primary_info_list", "primary_info_number", "super_title_string",
+        "super_title_textless", "toggles_list", "toggle_label_list", "segmented_toggle_label_number",
+        "view_count_string", "view_count_list", "view_count_number", "badge_style_list", "badges_object",
+        "owner_badge_style_list", "row_number", "row_string", "row_list"])
+def test_video_routes_read_watch_data_of_another_type_as_missing(client, monkeypatch, path, value):
+    """yt-watch-data-type-500: yt-dlp reads parts of a watch page's data (ytInitialData) as these types without
+    checking: its primary info, view count and metadata rows as objects, its super title as text it searches, its
+    toggle buttons' labels as strings it matches and its badges' styles as keys it looks up. So a value of another
+    type (or a super title with no text) was a 500 (AttributeError or TypeError) before any of our code ran. It reads
+    as missing, and the data's other details are still read."""
+    def player(self, client, video_id, *args, **kwargs):  # the player API's answer
+        return {"playabilityStatus": {"status": "OK"},
+                "videoDetails": {"videoId": video_id, "title": "Odd", "lengthSeconds": "19", "author": "a",
+                                 "channelId": "UC" + "x" * 22}}
+
+    def initial_data(self, *args, **kwargs):  # the watch page's
+        data = {"contents": {"twoColumnWatchNextResults": {"results": {"results": {"contents": [
+            {"videoPrimaryInfoRenderer": {
+                "superTitleLink": {"runs": [{"text": "Show S1 E2"}]},
+                "viewCount": {"videoViewCountRenderer": {"viewCount": {"simpleText": "100 views"}}},
+                "videoActions": {"menuRenderer": {"topLevelButtons": [{"toggleButtonRenderer": {
+                    "defaultText": nest(LABEL, "5 likes")}}]}},
+                "badges": [{"metadataBadgeRenderer": {"style": "BADGE_STYLE_TYPE_SIMPLE", "label": "Unlisted"}}]}},
+            {"videoSecondaryInfoRenderer": {
+                "owner": {"videoOwnerRenderer": {"badges": [{"metadataBadgeRenderer": {
+                    "icon": {"iconType": "CHECK_CIRCLE_THICK"}, "style": "BADGE_STYLE_TYPE_VERIFIED"}}]}},
+                "metadataRowContainer": {"metadataRowContainerRenderer": {"rows": [{"metadataRowRenderer": {
+                    "title": {"simpleText": "License"}, "contents": [{"simpleText": "Creative Commons"}]}}]}}}},
+        ]}}}}, "engagementPanels": [{"engagementPanelSectionListRenderer": {
+            "panelIdentifier": "engagement-panel-comments-section",
+            "header": {"engagementPanelTitleHeaderRenderer": {"contextualInfo": {"runs": [{"text": "12"}]}}}}}]}
+        node = data
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+        return data
+
+    stub_player(monkeypatch, player)
+    monkeypatch.setattr(YoutubeIE, "_download_initial_data", initial_data)
+    video = client.get("/v1/youtube/video", params={"url": watch(ZOO)})
+    transcript = client.get("/v1/youtube/video/transcript", params={"url": watch(ZOO)})
+    assert (video.status_code, transcript.status_code) == (200, 200), (video.text, transcript.text)
+    assert video.json()["title"] == "Odd" and video.json()["commentCountInt"] == 12 and transcript.json()["success"]
+
+
 def test_video_route_exact_comment_count(client, monkeypatch):
     stub_watch(monkeypatch, ZOO)
     calls = []
