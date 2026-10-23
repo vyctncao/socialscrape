@@ -1,3 +1,6 @@
+# Live at https://scrape.mimic.host: Stackdome project `socialscrape`, stack `socialscrape-app`, on the `local`
+# server (62.146.175.26, where *.mimic.host points). A stack in this project that lands on another server can't
+# get a certificate for a mimic.host name, so create a replacement stack with an explicit cluster_id.
 name: socialscrape-app
 resources:
   api:
@@ -14,23 +17,26 @@ resources:
       SOCIALSCRAPE_CACHE_PATH: /data/cache.sqlite3
       SOCIALSCRAPE_PORTAL_PATH: /data/portal.sqlite3
       SOCIALSCRAPE_LOG_LEVEL: INFO
+      SOCIALSCRAPE_EMAIL_FROM: SocialScrape <noreply@mimic.host>
+      SOCIALSCRAPE_PUBLIC_URL: https://scrape.mimic.host
     secrets:
-      socialscrape-portal-encryption:
+      socialscrape-prod-encryption:
         SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY: fernet_key
+      socialscrape-prod-resend:
+        SOCIALSCRAPE_RESEND_API_KEY: api_key
     volumes:
       - name: data
         path: /data
     ports:
       # The live port uses custom_domain: scrape.mimic.host and TLS. The
-      # Stackfile schema cannot preserve custom_domain, so publish code with
-      # `stackdome create release --stack socialscrape-app --wait` using the
-      # saved stack definition. Applying this file would clear the domain;
+      # Stackfile schema can't hold either, so publish code with
+      # `STACKDOME_PROJECT=socialscrape stackdome create release --stack socialscrape-app --wait`
+      # using the saved stack definition. Applying this file would clear the domain;
       # Stackdome blocks hostname changes on an already-public live port.
       - name: http
         port: 8000
         protocol: HTTP
         public: true
-        tls: true
         subdomain: ""
 volumes:
   data:

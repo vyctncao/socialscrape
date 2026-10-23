@@ -95,7 +95,7 @@ the UI assets. Authentication pages use the same version. This keeps a returning
 browser from combining new markup with cached scripts from an earlier deployment.
 
 The live Stackdome resource owns `scrape.mimic.host` with TLS enabled. Release
-published code with `stackdome create release --stack socialscrape-app --wait`.
+published code with `STACKDOME_PROJECT=socialscrape stackdome create release --stack socialscrape-app --wait`.
 The Stackfile schema cannot represent `custom_domain`; applying that file would
 clear the saved hostname. Preserve the resource's domain, secret connection,
 and persistent volume when changing its deployment definition.
