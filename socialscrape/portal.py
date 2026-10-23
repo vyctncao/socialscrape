@@ -157,7 +157,7 @@ class PortalStore:
                 used_at REAL,
                 revoked_at REAL
             );
-            CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON members(role) WHERE role='owner';
+            DROP INDEX IF EXISTS one_owner;  -- a workspace can have several owners
             CREATE INDEX IF NOT EXISTS oauth_tokens_family ON oauth_tokens(family_id);
             CREATE INDEX IF NOT EXISTS requests_created_at ON requests(created_at DESC);
             CREATE INDEX IF NOT EXISTS requests_member_id ON requests(member_id, created_at DESC);
@@ -556,6 +556,26 @@ class PortalStore:
             cur = self._conn.execute("DELETE FROM members WHERE id=? AND role='member'", (member_id,))
             self._conn.commit()
             return cur.rowcount == 1
+
+    def set_member_role(self, owner: Principal, member_id: int, role: str) -> bool:
+        """Owners change anyone's role but their own, so the workspace always keeps at least one owner."""
+        if owner.role != "owner":
+            raise PermissionError
+        if role not in ("owner", "member"):
+            raise ValueError("Choose owner or member")
+        if owner.id == member_id:
+            raise ValueError("Another owner has to change your role")
+        with self._lock:  # re-check the acting owner here: another owner may have demoted them mid-request
+            cur = self._conn.execute(
+                "UPDATE members SET role=? WHERE id=? AND EXISTS(SELECT 1 FROM members WHERE id=? AND role='owner')",
+                (role, member_id, owner.id),
+            )
+            self._conn.commit()
+            if cur.rowcount == 1:
+                return True
+            if not self._conn.execute("SELECT 1 FROM members WHERE id=? AND role='owner'", (owner.id,)).fetchone():
+                raise PermissionError
+            return False
 
     def record_request(self, principal: Principal | None, key_id: int | None, method: str, path: str, query: str,
                        status: int, duration_ms: int, cached: bool, response_body: bytes = b"",
@@ -1023,6 +1043,22 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         if not store.remove_member(p, member_id):
             return JSONResponse({"detail": "This member was already removed."}, status_code=404)
         return {"removed": True}
+
+    @router.patch("/portal/api/team/{member_id}")
+    async def set_member_role(request: Request, member_id: int):
+        p = _owner(request)
+        _csrf(request, p)
+        data = await request.json()
+        role = str(data.get("role", ""))
+        try:
+            changed = store.set_member_role(p, member_id, role)
+        except ValueError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422)
+        except PermissionError:
+            raise HTTPException(403, "Workspace owner access required") from None
+        if not changed:
+            return JSONResponse({"detail": "This member was removed."}, status_code=404)
+        return {"role": role}
 
     @router.post("/portal/api/invites")
     async def invite(request: Request):

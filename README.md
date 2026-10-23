@@ -33,7 +33,8 @@ With only `SOCIALSCRAPE_API_KEYS`, these three, `/redoc` and `/openapi.json` are
 Set `SOCIALSCRAPE_PORTAL_PATH` to a persistent SQLite file to enable the private web dashboard at `/app`. With an
 empty database, the first visitor creates the owner account. After that there is no public registration: the owner
 creates seven-day invitation links on the Team page, and each member signs in with their own password and creates
-separate revocable API keys. The dashboard includes a live playground, request history, usage, and documentation
+separate revocable API keys. An owner can make any other member an owner, or an owner a member, from the same page;
+nobody can change their own role, so the workspace always keeps an owner. The dashboard includes a live playground, request history, usage, and documentation
 generated from the server's OpenAPI schema. Request history keeps every request, but its stored response bodies only
 for 14 days and up to 256 MiB in all (oldest cleared first); the response cache drops entries older than 30 days and
 keeps at most 256 MiB. Both share the database volume with members and keys, so neither can fill it.

@@ -1756,6 +1756,27 @@ def test_history_detail_reports_response_availability(env, tmp_path, monkeypatch
     assert detail["response"] == ""
 
 
+def test_portal_store_drops_the_single_owner_index(tmp_path):
+    from socialscrape.portal import Principal, PortalStore
+
+    path = str(tmp_path / "portal.sqlite3")
+    owner_id = PortalStore(path).create_member("owner@example.com", "a strong password", "owner")
+    with sqlite3.connect(path) as conn:  # databases created before co-owners have this index
+        conn.execute("CREATE UNIQUE INDEX one_owner ON members(role) WHERE role='owner'")
+    store = PortalStore(path)
+    member_id = store.create_member("friend@example.com", "another strong password")
+    owner = Principal(owner_id, "owner@example.com", "owner")
+    assert store.set_member_role(owner, member_id, "owner") is True
+    assert {m["role"] for m in store.members(owner)} == {"owner"}
+    with pytest.raises(PermissionError):
+        store.set_member_role(Principal(member_id, "friend@example.com", "member"), owner_id, "member")
+    friend = Principal(member_id, "friend@example.com", "owner")
+    assert store.set_member_role(owner, member_id, "member") is True
+    with pytest.raises(PermissionError):  # a request authorized before its sender was demoted
+        store.set_member_role(friend, owner_id, "member")
+    assert [m["role"] for m in store.members(owner)] == ["owner", "member"]
+
+
 def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     import re
 
@@ -1852,6 +1873,29 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     friend_key = friend.post("/portal/api/keys", headers={"x-csrf-token": friend_me["csrf"]},
                              json={"name": "Friend"}).json()["key"]
     member = next(m for m in owner.get("/portal/api/team").json()["members"] if m["role"] == "member")
+    owner_id = next(m["id"] for m in owner.get("/portal/api/team").json()["members"] if m["role"] == "owner")
+    friend_headers = {"x-csrf-token": friend_me["csrf"]}
+    assert friend.patch(f"/portal/api/team/{owner_id}", headers=friend_headers,
+                        json={"role": "member"}).status_code == 403
+    assert owner.patch(f"/portal/api/team/{member['id']}", json={"role": "owner"}).status_code == 403  # no CSRF
+    assert owner.patch(f"/portal/api/team/{member['id']}", headers=headers,
+                       json={"role": "admin"}).status_code == 422
+    assert owner.patch(f"/portal/api/team/{owner_id}", headers=headers, json={"role": "member"}).status_code == 422
+    assert owner.patch(f"/portal/api/team/{member['id']}", headers=headers,
+                       json={"role": "owner"}).json() == {"role": "owner"}
+    assert friend.get("/portal/api/me").json()["role"] == "owner"
+    assert {m["role"] for m in friend.get("/portal/api/team").json()["members"]} == {"owner"}
+    assert friend.get("/portal/api/settings/platforms").status_code == 200
+    assert owner.delete(f"/portal/api/team/{member['id']}", headers=headers).status_code == 404  # demote first
+    assert friend.patch(f"/portal/api/team/{owner_id}", headers=friend_headers,
+                        json={"role": "member"}).json() == {"role": "member"}
+    assert owner.get("/portal/api/settings/platforms").status_code == 403
+    assert friend.patch(f"/portal/api/team/{owner_id}", headers=friend_headers,
+                        json={"role": "owner"}).json() == {"role": "owner"}
+    assert owner.patch(f"/portal/api/team/{member['id']}", headers=headers,
+                       json={"role": "member"}).json() == {"role": "member"}
+    assert friend.get("/portal/api/me").json()["role"] == "member"
+    assert owner.patch("/portal/api/team/999999", headers=headers, json={"role": "owner"}).status_code == 404
     removed = owner.delete(f"/portal/api/team/{member['id']}", headers=headers).json()
     assert removed == {"removed": True}
     assert friend.get("/portal/api/me").status_code == 401
