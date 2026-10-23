@@ -52,7 +52,7 @@ def test_every_tiktok_path_is_implemented_or_explained(client):
             r = client.get(path)
             assert r.status_code == 501 and r.json()["error"] == "not_supported", path
         else:
-            assert path not in tiktok.UNSUPPORTED and row["source"].startswith("yt-dlp"), path
+            assert path not in tiktok.UNSUPPORTED and row["source"], path
 
 
 @pytest.mark.parametrize("path", ["/v2/tiktok/video", "/v1/tiktok/video/transcript", "/v1/tiktok/profile",
@@ -1595,3 +1595,31 @@ def test_not_found_is_404(client, path, params):
     skip_if_blocked(r)
     assert r.status_code == 404, (path, r.status_code, r.text[:200])
     assert r.json()["error"] == "not_found"
+
+
+def test_popular_creators_ranks_a_regional_recommended_feed(client, monkeypatch):
+    from socialscrape import fallback
+    from socialscrape.platforms import tiktok
+
+    feed = {"success": True, "aweme_list": [
+        {"aweme_id": "2", "create_time": 2, "url": "https://www.tiktok.com/@beta/video/2",
+         "author": {"uid": "20", "unique_id": "beta", "nickname": "Beta",
+                    "avatar_medium": {"url_list": ["https://img/beta"]}},
+         "statistics": {"play_count": 200, "digg_count": 80}, "video": {"cover": {"url_list": ["b"]}}},
+        {"aweme_id": "1", "create_time": 1, "url": "https://www.tiktok.com/@alpha/video/1",
+         "author": {"uid": "10", "unique_id": "alpha", "nickname": "Alpha",
+                    "avatar_medium": {"url_list": ["https://img/alpha"]}},
+         "statistics": {"play_count": 100, "digg_count": 10}, "video": {"cover": {"url_list": ["a"]}}},
+    ]}
+    async def ask_path(app, path, params):
+        assert (path, params) == ("/v1/tiktok/get-trending-feed", {"region": "US"})
+        return 200, feed, None
+    async def with_ydl(platform, fn, **opts):
+        handle = next((cell.cell_contents for cell in fn.__closure__ or () if isinstance(cell.cell_contents, str)), "")
+        return {"stats": {"followerCount": 1_000 if handle == "beta" else 2_000, "heartCount": 3_000}}
+    monkeypatch.setattr(fallback, "ask_path", ask_path)
+    monkeypatch.setattr(tiktok, "with_ydl", with_ydl)
+    body = client.get("/v1/tiktok/creators/popular", params={"creatorCountry": "US"}).json()
+    assert [creator["user_id"] for creator in body["creators"]] == ["10", "20"]
+    assert body["creators"][0]["items"][0]["item_id"] == "1"
+    assert body["pagination"] == {"has_more": False, "page": 1, "size": 2, "total": 2}
