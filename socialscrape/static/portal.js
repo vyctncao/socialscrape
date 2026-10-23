@@ -139,18 +139,25 @@ async function team() {
     ${tableRegion('Workspace members', `<table><thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">API keys</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${data.members.map(member => `<tr><td>${esc(member.email)}</td><td><span class="badge">${member.role === 'owner' ? 'Owner' : 'Member'}</span></td><td>${number(member.key_count)}</td><td>${fmt(member.created_at)}</td><td>${fmt(member.last_login_at)}</td><td>${member.role === 'member' ? `<button class="danger" data-remove="${member.id}" aria-label="Remove ${esc(member.email)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>`)}`);
 }
 
+function poolLabel(kind, count) {
+  if (!count) return kind === 'proxy' ? 'No proxies' : 'No accounts';
+  return `${count} ${kind === 'proxy' ? (count === 1 ? 'proxy' : 'proxies') : (count === 1 ? 'account' : 'accounts')}`;
+}
+function poolList(platform, kind, items) {
+  return items.length ? `<ol class="manager-list">${items.map(item => `<li><div class="manager-position"><strong>${item.position === 1 ? 'Primary' : `Backup ${item.position - 1}`}</strong><span>Updated ${esc(fmt(item.updated_at))}</span></div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move up">↑</button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move down">↓</button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No account cookies configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway account below.');
+}
+async function openPlatformManager(platform, kind, trigger = document.activeElement) {
+  const data = await api('/portal/api/settings/platforms'), items = data[platform][kind];
+  dialogTrigger = trigger;
+  const name = platformName(platform), isProxy = kind === 'proxy', full = items.length >= 5;
+  const form = full ? `<div class="inline-note">${icon('check')}<span>Pool full · 5 of 5 configured</span></div>` : `<form class="platform-setting-form manager-form" data-platform="${platform}" data-kind="${kind}"><label class="field">Add ${items.length ? `Backup ${items.length}` : 'primary'} ${isProxy ? 'proxy' : 'account cookies'}${isProxy ? '<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port">' : '<input name="file" type="file" required accept=".txt,text/plain">'}<span class="help">${isProxy ? 'Credentials are encrypted and never shown again.' : 'Netscape cookies.txt from a dedicated throwaway account, maximum 2 MiB.'}</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add ${isProxy ? 'proxy' : 'account'}</button></form>`;
+  openDialog({title:`${name} ${isProxy ? 'proxies' : 'accounts'}`, description:`Ordered ${isProxy ? 'network' : 'authenticated account'} pool · ${items.length} of 5 configured`, body:`${poolList(platform,kind,items)}<div class="manager-add">${form}</div>`, footer:'<button class="ghost" data-dialog-close>Done</button>'});
+}
 async function settingsPage() {
   if (PORTAL.role !== 'owner') return layout('Platform settings', 'Credentials and network access by provider.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update platform credentials and proxies.')}</section>`);
   const data = await api('/portal/api/settings/platforms');
-  const names = {instagram:'Instagram', tiktok:'TikTok', youtube:'YouTube'};
-  const list = (platform, kind, items) => items.length ? `<ol class="credential-pool">${items.map(item => `<li><div><strong>${item.position === 1 ? 'Primary' : `Backup ${item.position - 1}`}</strong><span>${kind === 'proxy' ? 'Proxy credentials saved privately' : 'Account cookies saved privately'} · ${esc(fmt(item.updated_at))}</span></div><div class="pool-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${item.position > 1 ? `<button class="ghost" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${kind} up">↑</button>` : ''}${item.position < items.length ? `<button class="ghost" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${kind} down">↓</button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}">Remove</button></div></li>`).join('')}</ol>` : `<div class="empty compact">No ${kind === 'proxy' ? 'proxies' : 'cookie accounts'} configured.</div>`;
-  const cards = Object.entries(names).map(([platform, name]) => {
-    const item = data[platform], proxies = item.proxy, cookies = item.cookies;
-    return `<section class="card platform-card"><div class="card-head"><div><div class="eyebrow">Provider</div><h2>${platformLabel(platform)}</h2></div><span class="badge ${proxies.length || cookies.length ? 'good' : ''}">${proxies.length || cookies.length ? `${proxies.length} prox${proxies.length === 1 ? 'y' : 'ies'} · ${cookies.length} account${cookies.length === 1 ? '' : 's'}` : 'Anonymous'}</span></div>
-      <div class="setting-section"><div class="setting-copy"><h3>Proxy pool</h3><p class="muted">Tried in order only for retryable network, block, login-wall, or rejected-session failures.</p>${list(platform,'proxy',proxies)}</div>${proxies.length < 5 ? `<form class="platform-setting-form stack compact-setting-form" data-platform="${platform}" data-kind="proxy"><label class="field">Add ${proxies.length ? `Backup ${proxies.length}` : 'primary'} proxy<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port"><span class="help">Values are encrypted and never shown again.</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add proxy</button></form>` : `<div class="inline-note pool-full">${icon('check')}<span>Proxy pool full · 5 of 5 configured</span></div>`}</div>
-      <div class="setting-section"><div class="setting-copy"><h3>Account cookie pool</h3><p class="muted">Each retry uses one complete cookie jar; cookies from different accounts are never merged.</p>${list(platform,'cookies',cookies)}</div><form class="platform-setting-form stack" data-platform="${platform}" data-kind="cookies"><label class="field">Add ${cookies.length ? `Backup ${cookies.length}` : 'primary'} account cookies<input name="file" type="file" required accept=".txt,text/plain"><span class="help">Dedicated throwaway account, Netscape cookies.txt, maximum 2 MiB. Up to five.</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add account cookies</button></form></div></section>`;
-  }).join('');
-  return layout('Platform settings', 'Configure ordered backup pools independently for Instagram, TikTok, and YouTube.', `<div class="platform-settings">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Attempt 1 uses both primaries. Later attempts advance to the next configured proxy and cookie account, reusing the last entry on the shorter list. Bad input and missing content are never retried.</span></div>`);
+  const cards = ['instagram','tiktok','youtube'].map(platform => { const item=data[platform]; return `<section class="card provider-summary"><div class="provider-summary-head"><div><div class="eyebrow">Provider</div><h2>${platformLabel(platform)}</h2></div><span class="badge ${item.proxy.length || item.cookies.length ? 'good' : ''}">${item.proxy.length || item.cookies.length ? 'Configured' : 'Anonymous'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)} · automatic failover</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Account cookies</strong><small>${poolLabel('cookies',item.cookies.length)} · isolated cookie jars</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage accounts</button></div></section>`; }).join('');
+  return layout('Platform settings', 'Configure network and account access independently for each provider.', `<div class="provider-summary-grid">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Secrets stay encrypted. Open a manager only when you need to test, reorder, add, or remove an entry.</span></div>`);
 }
 
 async function requestHistory() {
@@ -477,7 +484,8 @@ async function savePlatformSetting(form) {
       value = await file.text();
     } else value = form.elements.value.value.trim();
     await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}});
-    await render(); toast(`${kind === 'proxy' ? 'Proxy' : 'Cookies'} saved for ${platformName(platform)}.`);
+    if (form.closest('#dialog')) await openPlatformManager(platform, kind, dialogTrigger); else await render();
+    toast(`${kind === 'proxy' ? 'Proxy' : 'Cookies'} saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; }
   finally { done(); }
 }
@@ -489,7 +497,7 @@ async function movePlatformSetting(button) {
   card.querySelector('[data-pool-error]')?.remove();
   try {
     await api(`/portal/api/settings/platforms/${button.dataset.platform}/${button.dataset.moveSetting}/${button.dataset.entry}/move`, {method:'POST', body:{direction:button.dataset.direction}});
-    await render(); toast('Order updated.');
+    if (button.closest('#dialog')) await openPlatformManager(button.dataset.platform, button.dataset.moveSetting, dialogTrigger); else await render(); toast('Order updated.');
   } catch (error) { const message = document.createElement('div'); message.className = 'field-error'; message.dataset.poolError = ''; message.setAttribute('role','alert'); message.textContent = error.message; card.append(message); }
   finally { done(); }
 }
@@ -714,6 +722,8 @@ document.addEventListener('click', event => {
   if (revoke) { const key = state.keys.find(item => String(item.id) === revoke.dataset.revoke); confirmAction('Revoke this API key?', `“${key?.name || 'This key'}” will stop working. Integrations using it will lose access.`, 'Revoke key', () => api(`/portal/api/keys/${revoke.dataset.revoke}`, {method:'DELETE'})); }
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
+  const managePlatform = event.target.closest('[data-manage-platform]');
+  if (managePlatform) { openPlatformManager(managePlatform.dataset.managePlatform, managePlatform.dataset.manageKind, managePlatform).catch(error => toast(error.message)); return; }
   const testProxy = event.target.closest('[data-test-proxy]');
   if (testProxy) testPlatformProxy(testProxy);
   const moveSetting = event.target.closest('[data-move-setting]');
