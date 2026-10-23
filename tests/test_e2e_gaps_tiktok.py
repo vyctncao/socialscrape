@@ -54,6 +54,7 @@ ROUTE_PARAMS = {
     "/v1/tiktok/song": {"clipId"},
     "/v1/tiktok/song/videos": {"clipId", "cursor"},
     "/v1/tiktok/collection/videos": {"url", "cursor"},
+    "/v1/tiktok/creators/popular": {"page", "sortBy", "followerCount", "creatorCountry", "audienceCountry"},
 }
 
 _SPACING = 1.0  # seconds between calls that reached TikTok
@@ -97,7 +98,7 @@ def _tiktok_rows(c) -> dict[str, str]:
 def test_tiktok_501_routes_answer_501_405_and_expose_no_params(client):
     rows = _tiktok_rows(client)
     unsupported = sorted(p for p, s in rows.items() if s == "not_supported")
-    assert len(unsupported) >= 19, unsupported
+    assert len(unsupported) >= 18, unsupported
     spec = client.get("/openapi.json").json()["paths"]
     for path in unsupported:
         check_err(client.get(path, params={"handle": STOOL, "url": SCOUT_VIDEO}), 501, "not_supported")

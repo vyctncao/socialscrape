@@ -16,6 +16,7 @@ object when the post shows up in its sound's app feed; otherwise web posts are r
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -24,7 +25,7 @@ import time
 from typing import Any
 
 import yt_dlp
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from yt_dlp.networking import HEADRequest
 from yt_dlp.utils import ExtractorError
 
@@ -680,6 +681,89 @@ async def tiktok_collection_videos(url: str = Query(...), cursor: str | None = N
     })
 
 
+@sc_get(router, "/v1/tiktok/creators/popular",
+        source="regional anonymous recommended feed, with TikTok profile hydration",
+        notes="When TikTok Creative Center is down, ranks creators surfaced in the selected market's public "
+              "recommended feed; this is not Creative Center's official chart.")
+async def popular_creators(
+    request: Request,
+    page: str = "1",
+    sortBy: str = "follower",
+    followerCount: str | None = None,
+    creatorCountry: str = "US",
+    audienceCountry: str | None = None,
+) -> dict[str, Any]:
+    from .. import fallback
+
+    page_no = int(page) if page.isascii() and page.isdigit() and int(page) > 0 else 0
+    if not page_no:
+        raise BadRequest("page must be a positive integer")
+    country = creatorCountry.strip().upper()
+    if not _REGION.fullmatch(country):
+        raise BadRequest("creatorCountry must be a two-letter country code")
+    status, feed, problem = await fallback.ask_path(
+        request.app, "/v1/tiktok/get-trending-feed", {"region": country}
+    )
+    if problem or status != 200 or not isinstance(feed, dict):
+        raise UpstreamError("TikTok's regional recommended feed is unavailable")
+    grouped: dict[str, dict[str, Any]] = {}
+    for item in M.objs(feed.get("aweme_list")):
+        author, stats = M.obj(item.get("author")), M.obj(item.get("statistics"))
+        uid, handle = str(author.get("uid") or ""), M.text(author.get("unique_id"))
+        if not uid or not handle:
+            continue
+        row = grouped.setdefault(uid, {"author": author, "items": [], "views": 0, "likes": 0})
+        cover = M.obj(M.obj(item.get("video")).get("cover"))
+        row["items"].append(compact({
+            "item_id": str(item.get("aweme_id") or ""), "create_time": M.to_int(item.get("create_time")),
+            "liked_cnt": M.to_int(stats.get("digg_count")), "vv": M.to_int(stats.get("play_count")),
+            "cover_url": next(iter(cover.get("url_list") or []), None), "tt_link": item.get("url"),
+        }))
+        row["views"] += M.to_int(stats.get("play_count")) or 0
+        row["likes"] += M.to_int(stats.get("digg_count")) or 0
+
+    async def hydrate(row: dict[str, Any]) -> dict[str, Any]:
+        author = row["author"]
+        handle = author["unique_id"]
+        try:
+            info = await with_ydl(P, lambda ydl: _user_page(ydl, handle))
+        except ApiError:
+            info = {}
+        stats = M.obj(info.get("stats"))
+        avatar = M.obj(author.get("avatar_medium"))
+        return compact({
+            "avatar_url": next(iter(avatar.get("url_list") or []), None), "country_code": country,
+            "follower_cnt": M.to_int(stats.get("followerCount")), "items": row["items"],
+            "liked_cnt": M.to_int(stats.get("heartCount")) or row["likes"],
+            "nick_name": author.get("nickname"), "tcm_id": str(author.get("uid")),
+            "tcm_link": f"https://www.tiktok.com/@{author['unique_id']}",
+            "tt_link": f"https://www.tiktok.com/@{author['unique_id']}", "user_id": str(author.get("uid")),
+            "_sample_views": row["views"], "_sample_likes": row["likes"],
+        })
+
+    creators = await asyncio.gather(*(hydrate(row) for row in grouped.values()))
+    if followerCount:
+        ranges = {"10k-100k": (10_000, 100_000), "100k-1m": (100_000, 1_000_000),
+                  "1m-10m": (1_000_000, 10_000_000), ">10m": (10_000_000, float("inf"))}
+        if followerCount not in ranges:
+            raise BadRequest("followerCount must be 10k-100k, 100k-1m, 1m-10m or >10m")
+        low, high = ranges[followerCount]
+        creators = [c for c in creators if low <= (c.get("follower_cnt") or 0) < high]
+    key = ((lambda c: c.get("_sample_likes", 0) / max(c.get("_sample_views", 0), 1))
+           if sortBy in ("engagement", "engagement_rate") else
+           (lambda c: c.get("_sample_views", 0)) if sortBy in ("popular", "popularity") else
+           (lambda c: c.get("follower_cnt") or 0))
+    creators.sort(key=key, reverse=True)
+    for creator in creators:
+        creator.pop("_sample_views", None)
+        creator.pop("_sample_likes", None)
+    size, start = 20, (page_no - 1) * 20
+    selected = creators[start:start + size]
+    return {"creators": selected, "pagination": {"has_more": start + size < len(creators),
+                                                   "page": page_no, "size": len(selected),
+                                                   "total": len(creators)}}
+
+
 _NO_EXTRACTOR = "yt-dlp has no TikTok extractor that calls"
 
 UNSUPPORTED = {
@@ -698,7 +782,6 @@ UNSUPPORTED = {
                                  "(probed 2026-10-13).",
     "/v1/tiktok/search/keyword": "yt-dlp has no TikTok search extractor (/api/search/item/ is never called).",
     "/v1/tiktok/search/top": "yt-dlp has no TikTok search extractor (/api/search/general/ is never called).",
-    "/v1/tiktok/creators/popular": "Popular creators come from TikTok Creative Center; " + _NO_EXTRACTOR + " it.",
     "/v1/tiktok/get-trending-feed": "The For You/trending feed (/api/recommend/item_list/) is never called by "
                                     "yt-dlp.",
     "/v1/tiktok/shop/search": "TikTok Shop is not touched by any yt-dlp extractor.",

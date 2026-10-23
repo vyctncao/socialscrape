@@ -182,6 +182,29 @@ def config(env: FallbackEnv, store: PortalStore | None) -> Config:
                   None)
 
 
+def active_config(app) -> Config:
+    """Effective fallback config for local composite endpoints; contains a secret and is never returned directly."""
+    return config(app.state.fallback_env, getattr(app.state, "portal", None))
+
+
+async def ask_path(app, path: str, params: dict[str, str]) -> tuple[int | None, dict[str, Any] | None, str | None]:
+    """Ask the configured compatibility provider for one catalog path, for a local composite endpoint."""
+    current = active_config(app)
+    if not current.active:
+        return None, None, "disabled"
+    query = urlencode(list(params.items()))
+    url = f"{app.state.fallback_env.url}{path}" + (f"?{query}" if query else "")
+    timeout = get_settings().request_timeout
+    loop = asyncio.get_running_loop()
+    try:
+        status_code, body, problem = await asyncio.wait_for(
+            loop.run_in_executor(_pool(), _fetch, url, current.api_key or "", timeout), timeout
+        )
+    except TimeoutError:
+        return None, None, "timeout"
+    return status_code, _json_object(body) if problem is None else None, problem
+
+
 def status(env: FallbackEnv, store: PortalStore | None) -> dict[str, Any]:
     """The dashboard's view of the settings. Never the key."""
     c = config(env, store)
