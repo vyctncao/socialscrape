@@ -600,7 +600,7 @@ window.addEventListener('resize', () => {
 
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
-  return ['playground','keys','team','history','usage','docs','settings','fallback'].includes(route) ? route : 'overview';
+  return ['playground','keys','team','history','usage','docs','tests','settings','fallback'].includes(route) ? route : 'overview';
 }
 function loadingShape(current) {
   const template = document.querySelector(`template[data-loading-page="${current}"]`);
@@ -643,7 +643,7 @@ async function render({retryFailedOnly = false} = {}) {
   document.querySelectorAll('.nav a').forEach(link => {
     if (link.dataset.page === current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
-  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage, fallback:FallbackPage.render};
+  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, tests:EndpointTests.render, settings:settingsPage, fallback:FallbackPage.render};
   try {
     const html = await views[current]({retryFailedOnly});
     if (renderId !== state.renderId) return;

@@ -130,3 +130,9 @@ The `/ui-ux-pro-max` review supplements Mimic's visual rules with checks for
 keyboard focus, stable pending controls, explicit recovery, responsive layouts,
 contrast, and reduced motion. Its generated palette and typography do not replace
 Mimic's workspace tokens or original platform artwork.
+
+Endpoint tests (`/app/tests`) lives in `selftest.js` and `selftest.css`, like the Fallback
+page’s own files, and renders through the same router with its own loading skeleton. Its
+platform filter is a radio group drawn as the kit’s segmented control, every result pairs a
+status badge with words, failures are announced politely as they happen, and the run’s one
+primary action becomes Stop while tests are running.

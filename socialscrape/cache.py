@@ -164,7 +164,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         key = cache_key(request)
-        if max_age is not None and (hit := self.cache.get(key, max_age)):
+        hit = self.cache.get(key, max_age) if max_age is not None else None
+        # x-socialscrape-fallback: off asks for this server's own answer, so not one ScrapeCreators gave.
+        if hit and not (hit[2] and request.headers.get("x-socialscrape-fallback", "").strip().lower() == "off"):
             body, stored_at, fallback = hit
             body["cached"] = True
             body["cached_at"] = stored_at.isoformat().replace("+00:00", "Z")

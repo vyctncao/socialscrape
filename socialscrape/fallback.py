@@ -44,7 +44,8 @@ log = logging.getLogger("socialscrape.fallback")
 
 PROVIDER = "scrapecreators"
 DEFAULT_URL = "https://api.scrapecreators.com"
-# On every response ScrapeCreators served (cache hits of one too): HEADER: PROVIDER.
+# On every response ScrapeCreators served (cache hits of one too): HEADER: PROVIDER. A request with HEADER: off is
+# never sent there, nor answered from the cache with something it served.
 HEADER = "x-socialscrape-fallback"
 TRIGGERS = ("unsupported", "errors", "restricted", "not_found")
 DEFAULT_TRIGGERS = ("unsupported", "errors")
@@ -404,6 +405,8 @@ class FallbackMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         c = config(self.env, getattr(request.app.state, "portal", None))
         if (not c.active or path.split("/")[2] not in c.platforms or _VIA in request.headers.get("via", "")
+                # The caller asked for this server's own answer (the dashboard's endpoint tests do).
+                or request.headers.get(HEADER, "").strip().lower() == "off"
                 # Our own cursors mean nothing to ScrapeCreators.
                 or any(name in _CURSOR_PARAMS and value.startswith(cursor.PREFIX)
                        for name, value in request.query_params.multi_items())):
