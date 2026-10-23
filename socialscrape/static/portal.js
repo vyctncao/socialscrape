@@ -114,7 +114,16 @@ async function requestHistory() {
   const data = await api('/portal/api/history?limit=200');
   return layout('Request history', 'Inspect API activity, response status, and timing.', `
     <div class="table-caption"><span>Latest ${number(data.requests.length)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
-    ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span></td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
+    ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr class="history-row" tabindex="0" data-history-id="${request.id}" aria-label="Open response from ${esc(fmt(request.created_at))}"><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span></td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
+}
+
+async function showHistoryDetail(id) {
+  const detail = await api(`/portal/api/history/${id}`);
+  let formatted = detail.response || '';
+  try { formatted = JSON.stringify(JSON.parse(formatted), null, 2); } catch {}
+  const route = detail.path + (detail.query ? `?${detail.query}` : '');
+  openDialog({title:`${detail.method} ${detail.path}`, description:`${detail.status} · ${number(detail.duration_ms)} ms · ${detail.cached ? 'Cache hit' : 'Live'}`, body:`<dl class="history-facts"><div><dt>Time</dt><dd>${esc(fmt(detail.created_at))}</dd></div><div><dt>API key</dt><dd>${esc(detail.prefix || 'Workspace session')}</dd></div><div><dt>Request</dt><dd><code>${esc(route)}</code></dd></div></dl>${detail.response_truncated ? '<div class="inline-note">The stored response was capped at 2 MiB.</div>' : ''}<pre class="code history-response" id="history-response" tabindex="0"></pre>`, footer:`<button class="ghost" data-dialog-close>Close</button><button class="primary" data-copy="history-response">${icon('copy')}Copy response</button>`});
+  $('#history-response').textContent = formatted || 'No response body was stored for this request.';
 }
 
 async function usage() {
@@ -401,6 +410,8 @@ document.addEventListener('click', event => {
   if (language) { state.language = language.dataset.language; updateSnippet(); }
   const copy = event.target.closest('[data-copy]'); if (copy) copyElement(copy.dataset.copy);
   if (event.target.closest('[data-dialog-close]')) closeDialog();
+  const historyRow = event.target.closest('[data-history-id]');
+  if (historyRow) { dialogTrigger = historyRow; showHistoryDetail(historyRow.dataset.historyId).catch(error => toast(error.message)); return; }
   const revoke = event.target.closest('[data-revoke]');
   if (revoke) { const key = state.keys.find(item => String(item.id) === revoke.dataset.revoke); confirmAction('Revoke this API key?', `“${key?.name || 'This key'}” will stop working. Integrations using it will lose access.`, 'Revoke key', () => api(`/portal/api/keys/${revoke.dataset.revoke}`, {method:'DELETE'})); }
   const remove = event.target.closest('[data-remove]');
@@ -430,6 +441,8 @@ document.addEventListener('change', event => {
   if (event.target.matches('[data-param]')) updateSnippet();
 });
 document.addEventListener('keydown', event => {
+  const historyRow = event.target.closest('[data-history-id]');
+  if (historyRow && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dialogTrigger = historyRow; showHistoryDetail(historyRow.dataset.historyId).catch(error => toast(error.message)); return; }
   if (!event.target.matches('[data-language]') || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
   event.preventDefault();
   const tabs = [...document.querySelectorAll('[data-language]')];

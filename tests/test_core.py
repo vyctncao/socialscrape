@@ -1706,7 +1706,11 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert owner.get("/portal/api/keys").json()["keys"][0]["last_used_at"] is not None
     assert TestClient(create_app(), base_url="https://testserver").get(
         "/v1/youtube/shorts/trending", headers={"x-api-key": created["key"]}).status_code == 501
-    assert owner.get("/portal/api/history").json()["requests"][0]["path"] == "/v1/youtube/shorts/trending"
+    history = owner.get("/portal/api/history").json()["requests"]
+    assert history[0]["path"] == "/v1/youtube/shorts/trending" and history[0]["has_response"] == 1
+    detail = owner.get(f"/portal/api/history/{history[0]['id']}").json()
+    assert detail["status"] == 501 and detail["response_truncated"] == 0
+    assert json.loads(detail["response"])["error"] == "not_supported"
 
     invite = owner.post("/portal/api/invites", headers=headers, json={"email": "friend@example.com"}).json()["url"]
     friend = TestClient(create_app(), base_url="https://testserver")
@@ -1718,6 +1722,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     friend_me = friend.get("/portal/api/me").json()
     assert friend_me["role"] == "member"
     assert friend.get("/portal/api/team").json() == {"members": []}
+    assert friend.get(f"/portal/api/history/{history[0]['id']}").status_code == 404
     assert friend.get("/portal/api/settings/platforms").status_code == 403
     friend_key = friend.post("/portal/api/keys", headers={"x-csrf-token": friend_me["csrf"]},
                              json={"name": "Friend"}).json()["key"]
@@ -1732,6 +1737,27 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert anonymous.get("/app", follow_redirects=False).headers["location"] == "/login"
     assert anonymous.get("/openapi.json").status_code == 401
     assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401
+
+
+def test_request_history_caps_large_response_bodies(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    portal = tmp_path / "portal.sqlite3"
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="")
+    app = create_app()
+
+    @app.get("/v9/test/large")
+    async def large():
+        return {"payload": "x" * (2 * 1024 * 1024 + 100)}
+
+    c = TestClient(app, base_url="https://testserver")
+    c.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                            "setup_token": "setup"})
+    assert c.get("/v9/test/large").status_code == 200
+    entry = c.get("/portal/api/history").json()["requests"][0]
+    detail = c.get(f"/portal/api/history/{entry['id']}").json()
+    assert detail["response_truncated"] == 1 and len(detail["response"].encode()) == 2 * 1024 * 1024
 
 
 def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatch):

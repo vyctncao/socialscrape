@@ -95,12 +95,19 @@ class PortalStore:
                 query TEXT NOT NULL,
                 status INTEGER NOT NULL,
                 duration_ms INTEGER NOT NULL,
-                cached INTEGER NOT NULL DEFAULT 0
+                cached INTEGER NOT NULL DEFAULT 0,
+                response_body BLOB,
+                response_truncated INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON members(role) WHERE role='owner';
             CREATE INDEX IF NOT EXISTS requests_created_at ON requests(created_at DESC);
             CREATE INDEX IF NOT EXISTS requests_member_id ON requests(member_id, created_at DESC);
         """)
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(requests)")}
+        if "response_body" not in columns:
+            self._conn.execute("ALTER TABLE requests ADD COLUMN response_body BLOB")
+        if "response_truncated" not in columns:
+            self._conn.execute("ALTER TABLE requests ADD COLUMN response_truncated INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
 
     @staticmethod
@@ -384,15 +391,17 @@ class PortalStore:
             return cur.rowcount == 1
 
     def record_request(self, principal: Principal | None, key_id: int | None, method: str, path: str, query: str,
-                       status: int, duration_ms: int, cached: bool) -> None:
+                       status: int, duration_ms: int, cached: bool, response_body: bytes = b"") -> None:
+        max_body = 2 * 1024 * 1024
+        stored_body, truncated = response_body[:max_body], len(response_body) > max_body
         with self._lock:
             if key_id is not None:
                 self._conn.execute("UPDATE api_keys SET last_used_at=? WHERE id=?", (time.time(), key_id))
             self._conn.execute(
-                "INSERT INTO requests(member_id,api_key_id,created_at,method,path,query,status,duration_ms,cached) "
-                "VALUES(?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO requests(member_id,api_key_id,created_at,method,path,query,status,duration_ms,cached,"
+                "response_body,response_truncated) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (principal.id if principal else None, key_id, time.time(), method, path, query[:4000], status,
-                 duration_ms, int(cached)),
+                 duration_ms, int(cached), stored_body, int(truncated)),
             )
             self._conn.commit()
 
@@ -400,11 +409,28 @@ class PortalStore:
         where, args = ("", ()) if principal.role == "owner" else ("WHERE r.member_id=?", (principal.id,))
         with self._lock:
             rows = self._conn.execute(
-                "SELECT r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,k.prefix,m.email "
+                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,"
+                "r.response_body IS NOT NULL has_response,r.response_truncated,k.prefix,m.email "
                 "FROM requests r LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"{where} ORDER BY r.created_at DESC LIMIT ?", (*args, min(max(limit, 1), 500))
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def history_detail(self, principal: Principal, request_id: int) -> dict[str, Any] | None:
+        where, args = (("r.id=?", (request_id,)) if principal.role == "owner"
+                       else ("r.id=? AND r.member_id=?", (request_id, principal.id)))
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,"
+                "r.response_body,r.response_truncated,k.prefix,m.email FROM requests r "
+                "LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
+                f"WHERE {where}", args
+            ).fetchone()
+        if not row:
+            return None
+        detail = dict(row)
+        detail["response"] = (detail.pop("response_body") or b"").decode("utf-8", "replace")
+        return detail
 
     def usage(self, principal: Principal) -> dict[str, Any]:
         clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
@@ -709,6 +735,13 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
     @router.get("/portal/api/history")
     async def history(request: Request, limit: int = 100):
         return {"requests": store.history(_require(request), limit)}
+
+    @router.get("/portal/api/history/{request_id}")
+    async def history_detail(request: Request, request_id: int):
+        detail = store.history_detail(_require(request), request_id)
+        if not detail:
+            raise HTTPException(404, "Request history entry not found")
+        return detail
 
     @router.get("/portal/api/usage")
     async def usage(request: Request):
