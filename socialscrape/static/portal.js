@@ -100,15 +100,14 @@ async function settingsPage() {
   if (PORTAL.role !== 'owner') return layout('Platform settings', 'Credentials and network access by provider.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update platform credentials and proxies.')}</section>`);
   const data = await api('/portal/api/settings/platforms');
   const names = {instagram:'Instagram', tiktok:'TikTok', youtube:'YouTube'};
+  const list = (platform, kind, items) => items.length ? `<ol class="credential-pool">${items.map(item => `<li><div><strong>${item.position === 1 ? 'Primary' : `Backup ${item.position - 1}`}</strong><span>${kind === 'proxy' ? 'Proxy credentials saved privately' : 'Account cookies saved privately'} · ${esc(fmt(item.updated_at))}</span></div><div class="pool-actions">${item.position > 1 ? `<button class="ghost" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${kind} up">↑</button>` : ''}${item.position < items.length ? `<button class="ghost" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${kind} down">↓</button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}">Remove</button></div></li>`).join('')}</ol>` : `<div class="empty compact">No ${kind === 'proxy' ? 'proxies' : 'cookie accounts'} configured.</div>`;
   const cards = Object.entries(names).map(([platform, name]) => {
-    const item = data[platform], proxy = item.proxy, cookies = item.cookies;
-    return `<section class="card platform-card"><div class="card-head"><div><div class="eyebrow">Provider</div><h2>${platformLabel(platform)}</h2></div><span class="badge ${proxy.configured || cookies.configured ? 'good' : ''}">${proxy.configured || cookies.configured ? 'Configured' : 'Anonymous'}</span></div>
-      <div class="setting-section"><div class="setting-copy"><h3>Residential proxy</h3><p class="muted">Used only for ${name} requests. Helpful when the provider blocks the server IP.</p>${proxy.configured ? `<div class="inline-note">${icon('shield-check')}<span>Saved privately · updated ${esc(fmt(proxy.updated_at))}</span></div>` : ''}</div>
-      <form class="platform-setting-form stack" data-platform="${platform}" data-kind="proxy"><label class="field">${proxy.configured ? 'Replace proxy URL' : 'Proxy URL'}<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port"><span class="help">HTTP, HTTPS, SOCKS4, SOCKS4A, SOCKS5, and SOCKS5H are supported.</span></label><div class="field-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${proxy.configured ? 'Replace proxy' : 'Save proxy'}</button>${proxy.configured ? `<button class="danger" type="button" data-clear-setting="proxy" data-platform="${platform}">Remove proxy</button>` : ''}</div></form></div>
-      <div class="setting-section"><div class="setting-copy"><h3>Authenticated account cookies</h3><p class="muted">Optional. Export a Netscape <code>cookies.txt</code> from a dedicated throwaway ${name} account. Never upload your personal account cookies.</p>${cookies.configured ? `<div class="inline-note">${icon('shield-check')}<span>Cookies saved privately · updated ${esc(fmt(cookies.updated_at))}</span></div>` : ''}</div>
-      <form class="platform-setting-form stack" data-platform="${platform}" data-kind="cookies"><label class="field">${cookies.configured ? 'Replace cookies.txt' : 'Cookies.txt file'}<input name="file" type="file" required accept=".txt,text/plain"><span class="help">Maximum 2 MiB. The file must contain ${platform === 'youtube' ? 'youtube.com' : platform + '.com'} cookies.</span></label><div class="field-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${cookies.configured ? 'Replace cookies' : 'Save cookies'}</button>${cookies.configured ? `<button class="danger" type="button" data-clear-setting="cookies" data-platform="${platform}">Remove cookies</button>` : ''}</div></form></div></section>`;
+    const item = data[platform], proxies = item.proxy, cookies = item.cookies;
+    return `<section class="card platform-card"><div class="card-head"><div><div class="eyebrow">Provider</div><h2>${platformLabel(platform)}</h2></div><span class="badge ${proxies.length || cookies.length ? 'good' : ''}">${proxies.length || cookies.length ? `${proxies.length} prox${proxies.length === 1 ? 'y' : 'ies'} · ${cookies.length} account${cookies.length === 1 ? '' : 's'}` : 'Anonymous'}</span></div>
+      <div class="setting-section"><div class="setting-copy"><h3>Proxy pool</h3><p class="muted">Tried in order only for retryable network, block, login-wall, or rejected-session failures.</p>${list(platform,'proxy',proxies)}</div><form class="platform-setting-form stack" data-platform="${platform}" data-kind="proxy"><label class="field">Add ${proxies.length ? `Backup ${proxies.length}` : 'primary'} proxy<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port"><span class="help">Up to five. Values are encrypted and never shown again.</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add proxy</button></form></div>
+      <div class="setting-section"><div class="setting-copy"><h3>Account cookie pool</h3><p class="muted">Each retry uses one complete cookie jar; cookies from different accounts are never merged.</p>${list(platform,'cookies',cookies)}</div><form class="platform-setting-form stack" data-platform="${platform}" data-kind="cookies"><label class="field">Add ${cookies.length ? `Backup ${cookies.length}` : 'primary'} account cookies<input name="file" type="file" required accept=".txt,text/plain"><span class="help">Dedicated throwaway account, Netscape cookies.txt, maximum 2 MiB. Up to five.</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add account cookies</button></form></div></section>`;
   }).join('');
-  return layout('Platform settings', 'Configure network access and authenticated accounts separately for each provider.', `<div class="platform-settings">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Proxy URLs and cookie files are encrypted at rest and never returned to the browser. New requests use changes immediately; requests already in flight keep their original settings.</span></div>`);
+  return layout('Platform settings', 'Configure ordered backup pools independently for Instagram, TikTok, and YouTube.', `<div class="platform-settings">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Attempt 1 uses both primaries. Later attempts advance to the next configured proxy and cookie account, reusing the last entry on the shorter list. Bad input and missing content are never retried.</span></div>`);
 }
 
 async function requestHistory() {
@@ -339,106 +338,11 @@ async function savePlatformSetting(form) {
       if (file.size > 2 * 1024 * 1024) throw Error('The cookies.txt file must be no larger than 2 MiB.');
       value = await file.text();
     } else value = form.elements.value.value.trim();
-    await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'PUT', body:{value}});
+    await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}});
     await render(); toast(`${kind === 'proxy' ? 'Proxy' : 'Cookies'} saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; }
   finally { button.disabled = false; button.textContent = label; }
 }
-
-function hidePopovers() {
-  document.querySelectorAll('.account-popup:popover-open, .platform-menu:popover-open').forEach(popup => popup.hidePopover());
-}
-function positionPopup(popup, trigger, kind) {
-  const anchor = trigger.getBoundingClientRect(), inset = 12, gap = 8;
-  if (kind === 'platform') popup.style.width = `${anchor.width}px`;
-  const rect = {width:popup.offsetWidth, height:popup.offsetHeight};
-  let left = anchor.left, top = anchor.bottom + gap;
-  if (kind === 'account' && innerWidth > 760) {
-    left = anchor.right + gap;
-    top = anchor.bottom - rect.height;
-  } else if (kind === 'account' || top + rect.height > innerHeight - inset) {
-    top = anchor.top - rect.height - gap;
-  }
-  popup.style.left = `${Math.max(inset, Math.min(left, innerWidth - rect.width - inset))}px`;
-  popup.style.top = `${Math.max(inset, Math.min(top, innerHeight - rect.height - inset))}px`;
-}
-function initAccountMenus() {
-  const role = PORTAL.role === 'owner' ? 'Workspace owner' : 'Team member';
-  document.querySelectorAll('[data-account-trigger]').forEach(trigger => {
-    const popup = document.getElementById(trigger.getAttribute('popovertarget'));
-    const identity = `<span class="person-avatar" aria-hidden="true">${esc(PORTAL.email.slice(0,1).toUpperCase())}</span><span class="account-copy"><strong>${role}</strong><small title="${esc(PORTAL.email)}">${esc(PORTAL.email)}</small></span>`;
-    trigger.innerHTML = `${identity}${icon('dots-three')}`;
-    popup.innerHTML = `<div class="account-menu-header"><span class="person-avatar" aria-hidden="true">${esc(PORTAL.email.slice(0,1).toUpperCase())}</span><span class="account-copy"><strong id="${popup.id}-title">${role}</strong><small title="${esc(PORTAL.email)}">${esc(PORTAL.email)}</small></span><button type="button" class="account-theme-toggle" data-theme-toggle aria-label="Switch theme">${icon(document.documentElement.dataset.theme === 'light' ? 'moon' : 'sun')}</button></div><div class="account-separator" role="separator"></div>${PORTAL.role === 'owner' ? `<a href="/app/settings" class="account-action" data-account-action><span class="account-action-icon">${icon('gear-six')}</span><span>Settings</span>${icon('caret-right')}</a><div class="account-separator" role="separator"></div>` : ''}<form method="post" action="/logout"><button type="submit" class="account-action sign-out" data-account-action><span class="account-action-icon">${icon('sign-out')}</span><span>Log out</span></button></form>`;
-    popup.addEventListener('toggle', event => {
-      const open = event.newState === 'open';
-      trigger.setAttribute('aria-expanded', String(open));
-      if (open) positionPopup(popup, trigger, 'account');
-      else if (popup.contains(document.activeElement)) trigger.focus();
-    });
-    popup.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { event.preventDefault(); popup.hidePopover(); trigger.focus(); }
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const actions = [...popup.querySelectorAll('button, a')];
-      let index = actions.indexOf(document.activeElement);
-      index = event.key === 'Home' ? 0 : event.key === 'End' ? actions.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + actions.length) % actions.length;
-      actions[index].focus();
-    });
-    trigger.addEventListener('keydown', event => {
-      if (!['ArrowUp','ArrowDown'].includes(event.key)) return;
-      event.preventDefault(); popup.showPopover();
-      const actions = [...popup.querySelectorAll('button, a')];
-      actions[event.key === 'ArrowUp' ? actions.length - 1 : 0].focus();
-    });
-  });
-}
-function initPlatformPicker() {
-  const trigger = $('#platform-trigger'), popup = $('#platform-menu');
-  let openingEdge;
-  popup.addEventListener('toggle', event => {
-    const open = event.newState === 'open';
-    trigger.setAttribute('aria-expanded', String(open));
-    if (open) {
-      positionPopup(popup, trigger, 'platform');
-      const choices = [...popup.querySelectorAll('[role=option]')];
-      const choice = openingEdge === 'last' ? choices.at(-1) : openingEdge === 'first' ? choices[0] : popup.querySelector('[aria-selected=true]');
-      choice.focus(); openingEdge = null;
-    }
-  });
-  trigger.addEventListener('keydown', event => {
-    if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
-    event.preventDefault(); openingEdge = event.key === 'ArrowUp' ? 'last' : 'first'; popup.showPopover();
-  });
-  popup.addEventListener('click', event => {
-    const choice = event.target.closest('[data-platform-choice]');
-    if (!choice) return;
-    $('#pg-platform').value = choice.dataset.platformChoice;
-    $('#platform-selected').innerHTML = platformLabel(choice.dataset.platformChoice);
-    popup.querySelectorAll('[role=option]').forEach(option => option.setAttribute('aria-selected', String(option === choice)));
-    fillEndpoints(); popup.hidePopover(); trigger.focus();
-  });
-  popup.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { event.preventDefault(); popup.hidePopover(); trigger.focus(); return; }
-    if (event.key === 'Tab') { popup.hidePopover(); return; }
-    if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
-    event.preventDefault();
-    const choices = [...popup.querySelectorAll('[role=option]')];
-    let index = choices.indexOf(document.activeElement);
-    index = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
-    choices[index].focus();
-  });
-}
-window.addEventListener('resize', () => {
-  if (innerWidth > 760 && $('#nav-dialog').open) {
-    document.querySelectorAll('#nav-dialog .account-popup:popover-open').forEach(popup => popup.hidePopover());
-    $('#nav-dialog').close();
-  }
-  document.querySelectorAll('.account-popup:popover-open, .platform-menu:popover-open').forEach(popup => {
-    const trigger = document.querySelector(`[popovertarget="${popup.id}"]`);
-    if (trigger.getBoundingClientRect().width) positionPopup(popup, trigger, popup.classList.contains('account-popup') ? 'account' : 'platform');
-    else popup.hidePopover();
-  });
-});
 
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
@@ -501,9 +405,11 @@ document.addEventListener('click', event => {
   if (revoke) { const key = state.keys.find(item => String(item.id) === revoke.dataset.revoke); confirmAction('Revoke this API key?', `“${key?.name || 'This key'}” will stop working. Integrations using it will lose access.`, 'Revoke key', () => api(`/portal/api/keys/${revoke.dataset.revoke}`, {method:'DELETE'})); }
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
+  const moveSetting = event.target.closest('[data-move-setting]');
+  if (moveSetting) { api(`/portal/api/settings/platforms/${moveSetting.dataset.platform}/${moveSetting.dataset.moveSetting}/${moveSetting.dataset.entry}/move`, {method:'POST', body:{direction:moveSetting.dataset.direction}}).then(render).catch(error => toast(error.message)); }
+  const removeSetting = event.target.closest('[data-remove-setting]');
+  if (removeSetting) { const kind=removeSetting.dataset.removeSetting, platform=removeSetting.dataset.platform, entry=removeSetting.dataset.entry; confirmAction(`Remove this ${platformLabel(platform)} ${kind === 'proxy' ? 'proxy' : 'cookie account'}?`, 'The remaining entries keep their current order.', `Remove ${kind === 'proxy' ? 'proxy' : 'account'}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}/${entry}`, {method:'DELETE'})); }
   if (event.target.closest('#retry-page')) render();
-  const clearSetting = event.target.closest('[data-clear-setting]');
-  if (clearSetting) { const kind=clearSetting.dataset.clearSetting, platform=clearSetting.dataset.platform; confirmAction(`Remove ${platformName(platform)} ${kind}?`, `New ${platformName(platform)} requests will stop using this saved ${kind}.`, `Remove ${kind}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'DELETE'})); }
 });
 document.addEventListener('submit', event => {
   if (['key-form','invite-form','request-form'].includes(event.target.id) || event.target.matches('.platform-setting-form')) {

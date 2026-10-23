@@ -117,7 +117,8 @@ class _Logger:
         log.info(msg)
 
 
-def base_options(platform: str) -> dict[str, Any]:
+def base_options(platform: str, dashboard_proxy: str | None = None,
+                 dashboard_cookies: bool = False) -> dict[str, Any]:
     s = get_settings()
     opts: dict[str, Any] = {
         "quiet": True,
@@ -132,31 +133,29 @@ def base_options(platform: str) -> dict[str, Any]:
         "extractor_retries": 2,
         "allowed_extractors": ALLOWED_EXTRACTORS.get(platform, ["default"]),
     }
-    from .portal import active_platform_settings
-    dashboard_proxy, _ = active_platform_settings(platform)
     proxy = dashboard_proxy or s.proxy
     if proxy:
         opts["proxy"] = proxy
-    if cookie_file := s.cookie_file(platform):
+    if not dashboard_cookies and (cookie_file := s.cookie_file(platform)):
         if problem := cookie_file_problem(cookie_file):
             raise Misconfigured(f"The server's {platform} cookie file (SOCIALSCRAPE_COOKIES_{platform.upper()}) "
                                 f"{problem}", code="cookies_error")
         opts["cookiefile"] = cookie_file
-    elif s.cookies_from_browser:
+    elif not dashboard_cookies and s.cookies_from_browser:
         browser, _, profile = s.cookies_from_browser.partition(":")
         opts["cookiesfrombrowser"] = (browser, profile or None, None, None)
     return opts
 
 
 def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any]) -> T:
-    merged = base_options(platform)
+    dashboard_proxy = opts.pop("_dashboard_proxy", None)
+    dashboard_cookies = opts.pop("_dashboard_cookies", None)
+    merged = base_options(platform, dashboard_proxy, dashboard_cookies is not None)
     extractor_args = opts.pop("extractor_args", None)
     merged.update(opts)
     if extractor_args:
         merged["extractor_args"] = extractor_args
     with yt_dlp.YoutubeDL(merged) as ydl:
-        from .portal import active_platform_settings
-        _, dashboard_cookies = active_platform_settings(platform)
         if dashboard_cookies:
             try:
                 ydl.cookiejar._really_load(io.StringIO(dashboard_cookies), "dashboard cookies.txt", True, True)
@@ -506,19 +505,40 @@ def _cookie_sendable(cookie: Cookie) -> bool:
 
 
 async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], **ydl_opts: Any) -> T:
-    """Run `fn(ydl)` in the worker pool and translate any yt-dlp error."""
+    """Run `fn(ydl)` in the worker pool; retry configured platform profiles only for retryable upstream failures."""
+    from .portal import active_platform_pool
+
+    proxies, cookies = active_platform_pool(platform)
+    attempts = max(len(proxies), len(cookies), 1)
     loop = asyncio.get_running_loop()
-    try:
-        return await asyncio.wait_for(
-            loop.run_in_executor(_pool(), _run, platform, fn, ydl_opts),
-            timeout=get_settings().request_timeout,
-        )
-    except ApiError:
-        raise
-    except asyncio.TimeoutError as exc:
-        raise UpstreamError("Timed out waiting for the platform", code="timeout") from exc
-    except (YoutubeDLError, RequestError) as exc:
-        raise translate_error(exc) from exc
+    for index in range(attempts):
+        options = dict(ydl_opts)
+        if proxies:
+            options["_dashboard_proxy"] = proxies[min(index, len(proxies) - 1)]
+        if cookies:
+            options["_dashboard_cookies"] = cookies[min(index, len(cookies) - 1)]
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(_pool(), _run, platform, fn, options),
+                timeout=get_settings().request_timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            error: ApiError = UpstreamError("Timed out waiting for the platform", code="timeout")
+            cause: BaseException = exc
+        except ApiError as exc:
+            error, cause = exc, exc
+        except (YoutubeDLError, RequestError) as exc:
+            error, cause = translate_error(exc), exc
+        if index + 1 >= attempts or not _retry_profile(error):
+            raise error from cause
+        log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1, error.code, index + 2)
+    raise AssertionError("unreachable")
+
+
+def _retry_profile(error: ApiError) -> bool:
+    return error.code in {
+        "upstream_blocked", "network_error", "proxy_error", "forbidden", "cookies_rejected",
+    }
 
 
 # --- error translation -------------------------------------------------------
