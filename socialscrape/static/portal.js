@@ -91,14 +91,18 @@ async function team() {
 }
 
 async function settingsPage() {
-  if (PORTAL.role !== 'owner') return layout('Network settings', 'Workspace connection settings.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update the proxy used for API requests.')}</section>`);
-  const data = await api('/portal/api/settings/proxy');
-  return layout('Network settings', 'Manage the proxy used for outbound requests to social platforms.', `
-    <section class="card settings-card"><div class="card-head"><h2>Outbound proxy</h2><span class="badge ${data.configured ? 'good' : ''}">${data.configured ? 'Saved' : 'No saved proxy'}</span></div>
-    <p class="muted">A proxy can help when a platform limits requests from your server’s IP address.</p>
-    ${data.configured ? `<div class="inline-note">${icon('shield-check')}<span>A proxy is saved. Its address and credentials are kept private. Updated ${esc(fmt(data.updated_at))}.</span></div>` : ''}
-    <form id="proxy-form" class="stack" style="margin-top:24px"><label class="field">${data.configured ? 'Replace proxy URL' : 'Proxy URL'}<input id="proxy-url" name="proxy" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port" aria-describedby="proxy-hint"><span class="help" id="proxy-hint">Supports HTTP, HTTPS, and SOCKS proxies. Include the protocol, host, and port. Saved credentials are encrypted and are never returned to the browser.</span></label><div class="field-error" id="action-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${data.configured ? 'Replace proxy' : 'Save proxy'}</button>${data.configured ? '<button class="danger" type="button" id="clear-proxy">Remove saved proxy</button>' : ''}</div></form></section>
-    <div class="inline-note settings-card" style="margin-top:24px">${icon('globe')}<span>Saving a proxy updates the workspace configuration. It does not verify that the proxy can reach each platform. Removing it restores the server’s environment proxy, if configured.</span></div>`);
+  if (PORTAL.role !== 'owner') return layout('Platform settings', 'Credentials and network access by provider.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update platform credentials and proxies.')}</section>`);
+  const data = await api('/portal/api/settings/platforms');
+  const names = {instagram:'Instagram', tiktok:'TikTok', youtube:'YouTube'};
+  const cards = Object.entries(names).map(([platform, name]) => {
+    const item = data[platform], proxy = item.proxy, cookies = item.cookies;
+    return `<section class="card platform-card"><div class="card-head"><div><div class="eyebrow">Provider</div><h2>${name}</h2></div><span class="badge ${proxy.configured || cookies.configured ? 'good' : ''}">${proxy.configured || cookies.configured ? 'Configured' : 'Anonymous'}</span></div>
+      <div class="setting-section"><div class="setting-copy"><h3>Residential proxy</h3><p class="muted">Used only for ${name} requests. Helpful when the provider blocks the server IP.</p>${proxy.configured ? `<div class="inline-note">${icon('shield-check')}<span>Saved privately · updated ${esc(fmt(proxy.updated_at))}</span></div>` : ''}</div>
+      <form class="platform-setting-form stack" data-platform="${platform}" data-kind="proxy"><label class="field">${proxy.configured ? 'Replace proxy URL' : 'Proxy URL'}<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port"><span class="help">HTTP, HTTPS, SOCKS4, SOCKS4A, SOCKS5, and SOCKS5H are supported.</span></label><div class="field-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${proxy.configured ? 'Replace proxy' : 'Save proxy'}</button>${proxy.configured ? `<button class="danger" type="button" data-clear-setting="proxy" data-platform="${platform}">Remove proxy</button>` : ''}</div></form></div>
+      <div class="setting-section"><div class="setting-copy"><h3>Authenticated account cookies</h3><p class="muted">Optional. Export a Netscape <code>cookies.txt</code> from a dedicated throwaway ${name} account. Never upload your personal account cookies.</p>${cookies.configured ? `<div class="inline-note">${icon('shield-check')}<span>Cookies saved privately · updated ${esc(fmt(cookies.updated_at))}</span></div>` : ''}</div>
+      <form class="platform-setting-form stack" data-platform="${platform}" data-kind="cookies"><label class="field">${cookies.configured ? 'Replace cookies.txt' : 'Cookies.txt file'}<input name="file" type="file" required accept=".txt,text/plain"><span class="help">Maximum 2 MiB. The file must contain ${platform === 'youtube' ? 'youtube.com' : platform + '.com'} cookies.</span></label><div class="field-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${cookies.configured ? 'Replace cookies' : 'Save cookies'}</button>${cookies.configured ? `<button class="danger" type="button" data-clear-setting="cookies" data-platform="${platform}">Remove cookies</button>` : ''}</div></form></div></section>`;
+  }).join('');
+  return layout('Platform settings', 'Configure network access and authenticated accounts separately for each provider.', `<div class="platform-settings">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Proxy URLs and cookie files are encrypted at rest and never returned to the browser. New requests use changes immediately; requests already in flight keep their original settings.</span></div>`);
 }
 
 async function requestHistory() {
@@ -314,17 +318,22 @@ async function submitCreation(form) {
   finally { button.disabled = false; button.innerHTML = label; }
 }
 
-async function saveProxy(form) {
-  const button = form.querySelector('button[type=submit]');
+async function savePlatformSetting(form) {
+  const button = form.querySelector('button[type=submit]'), error = form.querySelector('.field-error');
   if (button.disabled) return;
-  const label = button.textContent;
-  button.disabled = true; button.textContent = 'Saving…'; $('#action-error').hidden = true;
+  const label = button.textContent, platform = form.dataset.platform, kind = form.dataset.kind;
+  button.disabled = true; button.textContent = 'Saving…'; error.hidden = true;
   try {
-    await api('/portal/api/settings/proxy', {method:'PUT', body:{url:$('#proxy-url').value.trim()}});
-    $('#proxy-url').value = '';
-    await render();
-    toast('Proxy configuration saved.');
-  } catch (error) { showError(error); }
+    let value;
+    if (kind === 'cookies') {
+      const file = form.elements.file.files[0];
+      if (!file) throw Error('Choose a cookies.txt file.');
+      if (file.size > 2 * 1024 * 1024) throw Error('The cookies.txt file must be no larger than 2 MiB.');
+      value = await file.text();
+    } else value = form.elements.value.value.trim();
+    await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'PUT', body:{value}});
+    await render(); toast(`${kind === 'proxy' ? 'Proxy' : 'Cookies'} saved for ${platformName(platform)}.`);
+  } catch (err) { error.textContent = err.message; error.hidden = false; }
   finally { button.disabled = false; button.textContent = label; }
 }
 
@@ -389,13 +398,14 @@ document.addEventListener('click', event => {
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
   if (event.target.closest('#retry-page')) render();
-  if (event.target.closest('#clear-proxy')) confirmAction('Remove the saved proxy?', 'Future requests will use the server’s environment proxy, if configured, or connect directly.', 'Remove proxy', () => api('/portal/api/settings/proxy', {method:'DELETE'}));
+  const clearSetting = event.target.closest('[data-clear-setting]');
+  if (clearSetting) { const kind=clearSetting.dataset.clearSetting, platform=clearSetting.dataset.platform; confirmAction(`Remove ${platformName(platform)} ${kind}?`, `New ${platformName(platform)} requests will stop using this saved ${kind}.`, `Remove ${kind}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'DELETE'})); }
 });
 document.addEventListener('submit', event => {
-  if (['key-form','invite-form','request-form','proxy-form'].includes(event.target.id)) {
+  if (['key-form','invite-form','request-form'].includes(event.target.id) || event.target.matches('.platform-setting-form')) {
     event.preventDefault();
     if (event.target.id === 'request-form') runRequest();
-    else if (event.target.id === 'proxy-form') saveProxy(event.target);
+    else if (event.target.matches('.platform-setting-form')) savePlatformSetting(event.target);
     else submitCreation(event.target);
   }
 });

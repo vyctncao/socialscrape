@@ -11,6 +11,7 @@ internals and yt-dlp's networking stack.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -131,8 +132,9 @@ def base_options(platform: str) -> dict[str, Any]:
         "extractor_retries": 2,
         "allowed_extractors": ALLOWED_EXTRACTORS.get(platform, ["default"]),
     }
-    from .portal import active_proxy
-    proxy = active_proxy() or s.proxy
+    from .portal import active_platform_settings
+    dashboard_proxy, _ = active_platform_settings(platform)
+    proxy = dashboard_proxy or s.proxy
     if proxy:
         opts["proxy"] = proxy
     if cookie_file := s.cookie_file(platform):
@@ -153,6 +155,15 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
     if extractor_args:
         merged["extractor_args"] = extractor_args
     with yt_dlp.YoutubeDL(merged) as ydl:
+        from .portal import active_platform_settings
+        _, dashboard_cookies = active_platform_settings(platform)
+        if dashboard_cookies:
+            try:
+                ydl.cookiejar._really_load(io.StringIO(dashboard_cookies), "dashboard cookies.txt", True, True)
+            except Exception as exc:
+                raise Misconfigured(
+                    f"The saved {platform} cookies.txt file cannot be loaded", code="cookies_error"
+                ) from exc
         if platform == "youtube":
             for key in ("Youtube", "YoutubeTab"):
                 ie = ydl.get_info_extractor(key)

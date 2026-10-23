@@ -1707,7 +1707,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     friend_me = friend.get("/portal/api/me").json()
     assert friend_me["role"] == "member"
     assert friend.get("/portal/api/team").json() == {"members": []}
-    assert friend.get("/portal/api/settings/proxy").status_code == 403
+    assert friend.get("/portal/api/settings/platforms").status_code == 403
     friend_key = friend.post("/portal/api/keys", headers={"x-csrf-token": friend_me["csrf"]},
                              json={"name": "Friend"}).json()["key"]
     member = next(m for m in owner.get("/portal/api/team").json()["members"] if m["role"] == "member")
@@ -1723,7 +1723,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401
 
 
-def test_owner_can_set_encrypted_runtime_proxy_from_dashboard(env, tmp_path, monkeypatch):
+def test_owner_can_set_encrypted_platform_settings_from_dashboard(env, tmp_path, monkeypatch):
     from cryptography.fernet import Fernet
 
     from socialscrape import ytdlp
@@ -1739,18 +1739,34 @@ def test_owner_can_set_encrypted_runtime_proxy_from_dashboard(env, tmp_path, mon
     me = owner.get("/portal/api/me").json()
     headers = {"x-csrf-token": me["csrf"]}
     proxy = "http://private-user:private-password@proxy.example:4321"
+    cookies = "# Netscape HTTP Cookie File\n.instagram.com\tTRUE\t/\tTRUE\t2147483647\tqa_fake\tsecret\n"
 
-    assert owner.get("/portal/api/settings/proxy").json() == {"configured": False, "updated_at": None}
-    assert owner.put("/portal/api/settings/proxy", headers=headers, json={"url": proxy}).json() == {"configured": True}
-    status = owner.get("/portal/api/settings/proxy").json()
-    assert status["configured"] is True and status["updated_at"] > 0
+    empty = {"configured": False, "updated_at": None}
+    assert owner.get("/portal/api/settings/platforms").json() == {
+        platform: {"proxy": empty, "cookies": empty} for platform in ("instagram", "tiktok", "youtube")
+    }
+    assert owner.put("/portal/api/settings/platforms/instagram/proxy", headers=headers,
+                     json={"value": proxy}).json() == {"configured": True}
+    assert owner.put("/portal/api/settings/platforms/instagram/cookies", headers=headers,
+                     json={"value": cookies}).json() == {"configured": True}
+    status = owner.get("/portal/api/settings/platforms").json()
+    assert status["instagram"]["proxy"]["configured"] is True
+    assert status["instagram"]["cookies"]["configured"] is True
+    assert status["tiktok"] == {"proxy": empty, "cookies": empty}
     raw = portal.read_bytes()
-    assert b"private-user" not in raw and b"private-password" not in raw and proxy.encode() not in raw
+    assert all(secret not in raw for secret in (b"private-user", b"private-password", b"qa_fake", b"secret"))
     assert ytdlp.base_options("instagram")["proxy"] == proxy
-    assert proxy not in owner.get("/portal/api/settings/proxy").text
+    assert "proxy" not in ytdlp.base_options("tiktok")
+    seen = ytdlp._run("instagram", lambda ydl: [(c.domain, c.name, c.value) for c in ydl.cookiejar], {})
+    assert seen == [(".instagram.com", "qa_fake", "secret")]
+    assert proxy not in owner.get("/portal/api/settings/platforms").text
 
     for bad in ("ftp://user:pass@host:21", "http://host:0", "http://bad host:80"):
-        response = owner.put("/portal/api/settings/proxy", headers=headers, json={"url": bad})
+        response = owner.put("/portal/api/settings/platforms/youtube/proxy", headers=headers, json={"value": bad})
         assert response.status_code == 400 and proxy not in response.text
-    assert owner.delete("/portal/api/settings/proxy", headers=headers).json() == {"cleared": True}
+    bad_cookie = owner.put("/portal/api/settings/platforms/tiktok/cookies", headers=headers,
+                           json={"value": cookies})
+    assert bad_cookie.status_code == 400 and "tiktok.com" in bad_cookie.text
+    assert owner.delete("/portal/api/settings/platforms/instagram/proxy", headers=headers).json() == {"cleared": True}
+    assert owner.delete("/portal/api/settings/platforms/instagram/cookies", headers=headers).json() == {"cleared": True}
     assert "proxy" not in ytdlp.base_options("instagram")

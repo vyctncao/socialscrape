@@ -37,9 +37,10 @@ on persistent storage. Set a long random `SOCIALSCRAPE_SETUP_TOKEN` as a deploym
 owner, then remove it; without that code, nobody can claim an empty deployment. Alternatively,
 `SOCIALSCRAPE_OWNER_EMAIL` and `SOCIALSCRAPE_OWNER_PASSWORD` can bootstrap the first owner non-interactively. Supply
 all three only as deployment secrets and remove them after the first successful startup—never commit them. Existing
-`SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility. Owners can configure a residential proxy in
-**Network settings**; its URL is encrypted in the portal database with `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY`, never
-returned after saving, and applied to new platform requests immediately.
+`SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility. Owners can configure separate proxies and authenticated-account cookie files for Instagram, TikTok and YouTube in
+**Platform settings**. Values are encrypted in the portal database with `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY`, never
+returned after saving, and applied to new requests immediately. Use only dedicated throwaway accounts; the dashboard
+accepts Netscape `cookies.txt` exports and never stores platform passwords.
 
 Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
 

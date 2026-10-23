@@ -130,54 +130,67 @@ class PortalStore:
                 "SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY must be a Fernet key when portal settings are used"
             ) from None
 
-    def proxy_status(self, owner: Principal) -> dict[str, Any]:
-        if owner.role != "owner":
-            raise PermissionError
+    def _setting(self, name: str) -> tuple[bytes, float] | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT encrypted_value, updated_at FROM portal_settings WHERE name='proxy'"
-            ).fetchone()
-        if not row:
-            return {"configured": False, "updated_at": None}
-        try:
-            self._fernet().decrypt(row["encrypted_value"])
-        except InvalidToken:
-            raise ConfigError("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY cannot decrypt the saved proxy") from None
-        return {"configured": True, "updated_at": row["updated_at"]}
-
-    def proxy(self) -> str | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT encrypted_value FROM portal_settings WHERE name='proxy'"
+                "SELECT encrypted_value, updated_at FROM portal_settings WHERE name=?", (name,)
             ).fetchone()
         if not row:
             return None
         try:
-            return self._fernet().decrypt(row["encrypted_value"]).decode()
+            return self._fernet().decrypt(row["encrypted_value"]), row["updated_at"]
         except InvalidToken:
-            raise ConfigError("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY cannot decrypt the saved proxy") from None
+            raise ConfigError(f"SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY cannot decrypt saved {name}") from None
 
-    def set_proxy(self, owner: Principal, value: str) -> None:
-        if owner.role != "owner":
-            raise PermissionError
-        proxy = validate_proxy(value, name="Proxy")
-        if not proxy:
-            raise ValueError("Enter a proxy URL")
-        encrypted = self._fernet().encrypt(proxy.encode())
+    def _set_setting(self, owner: Principal, name: str, value: str) -> None:
+        encrypted = self._fernet().encrypt(value.encode())
         with self._lock:
             self._conn.execute(
-                "INSERT OR REPLACE INTO portal_settings(name,encrypted_value,updated_at,updated_by) "
-                "VALUES('proxy',?,?,?)", (encrypted, time.time(), owner.id)
+                "INSERT OR REPLACE INTO portal_settings(name,encrypted_value,updated_at,updated_by) VALUES(?,?,?,?)",
+                (name, encrypted, time.time(), owner.id),
             )
             self._conn.commit()
 
-    def clear_proxy(self, owner: Principal) -> bool:
-        if owner.role != "owner":
-            raise PermissionError
+    def _clear_setting(self, owner: Principal, name: str) -> bool:
         with self._lock:
-            cur = self._conn.execute("DELETE FROM portal_settings WHERE name='proxy'")
+            cur = self._conn.execute("DELETE FROM portal_settings WHERE name=?", (name,))
             self._conn.commit()
         return cur.rowcount == 1
+
+    def platform_status(self, owner: Principal) -> dict[str, Any]:
+        if owner.role != "owner":
+            raise PermissionError
+        return {platform: {
+            "proxy": _status(self._setting(f"{platform}.proxy")),
+            "cookies": _status(self._setting(f"{platform}.cookies")),
+        } for platform in ("instagram", "tiktok", "youtube")}
+
+    def platform_proxy(self, platform: str) -> str | None:
+        row = self._setting(f"{platform}.proxy")
+        return row[0].decode() if row else None
+
+    def platform_cookies(self, platform: str) -> str | None:
+        row = self._setting(f"{platform}.cookies")
+        return row[0].decode() if row else None
+
+    def set_platform_proxy(self, owner: Principal, platform: str, value: str) -> None:
+        if owner.role != "owner":
+            raise PermissionError
+        proxy = validate_proxy(value, name=f"{platform.title()} proxy")
+        if not proxy:
+            raise ValueError("Enter a proxy URL")
+        self._set_setting(owner, f"{platform}.proxy", proxy)
+
+    def set_platform_cookies(self, owner: Principal, platform: str, value: str) -> None:
+        if owner.role != "owner":
+            raise PermissionError
+        _validate_cookies(platform, value)
+        self._set_setting(owner, f"{platform}.cookies", value)
+
+    def clear_platform_setting(self, owner: Principal, platform: str, kind: str) -> bool:
+        if owner.role != "owner":
+            raise PermissionError
+        return self._clear_setting(owner, f"{platform}.{kind}")
 
     def has_members(self) -> bool:
         with self._lock:
@@ -390,6 +403,32 @@ content="width=device-width,initial-scale=1"><title>{title} · SocialScrape</tit
 </aside></div></body></html>''')
 
 
+def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
+    return {"configured": bool(row), "updated_at": row[1] if row else None}
+
+
+def _check_platform_setting(platform: str, kind: str) -> None:
+    if platform not in ("instagram", "tiktok", "youtube") or kind not in ("proxy", "cookies"):
+        raise HTTPException(404, "Unknown platform setting")
+
+
+def _validate_cookies(platform: str, value: str) -> None:
+    import io
+
+    from yt_dlp.cookies import YoutubeDLCookieJar
+
+    if not value.strip() or len(value.encode()) > 2 * 1024 * 1024:
+        raise ValueError("Upload a Netscape cookies.txt file no larger than 2 MiB")
+    jar = YoutubeDLCookieJar()
+    try:
+        jar._really_load(io.StringIO(value), "dashboard cookies.txt", True, True)
+    except Exception:
+        raise ValueError("Upload a valid Netscape cookies.txt file") from None
+    suffix = {"instagram": "instagram.com", "tiktok": "tiktok.com", "youtube": "youtube.com"}[platform]
+    if not any((cookie.domain or "").lstrip(".").lower().endswith(suffix) for cookie in jar):
+        raise ValueError(f"The cookies.txt file has no {suffix} cookies")
+
+
 def _session(request: Request) -> Principal | None:
     return request.app.state.portal.principal_for_session(request.cookies.get(SESSION_COOKIE))
 
@@ -413,8 +452,10 @@ def _owner(request: Request) -> Principal:
     return principal
 
 
-def active_proxy() -> str | None:
-    return _active_store.proxy() if _active_store else None
+def active_platform_settings(platform: str) -> tuple[str | None, str | None]:
+    if not _active_store:
+        return None, None
+    return _active_store.platform_proxy(platform), _active_store.platform_cookies(platform)
 
 
 def clear_active_portal() -> None:
@@ -570,26 +611,31 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         token = store.create_invite(p, str(data.get("email", "")))
         return {"url": str(request.base_url).rstrip("/") + "/invite/" + token}
 
-    @router.get("/portal/api/settings/proxy")
-    async def proxy_status(request: Request):
-        return store.proxy_status(_owner(request))
+    @router.get("/portal/api/settings/platforms")
+    async def platform_status(request: Request):
+        return store.platform_status(_owner(request))
 
-    @router.put("/portal/api/settings/proxy")
-    async def set_proxy(request: Request):
+    @router.put("/portal/api/settings/platforms/{platform}/{kind}")
+    async def set_platform_setting(request: Request, platform: str, kind: str):
         p = _owner(request)
         _csrf(request, p)
+        _check_platform_setting(platform, kind)
         data = await request.json()
         try:
-            store.set_proxy(p, str(data.get("url", "")))
+            if kind == "proxy":
+                store.set_platform_proxy(p, platform, str(data.get("value", "")))
+            else:
+                store.set_platform_cookies(p, platform, str(data.get("value", "")))
         except (ConfigError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from None
         return {"configured": True}
 
-    @router.delete("/portal/api/settings/proxy")
-    async def clear_proxy(request: Request):
+    @router.delete("/portal/api/settings/platforms/{platform}/{kind}")
+    async def clear_platform_setting(request: Request, platform: str, kind: str):
         p = _owner(request)
         _csrf(request, p)
-        return {"cleared": store.clear_proxy(p)}
+        _check_platform_setting(platform, kind)
+        return {"cleared": store.clear_platform_setting(p, platform, kind)}
 
     @router.get("/portal/api/history")
     async def history(request: Request, limit: int = 100):
