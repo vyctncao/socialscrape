@@ -166,7 +166,7 @@ async function playground() {
   return layout('Playground', 'Explore an endpoint. Make a request. Take the code with you.', `
     <div class="playground"><section class="card playground-config"><div class="section-label">Configure request</div><form class="form-stack" id="request-form"><div class="field"><span id="platform-label">Platform</span><input type="hidden" id="pg-platform" value="${selected}"><button type="button" class="platform-trigger" id="platform-trigger" popovertarget="platform-menu" aria-haspopup="listbox" aria-expanded="false" aria-controls="platform-menu" aria-labelledby="platform-label platform-selected"><span id="platform-selected">${platformLabel(selected)}</span>${icon('caret-down')}</button><div id="platform-menu" class="platform-menu" popover="auto" role="listbox" aria-labelledby="platform-label">${groups.map(group => `<button type="button" class="platform-option" role="option" data-platform-choice="${group}" aria-selected="${selected === group}" tabindex="-1">${platformLabel(group)}${icon('check')}</button>`).join('')}</div></div><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Run as<select id="pg-key"><option value="">Workspace session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">Snippets use your integration’s API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
     <div class="request-workbench"><section class="card"><div class="card-head"><div class="request-info"><span id="request-platform" aria-hidden="true"></span><span class="method">GET</span><code id="request-path"></code></div><button class="icon-button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button></div><div class="code-tabs" role="tablist" aria-label="Code language">${[['curl','cURL'],['node','Node.js'],['python','Python']].map(([lang, label]) => `<button id="tab-${lang}" role="tab" aria-controls="snippet" aria-selected="${state.language === lang}" tabindex="${state.language === lang ? 0 : -1}" data-language="${lang}">${label}</button>`).join('')}</div><pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}" style="margin-top:16px"></pre></section>
-    <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status">Ready</span><button class="icon-button" data-copy="response" aria-label="Copy response" title="Copy response" hidden>${icon('copy')}</button></div></div><div id="response" aria-live="polite"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
+    <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status" role="status">Ready</span><button class="icon-button" data-copy="response-raw" aria-label="Copy raw JSON response" title="Copy raw JSON" hidden>${icon('copy')}</button></div></div><div id="response"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
 }
 function saveDraft() {
   if (!state.endpoint || !$('#pg-params')?.children.length) return;
@@ -236,8 +236,8 @@ async function runRequest() {
   $('#request-error').hidden = true;
   status.className = 'badge'; status.textContent = 'Running';
   responseArea.setAttribute('aria-busy', 'true');
-  const copy = $('[data-copy="response"]'); copy.hidden = true;
-  const query = params(), url = $('#pg-endpoint').value + (query.size ? '?' + query : '');
+  const copy = $('[data-copy="response-raw"]'); copy.hidden = true;
+  const query = params(), path = $('#pg-endpoint').value, url = path + (query.size ? '?' + query : '');
   const keyId = $('#pg-key').value;
   const fields = [...$('#request-form').querySelectorAll('input, select, #platform-trigger')];
   fields.forEach(field => { field.disabled = true; });
@@ -246,10 +246,7 @@ async function runRequest() {
     const response = await fetch(url, {headers:{'x-portal-key-id':keyId}});
     const text = await response.text();
     if (!responseArea.isConnected) return;
-    let content = text;
-    try { content = JSON.stringify(JSON.parse(text), null, 2); } catch {}
-    responseArea.innerHTML = '<pre class="code" tabindex="0" aria-label="API response"></pre>';
-    responseArea.firstChild.textContent = content;
+    ResponsePreview.mount(responseArea, {path, status:response.status, text});
     status.className = `badge ${response.ok ? 'good' : 'bad'}`;
     status.textContent = `${response.status} ${response.ok ? 'OK' : 'Error'} · ${number(Math.round(performance.now() - started))} ms`;
     copy.hidden = false;
@@ -323,6 +320,7 @@ async function copyElement(id) {
     if (id === 'new-secret') {
       element.focus(); element.select(); $('#copy-feedback').textContent = 'Copy is unavailable. Select and copy the text above manually.';
     } else {
+      if (element.hidden) document.querySelector(`[role=tab][aria-controls="${id}"]`)?.click();  // e.g. Raw JSON behind Preview
       const range = document.createRange(); range.selectNodeContents(element);
       window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
       toast('Select and copy the highlighted text manually.');

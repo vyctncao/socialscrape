@@ -1699,6 +1699,8 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     login = TestClient(create_app(), base_url="https://testserver").get("/login").text
     assert f'/assets/appearance.js?v={script_url[2]}' in login
     assert f'/assets/portal.css?v={script_url[2]}' in dashboard and "__ASSET_VERSION__" not in dashboard
+    assert f'<script src="/assets/preview.js?v={script_url[2]}">' in dashboard  # the playground's response preview
+    assert "const ResponsePreview" in owner.get(f"/assets/preview.js?v={script_url[2]}").text
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 

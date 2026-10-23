@@ -19,7 +19,8 @@ agent character. Source assets remain unchanged. No external font or icon servic
 is required at runtime.
 
 The shell and all page renderers remain in `portal.html`, `portal.css`, and
-`portal.js`; authentication and invitation markup remains in `portal.py`. The
+`portal.js`, except the playground's response preview, which lives in
+`preview.js`; authentication and invitation markup remains in `portal.py`. The
 FastAPI static mount and Python wheel include the entire asset directory, so the
 Docker deployment requires no Node build step. `appearance.js` initializes the
 saved theme before rendering and is shared with authentication screens.
@@ -35,6 +36,16 @@ schema. Optional parameters are disclosed separately; drafts and the selected
 language survive in-app navigation. A workspace session can run requests without
 an API key, while exported snippets use an integration credential placeholder.
 Responses, usage totals, and request history come from the existing server APIs.
+A JSON response opens on a Preview tab that maps each endpoint onto shared views:
+a profile (picture, bio, links, every count, details, recent posts), a media card
+(engagement tiles, audio, tagged accounts, carousel slides, comments, chapters), item
+lists, comments and transcripts. Endpoints without a mapping get a summary of their
+top-level fields, and every response ends with a collapsed "All fields" list of each
+scalar value, so nothing is reachable only through the raw JSON.
+Stats a platform normally reports but this response omits read "Not returned", and
+rounded counts read "Approximate", so the preview never invents a number. The Raw
+JSON tab re-indents the response text without parsing numbers, so IDs beyond 2^53
+keep every digit, and the copy button always copies it.
 Proxy settings retain owner permissions and the server’s encrypted storage contract.
 
 The sidebar can collapse to an icon rail. Its state is initialized on the document

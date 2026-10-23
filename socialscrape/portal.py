@@ -470,7 +470,7 @@ class PortalStore:
 def _portal_asset_version() -> str:
     assets = Path(__file__).with_name("static")
     digest = hashlib.sha256()
-    for name in ("portal.html", "portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
+    for name in ("portal.html", "portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
                  "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg"):
         digest.update(name.encode())
         digest.update((assets / name).read_bytes())
@@ -480,7 +480,7 @@ def _portal_asset_version() -> str:
 def _versioned_page(page: str) -> str:
     version = _portal_asset_version()
     page = page.replace("__ASSET_VERSION__", version)
-    for name in ("portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg"):
+    for name in ("portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg"):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
