@@ -1861,6 +1861,10 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
                         headers=headers).json() == {"removed": True}
     status = owner.get("/portal/api/settings/platforms").json()["instagram"]
     assert status["proxy"][0]["position"] == status["cookies"][0]["position"] == 1
+    script = owner.get("/assets/portal.js").text
+    assert "provider-summary-grid" in script and "openPlatformManager" in script
+    assert "Manage proxies" in script and "Manage accounts" in script
+    assert "Add Backup 5 proxy" not in script
 
     monkeypatch.setattr("socialscrape.portal._test_proxy", lambda platform, proxy: {
         "ok": True, "status": 200, "blocked": False, "exit_ip": "203.0.113.9", "latency_ms": 321,
