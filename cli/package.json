@@ -1,0 +1,16 @@
+{
+  "name": "@socialscrape/cli",
+  "version": "1.0.0",
+  "description": "CLI for the SocialScrape API — ScrapeCreators-compatible YouTube, TikTok, and Instagram endpoints from the terminal",
+  "type": "module",
+  "bin": { "socialscrape": "bin/socialscrape.js" },
+  "scripts": { "start": "node bin/socialscrape.js", "test": "node --test" },
+  "dependencies": { "@clack/prompts": "0.10.1", "chalk": "5.6.2", "cli-table3": "0.6.5", "commander": "13.1.0", "conf": "13.1.0", "ora": "8.2.0" },
+  "engines": { "node": ">=20.3" },
+  "files": ["bin/", "src/", "api-config/", "README.md", "LICENSE", "THIRD_PARTY_NOTICES"],
+  "keywords": ["scraping", "social-media", "tiktok", "instagram", "youtube", "cli"],
+  "repository": { "type": "git", "url": "git+https://github.com/vyctncao/socialscrape.git", "directory": "cli" },
+  "homepage": "https://scrape.mimic.host/",
+  "publishConfig": { "access": "public" },
+  "license": "MIT"
+}

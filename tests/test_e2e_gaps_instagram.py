@@ -39,6 +39,7 @@ POSTS = "/v2/instagram/user/posts"
 REELS = "/v1/instagram/user/reels"
 HIGHLIGHTS = "/v1/instagram/user/highlights"
 DETAIL = "/v1/instagram/user/highlight/detail"
+SEARCH = "/v1/instagram/search"
 POPULAR = "/v1/instagram/search/popular"
 HASHTAG = "/v1/instagram/search/hashtag"
 REELS_SEARCH = "/v2/instagram/reels/search"
@@ -54,16 +55,16 @@ IMPLEMENTED = [
     (REELS, {"handle": JANE}),
     (HIGHLIGHTS, {"handle": JANE}),
     (DETAIL, {"id": HIGHLIGHT}),
+    (SEARCH, {"query": "nasa"}),
     (POPULAR, {"query": "cats"}),
     (HASHTAG, {"hashtag": "cats"}),
     (REELS_SEARCH, {"query": "cats"}),
     (TRANSCRIPT, {"url": REEL}),
 ]
-NOT_TRANSCRIPT = [e for e in IMPLEMENTED if e[0] != TRANSCRIPT]
+NOT_TRANSCRIPT = [e for e in IMPLEMENTED if e[0] not in (TRANSCRIPT, SEARCH)]
 UNSUPPORTED = [
     "/v1/instagram/basic-profile",
     "/v1/instagram/user/tagged-posts",
-    "/v1/instagram/search",
     "/v1/instagram/search/profiles",
     "/v1/instagram/audio/reels",
     "/v1/instagram/reels/trending",
@@ -240,7 +241,7 @@ def test_unsupported_route_envelope(client, path):
     assert p.status_code == 405 and p.headers["allow"] == "GET" and p.json()["error"] == "method_not_allowed"
 
 
-def test_coverage_lists_twelve_implemented_and_eight_unsupported(client):
+def test_coverage_lists_thirteen_implemented_and_seven_unsupported(client):
     entries = client.get("/meta/coverage").json()
     entries = entries.get("endpoints", entries) if isinstance(entries, dict) else entries
     mine = {e["path"]: e["status"] for e in entries if e["platform"] == "instagram"}

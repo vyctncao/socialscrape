@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import hashlib
 import hmac
 import html
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -38,6 +40,10 @@ BRAND_ASSETS = ("brand/favicon.svg", "brand/favicon.ico", "brand/favicon.png",
                 "brand/logomark.svg", "brand/logomark-chalk.svg", "brand/logomark.png", "brand/logomark-chalk.png",
                 "brand/logo.svg", "brand/logo-white.svg", "brand/logo.png", "brand/logo-white.png")
 _active_store: Any = None
+
+
+def dt_iso(timestamp: float) -> str:
+    return dt.datetime.fromtimestamp(timestamp, dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -121,7 +127,38 @@ class PortalStore:
                 fallback INTEGER NOT NULL DEFAULT 0,
                 response_pruned INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS oauth_clients (
+                client_id TEXT PRIMARY KEY,
+                client_name TEXT NOT NULL,
+                redirect_uris TEXT NOT NULL,
+                grant_types TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS oauth_codes (
+                code_hash TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+                member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+                redirect_uri TEXT NOT NULL,
+                code_challenge TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                resource TEXT NOT NULL,
+                expires_at REAL NOT NULL,
+                used_at REAL
+            );
+            CREATE TABLE IF NOT EXISTS oauth_tokens (
+                token_hash TEXT PRIMARY KEY,
+                token_type TEXT NOT NULL CHECK(token_type IN ('access', 'refresh')),
+                family_id TEXT NOT NULL,
+                client_id TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+                member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+                scope TEXT NOT NULL,
+                resource TEXT NOT NULL,
+                expires_at REAL NOT NULL,
+                used_at REAL,
+                revoked_at REAL
+            );
             CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON members(role) WHERE role='owner';
+            CREATE INDEX IF NOT EXISTS oauth_tokens_family ON oauth_tokens(family_id);
             CREATE INDEX IF NOT EXISTS requests_created_at ON requests(created_at DESC);
             CREATE INDEX IF NOT EXISTS requests_member_id ON requests(member_id, created_at DESC);
         """)
@@ -351,6 +388,98 @@ class PortalStore:
             ).fetchone()
         return (Principal(row["id"], row["email"], row["role"]), row["key_id"]) if row else None
 
+    def oauth_register_client(self, client_name: str, redirect_uris: list[str], grant_types: list[str]) -> str:
+        client_id = secrets.token_urlsafe(24)
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO oauth_clients(client_id,client_name,redirect_uris,grant_types,created_at) VALUES(?,?,?,?,?)",
+                (client_id, client_name, json.dumps(redirect_uris), json.dumps(grant_types), time.time()),
+            )
+            self._conn.commit()
+        return client_id
+
+    def oauth_client(self, client_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM oauth_clients WHERE client_id=?", (client_id,)).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result["redirect_uris"] = json.loads(result["redirect_uris"])
+        result["grant_types"] = json.loads(result["grant_types"])
+        return result
+
+    def oauth_create_code(self, member_id: int, fields: dict[str, str]) -> str:
+        token = secrets.token_urlsafe(32)
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO oauth_codes(code_hash,client_id,member_id,redirect_uri,code_challenge,scope,resource,"
+                "expires_at) VALUES(?,?,?,?,?,?,?,?)",
+                (self._token_hash(token), fields["client_id"], member_id, fields["redirect_uri"],
+                 fields["code_challenge"], fields["scope"], fields["resource"], time.time() + 600),
+            )
+            self._conn.commit()
+        return token
+
+    def _oauth_tokens(self, member_id: int, client_id: str, scope: str, resource: str,
+                      family_id: str | None = None) -> tuple[str, str]:
+        now = time.time()
+        family_id = family_id or secrets.token_urlsafe(24)
+        access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(40)
+        self._conn.executemany(
+            "INSERT INTO oauth_tokens(token_hash,token_type,family_id,client_id,member_id,scope,resource,expires_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            [(self._token_hash(access), "access", family_id, client_id, member_id, scope, resource, now + 3600),
+             (self._token_hash(refresh), "refresh", family_id, client_id, member_id, scope, resource, now + 2592000)],
+        )
+        return access, refresh
+
+    def oauth_exchange_code(self, code: str, client_id: str, redirect_uri: str, verifier: str,
+                            resource: str) -> tuple[str, str] | None:
+        from .oauth import PKCE_VERIFIER, _challenge
+        if not PKCE_VERIFIER.fullmatch(verifier):
+            return None
+        now = time.time()
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM oauth_codes WHERE code_hash=?", (self._token_hash(code),)).fetchone()
+            if (not row or row["used_at"] is not None or row["expires_at"] <= now or row["client_id"] != client_id
+                    or row["redirect_uri"] != redirect_uri or row["resource"] != resource
+                    or not verifier or not hmac.compare_digest(row["code_challenge"], _challenge(verifier))):
+                return None
+            self._conn.execute("UPDATE oauth_codes SET used_at=? WHERE code_hash=? AND used_at IS NULL",
+                               (now, self._token_hash(code)))
+            result = self._oauth_tokens(row["member_id"], client_id, row["scope"], resource)
+            self._conn.commit()
+            return result
+
+    def oauth_refresh(self, token: str, client_id: str, resource: str) -> tuple[str, str] | None:
+        now = time.time()
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM oauth_tokens WHERE token_hash=? AND token_type='refresh'",
+                                     (self._token_hash(token),)).fetchone()
+            if not row or row["client_id"] != client_id or row["resource"] != resource:
+                return None
+            if row["used_at"] is not None:
+                self._conn.execute("UPDATE oauth_tokens SET revoked_at=? WHERE family_id=?", (now, row["family_id"]))
+                self._conn.commit()
+                return None
+            if row["expires_at"] <= now or row["revoked_at"] is not None:
+                return None
+            self._conn.execute("UPDATE oauth_tokens SET used_at=? WHERE token_hash=?", (now, self._token_hash(token)))
+            result = self._oauth_tokens(row["member_id"], client_id, row["scope"], resource, row["family_id"])
+            self._conn.commit()
+            return result
+
+    def authenticate_bearer(self, token: str, resource: str) -> Principal | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT m.id,m.email,m.role FROM oauth_tokens t JOIN members m ON m.id=t.member_id "
+                "WHERE t.token_hash=? AND t.token_type='access' AND t.resource=? AND t.scope='mcp:tools' "
+                "AND t.expires_at>? AND t.revoked_at IS NULL AND NOT EXISTS "
+                "(SELECT 1 FROM oauth_tokens r WHERE r.family_id=t.family_id AND r.revoked_at IS NOT NULL)",
+                (self._token_hash(token), resource, time.time()),
+            ).fetchone()
+        return Principal(**dict(row)) if row else None
+
     def key_available_to(self, principal: Principal, key_id: int) -> bool:
         where, args = (("id=?", (key_id,)) if principal.role == "owner"
                        else ("id=? AND member_id=?", (key_id, principal.id)))
@@ -506,6 +635,55 @@ class PortalStore:
         detail["response"] = (detail.pop("response_body") or b"").decode("utf-8", "replace")
         return detail
 
+    def api_usage(self, principal: Principal, *, endpoint: str | None = None, status: int | None = None,
+                  page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
+        clauses, args = [], []
+        if principal.role != "owner":
+            clauses.append("member_id=?")
+            args.append(principal.id)
+        if endpoint:
+            clauses.append("path LIKE ?")
+            args.append(f"%{endpoint}%")
+        if status is not None:
+            clauses.append("status=?")
+            args.append(status)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT id,path,query,status,duration_ms,created_at,method,cached,fallback FROM requests {where} "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?", (*args, page_size, (page - 1) * page_size)
+            ).fetchall()
+        return [{"id": str(row["id"]), "endpoint": row["path"] + ("?" + row["query"] if row["query"] else ""),
+                 "status_code": row["status"], "duration_ms": row["duration_ms"],
+                 "success": 200 <= row["status"] < 400,
+                 "request_time": dt_iso(row["created_at"]), "http_method": row["method"],
+                 "created_at": dt_iso(row["created_at"]), "credits": 0,
+                 "cached": bool(row["cached"]), "fallback": bool(row["fallback"])} for row in rows]
+
+    def daily_usage(self, principal: Principal) -> list[dict[str, str]]:
+        clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
+        now = time.time()
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT date(created_at,'unixepoch') day,COUNT(*) count FROM requests "
+                f"WHERE created_at>=? {clause} GROUP BY day", (now - 30 * 86400, *args)
+            ).fetchall()
+        counts = {row["day"]: row["count"] for row in rows}
+        today = dt.datetime.fromtimestamp(now, dt.timezone.utc).date()
+        return [{"usage_date": f"{day.isoformat()}T00:00:00.000Z", "total_credits": "0",
+                 "request_count": str(counts.get(day.isoformat(), 0))}
+                for day in (today - dt.timedelta(days=i) for i in range(30))]
+
+    def most_used_routes(self, principal: Principal, start: float, end: float) -> list[dict[str, str]]:
+        clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT path,COUNT(*) count FROM requests WHERE created_at>=? AND created_at<=? {clause} "
+                "GROUP BY path ORDER BY count DESC,path LIMIT 20", (start, end, *args)
+            ).fetchall()
+        return [{"base_endpoint": row["path"], "call_count": str(row["count"]), "total_credits": "0"}
+                for row in rows]
+
     def usage(self, principal: Principal) -> dict[str, Any]:
         clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
         now = time.time()
@@ -597,7 +775,8 @@ content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</ti
 </div><aside class="auth-art" aria-label="Social Scrape artwork">
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
-</aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''))
+</aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''),
+                        headers={"Content-Security-Policy": "frame-ancestors 'none'", "X-Frame-Options": "DENY"})
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
@@ -698,9 +877,11 @@ def install_portal(app, store: PortalStore) -> None:
         return RedirectResponse("/app" if _session(request) else "/login", 303)
 
     @router.get("/login")
-    async def login_page(request: Request, error: str = ""):
+    async def login_page(request: Request, error: str = "", next: str = ""):
+        from .oauth import safe_next
+        target = safe_next(next)
         if _session(request):
-            return RedirectResponse("/app", 303)
+            return RedirectResponse(target, 303)
         setup = not store.has_members()
         setup_enabled = bool(os.environ.get("SOCIALSCRAPE_SETUP_TOKEN"))
         heading = "Create the owner account" if setup else "Sign in"
@@ -712,7 +893,7 @@ def install_portal(app, store: PortalStore) -> None:
 </label>''' if setup_enabled and setup else "")
         return _page(heading if setup else "Sign in", f'''<div class="eyebrow">Your workspace awaits</div>
 <h1>{heading}</h1><p>{copy}</p>{f'<div class="form-error" role="alert">{html.escape(error)}</div>' if error else ''}
-<form method="post" action="{action}">{setup_field}
+<form method="post" action="{action}"><input type="hidden" name="next" value="{html.escape(target)}">{setup_field}
 <label>Email<input name="email" type="email" autocomplete="email" required></label>
 <label>Password<input name="password" type="password"
 autocomplete="{'new-password' if setup else 'current-password'}" required
@@ -733,19 +914,21 @@ autocomplete="{'new-password' if setup else 'current-password'}" required
             return RedirectResponse(f"/login?error={str(exc)}", 303)
         return await _login_response(email, password, request.url.scheme == "https")
 
-    async def _login_response(email: str, password: str, secure: bool = False):
+    async def _login_response(email: str, password: str, secure: bool = False, next: str = ""):
+        from .oauth import safe_next
         result = store.login(email, password)
         if not result:
-            return RedirectResponse("/login?error=Email+or+password+is+incorrect", 303)
+            query = urlencode({"error": "Email or password is incorrect", "next": safe_next(next)})
+            return RedirectResponse("/login?" + query, 303)
         token, _ = result
-        response = RedirectResponse("/app", 303)
+        response = RedirectResponse(safe_next(next), 303)
         response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS, httponly=True, secure=secure,
                             samesite="strict", path="/")
         return response
 
     @router.post("/login")
-    async def login(request: Request, email: str = Form(...), password: str = Form(...)):
-        return await _login_response(email, password, request.url.scheme == "https")
+    async def login(request: Request, email: str = Form(...), password: str = Form(...), next: str = Form("")):
+        return await _login_response(email, password, request.url.scheme == "https", next)
 
     @router.post("/logout")
     async def logout(request: Request):

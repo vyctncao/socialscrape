@@ -1,0 +1,2 @@
+import { resolveApiKey } from "../auth.js"; import { callApi } from "../api-client.js"; import { printResult } from "../output.js";
+export async function balanceCommand(opts){const key=resolveApiKey(opts);if(!key){console.error("No API key found.\nRun 'socialscrape auth login' or set SOCIALSCRAPE_API_KEY");process.exitCode=1;return}try{printResult(await callApi(key,"GET","/v1/account/credit-balance"),opts)}catch(e){console.error("Request failed.");if(opts.verbose)console.error(e.message);process.exitCode=1}}

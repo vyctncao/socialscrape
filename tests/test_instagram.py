@@ -1495,3 +1495,19 @@ def test_live_not_found_is_404(client, path, params):
     status, body = live_get(client, path, **params)
     assert status == 404, body
     assert body["success"] is False and body["error"] == "not_found"
+
+
+def test_general_search_composes_profile_results(client, monkeypatch):
+    from socialscrape import fallback
+
+    async def ask_path(app, path, params):
+        assert (path, params) == ("/v1/instagram/search/profiles", {"query": "nasa"})
+        return 200, {"success": True, "profiles": [
+            {"id": "528817151", "username": "nasa", "full_name": "NASA", "is_verified": True,
+             "profile_pic_url": "https://img/nasa"},
+        ]}, None
+    monkeypatch.setattr(fallback, "ask_path", ask_path)
+    body = client.get("/v1/instagram/search", params={"query": "nasa"}).json()
+    assert body["data"]["users"] == [{"full_name": "NASA", "id": "528817151", "is_verified": True,
+                                       "position": 0, "profile_pic_url": "https://img/nasa", "username": "nasa"}]
+    assert body["data"]["hashtags"] == body["data"]["places"] == []

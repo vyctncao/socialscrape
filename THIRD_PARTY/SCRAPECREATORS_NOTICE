@@ -1,0 +1,6 @@
+Portions of the MCP tool titles, descriptions, and JSON Schemas in
+socialscrape/data/mcp_tools.json are adapted from the ScrapeCreators CLI.
+
+Copyright (c) ScrapeCreators
+Licensed under the MIT License. The upstream license is available at:
+https://github.com/ScrapeCreators/scrape-creators-cli/blob/main/LICENSE

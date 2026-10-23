@@ -190,6 +190,31 @@ The other 8 return 501: basic-profile by id, tagged posts, top search, profile s
 - **Timeouts.** A request that hits `SOCIALSCRAPE_REQUEST_TIMEOUT` answers `500 timeout`, but yt-dlp can't be interrupted: its call keeps a worker thread until it ends. Stopping the server (Ctrl-C included) doesn't wait for those calls: it gives them a second at most. With few `SOCIALSCRAPE_MAX_WORKERS`, calls queued behind a timed-out one share its wait and can time out too; they are dropped, not run late. This mainly happens when `SOCIALSCRAPE_REQUEST_TIMEOUT` <= `SOCIALSCRAPE_SOCKET_TIMEOUT`.
 - **AI transcription.** Runs locally (Whisper) and, like ScrapeCreators, refuses media over 120 s unless `allow_long_transcription=true` (that literal value only). A `language` the configured model can't transcribe is a 400 (`*.en` models are English-only). Music, silence and noise usually give null text, but that is best effort: Whisper (mlx-whisper above all) can still invent a short line there, or over the music or silence of a video that has speech. Transcriptions run one at a time, in a thread of their own.
 
+## MCP server
+
+SocialScrape exposes its 66 YouTube, TikTok, and Instagram compatibility routes plus four account tools at `POST /mcp`. It implements stateless MCP Streamable HTTP for protocol versions `2025-06-18` and `2025-03-26`; no session ID is required. Configure a client with the same API key used for REST:
+
+```json
+{
+  "mcpServers": {
+    "socialscrape": {
+      "url": "https://scrape.mimic.host/mcp",
+      "headers": {"x-api-key": "YOUR_API_KEY"}
+    }
+  }
+}
+```
+
+Every tool is read-only. Tool calls run through the application in-process, so REST authentication, request history, caching, and configured fallback behavior also apply to MCP. Set `SOCIALSCRAPE_PUBLIC_URL` in production so authentication challenges point at the canonical public origin.
+
+MCP clients can alternatively discover OAuth 2.1 from the protected-resource metadata advertised by `/mcp`. SocialScrape supports public-client dynamic registration, authorization code grants with PKCE S256, member consent, one-hour bearer tokens, and rotating refresh tokens. The portal must be enabled because approval and token attribution use portal members. Cursor, Claude, Claude Code, and VS Code can therefore use a URL-only configuration:
+
+```json
+{"mcpServers":{"socialscrape":{"url":"https://scrape.mimic.host/mcp"}}}
+```
+
+OAuth discovery lives at `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server`; registration, authorization, and token endpoints are under `/oauth`. Bearer-authenticated REST requests act as the approving member as well as authenticating `/mcp`; removing that member revokes their grants through the portal database's foreign-key cascade.
+
 ## Development
 
 ```bash

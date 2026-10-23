@@ -1597,6 +1597,18 @@ def test_not_found_is_404(client, path, params):
     assert r.json()["error"] == "not_found"
 
 
+def test_user_search_maps_an_exact_profile(client, monkeypatch):
+    async def with_ydl(platform, fn, **opts):
+        return {"user": {"id": "1", "secUid": "sec", "uniqueId": "nasa", "nickname": "NASA",
+                         "avatarMedium": {"uri": "avatar", "urlList": ["https://img"]}},
+                "stats": {"followerCount": 10, "followingCount": 2}}
+    monkeypatch.setattr(tiktok, "with_ydl", with_ydl)
+    body = client.get("/v1/tiktok/search/users", params={"query": "nasa"}).json()
+    assert body["users"] == [{"avatar_medium": {"uri": "avatar", "url_list": ["https://img"]},
+                               "follower_count": 10, "following_count": 2, "nickname": "NASA",
+                               "sec_uid": "sec", "uid": "1", "unique_id": "nasa"}]
+
+
 def test_popular_creators_ranks_a_regional_recommended_feed(client, monkeypatch):
     from socialscrape import fallback
     from socialscrape.platforms import tiktok

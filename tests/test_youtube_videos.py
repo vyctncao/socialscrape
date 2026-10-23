@@ -984,7 +984,7 @@ def test_bad_input_is_400(client, path, params):
     assert r.json()["success"] is False
 
 
-@pytest.mark.parametrize("path", ["/v1/youtube/shorts/trending", "/v1/youtube/search/typeahead"])
+@pytest.mark.parametrize("path", ["/v1/youtube/shorts/trending"])
 def test_unsupported_paths_explain_why(client, path):
     r = client.get(path)
     assert r.status_code == 501 and r.json()["error"] == "not_supported"
@@ -996,7 +996,7 @@ def test_my_paths_are_routed(client):
     paths = client.app.openapi()["paths"]
     for path in ("/v1/youtube/video", "/v1/youtube/video/transcript", "/v1/youtube/video/comments",
                  "/v1/youtube/video/comment/replies", "/v1/youtube/video/sponsors", "/v1/youtube/community-post",
-                 *M.UNSUPPORTED):
+                 "/v1/youtube/search/typeahead", *M.UNSUPPORTED):
         assert path in paths, path
 
 
@@ -1916,3 +1916,16 @@ def test_live_missing_is_404(client, path, params):
     r = client.get(path, params=params)
     assert r.status_code == 404, r.text
     assert r.json()["error"] == "not_found"
+
+
+def test_typeahead_maps_public_suggestions(client, monkeypatch):
+    from socialscrape.platforms import youtube_videos
+
+    async def with_ydl(platform, fn, **opts):
+        return ["mrbeast", ["mrbeast", "mrbeast gaming"]]
+    monkeypatch.setattr(youtube_videos, "with_ydl", with_ydl)
+    body = client.get("/v1/youtube/search/typeahead", params={"query": "mrbeast"}).json()
+    assert body["data"] == {"query": "mrbeast", "suggestions": [
+        {"channel": None, "text": "mrbeast", "type": "query"},
+        {"channel": None, "text": "mrbeast gaming", "type": "query"},
+    ]}
