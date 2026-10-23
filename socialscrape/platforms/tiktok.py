@@ -681,6 +681,25 @@ async def tiktok_collection_videos(url: str = Query(...), cursor: str | None = N
     })
 
 
+@sc_get(router, "/v1/tiktok/search/users", source="yt-dlp TikTokUserIE exact profile lookup",
+        notes="Exact-handle search fallback: returns the matching public profile rather than TikTok's ranked search.")
+async def search_users(query: str = Query(..., min_length=1), cursor: str | None = None,
+                       trim: str | None = None) -> dict[str, Any]:
+    if cursor not in (None, ""):
+        raise BadRequest("cursor is not supported for exact profile search", code="bad_cursor")
+    handle = _handle(query)
+    info = await with_ydl(P, lambda ydl: _user_page(ydl, handle))
+    user, stats = M.obj(info.get("user")), M.obj(info.get("stats"))
+    avatar = M.obj(user.get("avatarMedium") or user.get("avatarThumb"))
+    mapped = compact({
+        "avatar_medium": compact({"uri": avatar.get("uri"), "url_list": avatar.get("urlList")}),
+        "follower_count": M.to_int(stats.get("followerCount")),
+        "following_count": M.to_int(stats.get("followingCount")), "nickname": user.get("nickname"),
+        "sec_uid": user.get("secUid"), "uid": str(user.get("id") or ""), "unique_id": user.get("uniqueId"),
+    })
+    return {"cursor": 0, "users": [mapped] if mapped.get("uid") else []}
+
+
 @sc_get(router, "/v1/tiktok/creators/popular",
         source="regional anonymous recommended feed, with TikTok profile hydration",
         notes="When TikTok Creative Center is down, ranks creators surfaced in the selected market's public "
@@ -774,7 +793,6 @@ UNSUPPORTED = {
     "/v1/tiktok/user/audience": "Audience demographics are creator-analytics data; " + _NO_EXTRACTOR + " it.",
     "/v1/tiktok/user/following": "Following lists come from /api/user/list/; " + _NO_EXTRACTOR + " it.",
     "/v1/tiktok/user/followers": "Follower lists come from /api/user/list/; " + _NO_EXTRACTOR + " it.",
-    "/v1/tiktok/search/users": "yt-dlp has no TikTok search extractor (/api/search/user/ is never called).",
     "/v1/tiktok/search/suggestions": "yt-dlp has no TikTok search extractor (search suggestions are never "
                                      "fetched).",
     "/v1/tiktok/search/hashtag": "yt-dlp has no TikTok search; TikTokTagIE (marked broken) lists a tag's feed via "

@@ -55,6 +55,7 @@ ROUTE_PARAMS = {
     "/v1/tiktok/song/videos": {"clipId", "cursor"},
     "/v1/tiktok/collection/videos": {"url", "cursor"},
     "/v1/tiktok/creators/popular": {"page", "sortBy", "followerCount", "creatorCountry", "audienceCountry"},
+    "/v1/tiktok/search/users": {"query", "cursor", "trim"},
 }
 
 _SPACING = 1.0  # seconds between calls that reached TikTok
@@ -98,7 +99,7 @@ def _tiktok_rows(c) -> dict[str, str]:
 def test_tiktok_501_routes_answer_501_405_and_expose_no_params(client):
     rows = _tiktok_rows(client)
     unsupported = sorted(p for p, s in rows.items() if s == "not_supported")
-    assert len(unsupported) >= 18, unsupported
+    assert len(unsupported) >= 17, unsupported
     spec = client.get("/openapi.json").json()["paths"]
     for path in unsupported:
         check_err(client.get(path, params={"handle": STOOL, "url": SCOUT_VIDEO}), 501, "not_supported")
@@ -167,7 +168,9 @@ def test_auth_keys_with_cache_on(tmp_path):
 @pytest.mark.parametrize("header", ["qa-key-1 ", " qa-key-1", "qa-key-1\t"])
 def test_api_key_header_surrounding_whitespace_is_ignored(header):
     with app_with({"SOCIALSCRAPE_API_KEYS": "qa-key-1, qa-key-2"}, raise_errors=False) as c:
-        check_err(c.get("/v1/tiktok/search/users", headers={"x-api-key": header}), 501, "not_supported")
+        response = c.get("/v1/tiktok/search/users", params={"query": "not_a_real_user_12345"},
+                         headers={"x-api-key": header})
+        assert response.status_code != 401
 
 
 # --- captions and the cache key ---------------------------------------------------------------
@@ -273,7 +276,7 @@ def test_unusable_cookie_file_is_cookies_error(tmp_path, kind):
                               ("/v1/tiktok/video/transcript", {"url": SCOUT_VIDEO})):
             body = check_err(c.get(path_, params=params), 500, "cookies_error")
             assert str(tmp_path) not in body["message"]
-        check_err(c.get("/v1/tiktok/search/users"), 501, "not_supported")
+        check_err(c.get("/v1/tiktok/search/users", params={"query": STOOL}), 500, "cookies_error")
         check_err(c.get("/v1/tiktok/song", params={"clipId": "abc"}), 400, "bad_request")
 
 

@@ -7,16 +7,18 @@ the `next` API YoutubeIE uses for comments, and YoutubeTabIE's page loader.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import tempfile
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import yt_dlp
 from fastapi import APIRouter, Query
 from yt_dlp.extractor.youtube import YoutubeIE
+from yt_dlp.networking import Request
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import DownloadError, ExtractorError, get_first, traverse_obj
 
@@ -33,9 +35,6 @@ UNSUPPORTED = {
     "/v1/youtube/shorts/trending": (
         "YouTube removed its Trending page (yt-dlp's YoutubeTabIE now gets redirected to the home page for "
         "/feed/trending), and no yt-dlp extractor calls the Shorts feed/reel API that serves trending Shorts."),
-    "/v1/youtube/search/typeahead": (
-        "Search suggestions come from YouTube's suggest API (suggestqueries.google.com), which no yt-dlp "
-        "extractor calls."),
 }
 
 _LANG = re.compile(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*")
@@ -312,6 +311,21 @@ async def run(fn: Callable[[yt_dlp.YoutubeDL], dict[str, Any]], **opts: Any) -> 
 
 
 # --- routes ---------------------------------------------------------------------
+
+
+@sc_get(router, "/v1/youtube/search/typeahead", source="public YouTube suggestion service",
+        notes="Text suggestions come from suggestqueries.google.com; channel metadata is absent in its JSON format.")
+async def search_typeahead(query: str = Query(..., min_length=1)) -> dict[str, Any]:
+    def fetch(ydl: yt_dlp.YoutubeDL) -> list[Any]:
+        url = "https://suggestqueries.google.com/complete/search?" + urlencode({"client": "firefox", "ds": "yt",
+                                                                                "q": query})
+        with ydl.urlopen(Request(url)) as response:
+            return json.loads(response.read().decode("utf-8"))
+    answer = await with_ydl("youtube", fetch)
+    suggestions = answer[1] if isinstance(answer, list) and len(answer) > 1 and isinstance(answer[1], list) else []
+    return {"data": {"query": query, "suggestions": [
+        {"channel": None, "text": text, "type": "query"} for text in suggestions if isinstance(text, str)
+    ]}}
 
 
 @sc_get(router, "/v1/youtube/video", source="yt-dlp YoutubeIE (info dict + its watch-page ytInitialData/player responses)",

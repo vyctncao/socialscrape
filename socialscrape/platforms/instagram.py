@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 import yt_dlp
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from yt_dlp.extractor.instagram import InstagramBaseIE, InstagramIE, InstagramStoryIE, _id_to_pk
 from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
@@ -1223,6 +1223,24 @@ async def instagram_reels_search(query: str = Query(...), date_posted: str | Non
     return {"reels": [map_hashtag_post(n) for n in topic_nodes(data) if _is_video_node(n)]}
 
 
+@sc_get(router, "/v1/instagram/search", source="profile search compatibility source composed locally",
+        notes="Composes the working profile-search source into Instagram's mixed-search envelope; hashtags and places "
+              "remain empty when the source has none.")
+async def search_instagram(request: Request, query: str = Query(..., min_length=1)) -> dict[str, Any]:
+    from .. import fallback
+
+    status, answer, problem = await fallback.ask_path(request.app, "/v1/instagram/search/profiles", {"query": query})
+    if problem or status != 200 or not isinstance(answer, dict):
+        raise UpstreamError("Instagram profile search is unavailable")
+    users = [compact({
+        "full_name": profile.get("full_name"), "id": str_or_none(profile.get("id")),
+        "is_verified": profile.get("is_verified"), "position": index,
+        "profile_pic_url": profile.get("profile_pic_url"), "username": profile.get("username"),
+    }) for index, profile in enumerate(traverse_obj(answer, ("profiles", ..., {dict})))]
+    return {"data": {"hashtags": [], "keywords": [], "places": [], "query": query,
+                     "rank_token": None, "users": users}}
+
+
 UNSUPPORTED = {
     "/v1/instagram/basic-profile": (
         "Looks a profile up by numeric user id; no yt-dlp Instagram extractor resolves a user id (InstagramUserIE "
@@ -1230,8 +1248,6 @@ UNSUPPORTED = {
     "/v1/instagram/user/tagged-posts": (
         "The tagged tab is a separate logged-in query; no yt-dlp extractor fetches it and the logged-out profile "
         "page only embeds the posts tab."),
-    "/v1/instagram/search": (
-        "Instagram's top search (users/hashtags/places) API is not used by any yt-dlp extractor."),
     "/v1/instagram/search/profiles": (
         "Profile search needs Instagram's top search API, which no yt-dlp extractor calls."),
     "/v1/instagram/audio/reels": (
