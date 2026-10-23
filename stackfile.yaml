@@ -14,9 +14,6 @@ resources:
       SOCIALSCRAPE_CACHE_PATH: /data/cache.sqlite3
       SOCIALSCRAPE_PORTAL_PATH: /data/portal.sqlite3
       SOCIALSCRAPE_LOG_LEVEL: INFO
-    secrets:
-      socialscrape-app-bootstrap:
-        SOCIALSCRAPE_SETUP_TOKEN: setup_token
     volumes:
       - name: data
         path: /data
