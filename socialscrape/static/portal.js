@@ -157,7 +157,7 @@ async function requestHistory() {
   const data = await api('/portal/api/history?limit=200');
   return layout('Request history', 'Inspect API activity, response status, and timing.', `
     <div class="table-caption"><span>Latest ${number(data.requests.length)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
-    ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr class="history-row" tabindex="0" data-history-id="${request.id}" aria-label="Open response from ${esc(fmt(request.created_at))}"><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span></td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
+    ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr class="history-row" tabindex="0" data-history-id="${request.id}" aria-label="Open response from ${esc(fmt(request.created_at))}"><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span>${request.fallback ? ' <span class="badge">via ScrapeCreators</span>' : ''}</td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
 }
 
 async function showHistoryDetail(id) {
@@ -199,7 +199,7 @@ async function usage() {
   const legend = `<ul class="chart-legend" aria-label="Platforms">${series.map(([key]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${platformLabel(key)}</li>`).join('')}</ul>`;
   const chart = data.daily.map((day, index) => { const title=`${labels[index]} — Total ${day.total}; Instagram ${day.instagram}; TikTok ${day.tiktok}; YouTube ${day.youtube}`; return `<div class="bar-stack" tabindex="0" role="img" aria-label="${esc(title)}" style="height:${Math.max(1,day.total/max*100)}%" title="${esc(title)}">${series.map(([key]) => day[key] ? `<span class="bar-segment ${key}" style="height:${day[key]/day.total*100}%"></span>` : '').join('')}</div>`; }).join('');
   return layout('Usage', 'Understand your API traffic over the last 30 days.', `
-    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${number(total)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days</span></div><span class="badge">30 days</span></div>
+    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${number(total)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}</span></div><span class="badge">30 days</span></div>
     ${total ? `${legend}<div class="chart" aria-label="Stacked daily requests by platform. Exact counts are in the table below.">${chart}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
     <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts by platform', `<table><thead><tr><th scope="col">Period ending</th><th scope="col">${platformLabel('instagram')}</th><th scope="col">${platformLabel('tiktok')}</th><th scope="col">${platformLabel('youtube')}</th><th scope="col">Total</th></tr></thead><tbody>${data.daily.map((day,index) => `<tr><td>${labels[index]}</td><td>${number(day.instagram)}</td><td>${number(day.tiktok)}</td><td>${number(day.youtube)}</td><td><strong>${number(day.total)}</strong></td></tr>`).join('')}</tbody></table>`)}</details></section>
     <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code>${esc(route.path)}</code></strong><small>${number(route.count)} requests</small></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
@@ -581,7 +581,7 @@ window.addEventListener('resize', () => {
 
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
-  return ['playground','keys','team','history','usage','docs','settings'].includes(route) ? route : 'overview';
+  return ['playground','keys','team','history','usage','docs','settings','fallback'].includes(route) ? route : 'overview';
 }
 function loadingShape(current) {
   const template = document.querySelector(`template[data-loading-page="${current}"]`);
@@ -624,7 +624,7 @@ async function render({retryFailedOnly = false} = {}) {
   document.querySelectorAll('.nav a').forEach(link => {
     if (link.dataset.page === current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
-  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage};
+  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage, fallback:FallbackPage.render};
   try {
     const html = await views[current]({retryFailedOnly});
     if (renderId !== state.renderId) return;
@@ -674,7 +674,7 @@ function startPortal() {
 initAccountMenus();
 $('.content-foot .footer-platforms').innerHTML = platforms.map(platform => `<span role="img" aria-label="${platformName(platform)}">${platformLabel(platform)}</span>`).join('');
 const mobileNav = $('#nav').cloneNode(true); mobileNav.removeAttribute('id'); $('#mobile-nav').append(mobileNav);
-if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"]').forEach(link => link.remove());
+if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"], [data-page="fallback"]').forEach(link => link.remove());
 $('#mobile-menu').addEventListener('click', () => $('#nav-dialog').showModal());
 $('#dialog').addEventListener('close', () => {
   state.historyRequest = null;

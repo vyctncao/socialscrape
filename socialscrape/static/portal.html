@@ -10,6 +10,7 @@
   <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/brand/tokens.css">
   <link rel="stylesheet" href="/assets/portal.css">
+  <link rel="stylesheet" href="/assets/fallback.css">
   <script src="/assets/appearance.js"></script>
 </head>
 <body>
@@ -28,6 +29,7 @@
         <a data-page="usage" href="/app/usage" aria-label="Usage" title="Usage"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#chart-bar"></use></svg><span class="nav-label">Usage</span></a>
         <a data-page="docs" href="/app/docs" aria-label="Documentation" title="Documentation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span class="nav-label">Documentation</span></a>
         <a data-page="settings" href="/app/settings" aria-label="Platform settings" title="Platform settings"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#globe"></use></svg><span class="nav-label">Platform settings</span></a>
+        <a data-page="fallback" href="/app/fallback" aria-label="Fallback" title="Fallback"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#arrows-clockwise"></use></svg><span class="nav-label">Fallback</span></a>
       </nav>
       <div class="account-row"><button type="button" class="account-trigger" data-account-trigger popovertarget="account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="account-menu"></button><div class="account-popup" id="account-menu" popover="auto" role="dialog" aria-labelledby="account-menu-title"></div></div>
     </aside>
@@ -53,6 +55,7 @@
   __LOADING_TEMPLATES__
   <script>window.PORTAL=__PORTAL__</script>
   <script src="/assets/preview.js"></script>
+  <script src="/assets/fallback.js"></script>
   <script src="/assets/portal.js"></script>
 </body>
 </html>

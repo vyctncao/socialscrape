@@ -110,7 +110,8 @@ class PortalStore:
                 duration_ms INTEGER NOT NULL,
                 cached INTEGER NOT NULL DEFAULT 0,
                 response_body BLOB,
-                response_truncated INTEGER NOT NULL DEFAULT 0
+                response_truncated INTEGER NOT NULL DEFAULT 0,
+                fallback INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON members(role) WHERE role='owner';
             CREATE INDEX IF NOT EXISTS requests_created_at ON requests(created_at DESC);
@@ -121,6 +122,8 @@ class PortalStore:
             self._conn.execute("ALTER TABLE requests ADD COLUMN response_body BLOB")
         if "response_truncated" not in columns:
             self._conn.execute("ALTER TABLE requests ADD COLUMN response_truncated INTEGER NOT NULL DEFAULT 0")
+        if "fallback" not in columns:  # served by ScrapeCreators (fallback.py)
+            self._conn.execute("ALTER TABLE requests ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
 
     @staticmethod
@@ -404,7 +407,8 @@ class PortalStore:
             return cur.rowcount == 1
 
     def record_request(self, principal: Principal | None, key_id: int | None, method: str, path: str, query: str,
-                       status: int, duration_ms: int, cached: bool, response_body: bytes = b"") -> None:
+                       status: int, duration_ms: int, cached: bool, response_body: bytes = b"",
+                       fallback: bool = False) -> None:
         max_body = 2 * 1024 * 1024
         stored_body, truncated = response_body[:max_body], len(response_body) > max_body
         with self._lock:
@@ -412,9 +416,9 @@ class PortalStore:
                 self._conn.execute("UPDATE api_keys SET last_used_at=? WHERE id=?", (time.time(), key_id))
             self._conn.execute(
                 "INSERT INTO requests(member_id,api_key_id,created_at,method,path,query,status,duration_ms,cached,"
-                "response_body,response_truncated) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "response_body,response_truncated,fallback) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (principal.id if principal else None, key_id, time.time(), method, path, query[:4000], status,
-                 duration_ms, int(cached), stored_body, int(truncated)),
+                 duration_ms, int(cached), stored_body, int(truncated), int(fallback)),
             )
             self._conn.commit()
 
@@ -422,7 +426,7 @@ class PortalStore:
         where, args = ("", ()) if principal.role == "owner" else ("WHERE r.member_id=?", (principal.id,))
         with self._lock:
             rows = self._conn.execute(
-                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,"
+                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
                 "r.response_body IS NOT NULL has_response,r.response_truncated,k.prefix,m.email "
                 "FROM requests r LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"{where} ORDER BY r.created_at DESC LIMIT ?", (*args, min(max(limit, 1), 500))
@@ -434,7 +438,7 @@ class PortalStore:
                        else ("r.id=? AND r.member_id=?", (request_id, principal.id)))
         with self._lock:
             row = self._conn.execute(
-                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,"
+                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
                 "r.response_body,r.response_truncated,k.prefix,m.email FROM requests r "
                 "LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"WHERE {where}", args
@@ -462,19 +466,23 @@ class PortalStore:
                 "GROUP BY path ORDER BY count DESC,path LIMIT 10", (now - 30 * 86400, *args)
             ).fetchall()
             total = self._conn.execute(f"SELECT COUNT(*) count FROM requests WHERE 1=1 {clause}", args).fetchone()[0]
+            fallback_count = self._conn.execute(
+                f"SELECT COUNT(*) FROM requests WHERE created_at>=? AND fallback=1 {clause}", (now - 30 * 86400, *args)
+            ).fetchone()[0]
         points = {(int(r["bucket"]), r["platform"]): r["count"] for r in daily}
         days = [{platform: points.get((i - 29, platform), 0)
                  for platform in ("instagram", "tiktok", "youtube", "other")} for i in range(30)]
         for day in days:
             day["total"] = sum(day.values())
-        return {"total": total, "daily": days, "routes": [dict(r) for r in routes]}
+        return {"total": total, "daily": days, "routes": [dict(r) for r in routes], "fallback_count": fallback_count}
 
 
 @cache
 def _portal_asset_version() -> str:
     assets = Path(__file__).with_name("static")
     digest = hashlib.sha256()
-    for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
+    for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js",
+                 "appearance.js", "brand/tokens.css", "brand/icons.svg",
                  "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg",
                  *BRAND_ASSETS):
         digest.update(name.encode())
@@ -485,8 +493,8 @@ def _portal_asset_version() -> str:
 def _versioned_page(page: str) -> str:
     version = _portal_asset_version()
     page = page.replace("__ASSET_VERSION__", version).replace("__BRAND__", _brand("/app"))
-    for name in ("portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
-                 *BRAND_ASSETS):
+    for name in ("portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js", "appearance.js",
+                 "brand/tokens.css", "brand/icons.svg", *BRAND_ASSETS):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
