@@ -7,6 +7,7 @@ const ResponsePreview = (() => {
   const sprite = () => `/assets/brand/icons.svg?v=${encodeURIComponent(typeof document === 'undefined' ? '' : document.documentElement.dataset.assetVersion || '')}`;
   const icon = name => `<svg class="icon" aria-hidden="true"><use href="${sprite()}#${name}"></use></svg>`;
   const LIST_LIMIT = 24;
+  const FIELD_LIMIT = 500;
 
   // ---- Reading values --------------------------------------------------------------------------------------
   const get = (value, path) => path.split('.').reduce((node, key) => node == null ? undefined : node[key], value);
@@ -127,12 +128,18 @@ const ResponsePreview = (() => {
       return `<a class="text-link" href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${word.slice(end)}`;
     }).join('');
   }
-  function caption(value, className = 'preview-caption') {
+  // Long text collapses behind a "Show more" button. Each one gets an id unique across mounts, and the button names
+  // what it expands ("Show more of the caption for …"), since a list can hold many.
+  let collapsibleCount = 0;
+  function caption(value, className = 'preview-caption', subject = 'this text') {
     const body = text(value);
     if (!body) return '';
     if (body.length <= 280 && body.split('\n').length <= 5) return `<p class="${className}">${richText(body)}</p>`;
-    return `<p class="${className}" data-collapsible>${richText(body)}</p><button class="text-button" type="button" data-expand aria-expanded="false">Show more</button>`;
+    const id = `preview-text-${++collapsibleCount}`;
+    const about = subject.length > 90 ? `${subject.slice(0, 90)}…` : subject;
+    return `<p class="${className}" id="${id}" data-collapsible>${richText(body)}</p><button class="text-button" type="button" data-expand data-subject="${esc(about)}" aria-controls="${id}" aria-expanded="false" aria-label="${esc(`Show more of ${about}`)}">Show more</button>`;
   }
+  const captionFor = (kind, name) => text(name) ? `the ${kind} for ${text(name)}` : `the ${kind}`;
   function audioRow(audio) {
     if (!audio || !(text(audio.title) || text(audio.artist))) return '';
     const parts = [text(audio.artist) ? esc(audio.artist) : '', audio.duration ? esc(audio.duration) : ''].filter(Boolean).join(' · ');
@@ -168,9 +175,9 @@ const ResponsePreview = (() => {
   }
   // Every scalar field of a response, flattened, so nothing is only reachable through the raw JSON.
   const humanKey = key => String(key).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_+/g, ' ').trim();
-  function fieldRows(body) {
+  function fieldRows(body, limit = Infinity) {
     const rows = [], stack = [[body, []]];
-    while (stack.length) {
+    while (stack.length && rows.length < limit) {
       const [value, path] = stack.pop();
       if (Array.isArray(value)) {
         if (value.every(item => item === null || typeof item !== 'object')) { if (value.some(present)) rows.push({path, value:value.filter(present).join(', ')}); continue; }
@@ -189,26 +196,29 @@ const ResponsePreview = (() => {
       if (linkUrl(words)) return `<a class="text-link" href="${esc(words)}" target="_blank" rel="noopener noreferrer">${esc(words.length > 80 ? `${words.slice(0, 80)}…` : words)}</a>`;
       return esc(words.length > 300 ? `${words.slice(0, 300)}…` : words);
     };
-    return `<dl class="fact-list">${rows.map(row => `<div><dt>${esc(row.path.map(humanKey).join(' › '))}</dt><dd>${cell(row.value)}</dd></div>`).join('')}</dl>`;
+    const row = item => `<div><dt>${esc(item.path.map(humanKey).join(' › '))}</dt><dd>${cell(item.value)}</dd></div>`;
+    const shown = rows.slice(0, FIELD_LIMIT), rest = rows.slice(FIELD_LIMIT);
+    return `<dl class="fact-list">${shown.map(row).join('')}</dl>${rest.length ? `<template data-rest>${rest.map(row).join('')}</template><button class="ghost show-all" type="button" data-show-all>Show all ${exact(rows.length)} fields</button>` : ''}`;
   }
-  // `lazy` leaves the rows out until the disclosure is opened (see mount), since a list response can have thousands.
+  // `lazy` only checks that there is a field at all: the rows are walked and rendered once, when the disclosure is
+  // first opened (see mount), since a list response can have thousands.
   function allFields(body, {lazy = false} = {}) {
+    if (lazy) return fieldRows(body, 1).length ? `<details class="all-fields" data-all-fields><summary>${icon('caret-down')}All fields</summary></details>` : '';
     const rows = fieldRows(body);
-    if (!rows.length) return '';
-    return `<details class="all-fields"${lazy ? ' data-all-fields' : ''}><summary>${icon('caret-down')}All fields <span class="badge">${exact(rows.length)}</span></summary>${lazy ? '' : fieldList(rows)}</details>`;
+    return rows.length ? `<details class="all-fields"><summary>${icon('caret-down')}All fields <span class="badge">${exact(rows.length)}</span></summary>${fieldList(rows)}</details>` : '';
   }
 
 
   function mediaCard(item, platform) {
     const meta = [item.type ? `<span class="badge">${esc(item.type)}</span>` : '', item.created ? `<span>${icon('calendar-blank')}${time(item.created)}</span>` : '', item.duration ? `<span>${icon('clock')}${esc(item.duration)}</span>` : '', item.note ? `<span>${esc(item.note)}</span>` : ''].filter(Boolean).join('');
-    return `<article class="media-card">${thumb(item)}<div class="media-body">${byline(item.author)}${item.title ? `<h3 class="media-title">${esc(item.title)}</h3>` : ''}${caption(item.caption)}${chips(item.tags)}${meta ? `<div class="media-meta">${meta}</div>` : ''}${openLink(item.url, `Open on ${platform}`)}</div></article>${metricTiles(item.stats || [])}${audioRow(item.audio)}${facts(item.facts || [])}${(item.sections || []).join('')}`;
+    return `<article class="media-card">${thumb(item)}<div class="media-body">${byline(item.author)}${item.title ? `<h3 class="media-title">${esc(item.title)}</h3>` : ''}${caption(item.caption, 'preview-caption', captionFor('caption', item.title || at(item.author?.handle) || item.author?.name))}${chips(item.tags)}${meta ? `<div class="media-meta">${meta}</div>` : ''}${openLink(item.url, `Open on ${platform}`)}</div></article>${metricTiles(item.stats || [])}${audioRow(item.audio)}${facts(item.facts || [])}${(item.sections || []).join('')}`;
   }
   function profileCard(profile, platform) {
     const handle = at(profile.handle), name = text(profile.name) || handle || 'Profile';
     const links = [...new Set((profile.links || []).map(linkUrl).filter(Boolean))];
     const status = profile.status ? `<span class="badge ${profile.status.tone || ''}">${esc(profile.status.label)}</span>` : '';
     const badges = (profile.badges || []).filter(Boolean).map(label => `<span class="badge">${esc(label)}</span>`).join('');
-    return `<article class="profile-head">${avatar(profile.avatar, name, 'xl')}<div class="media-body"><div><h3 class="media-title">${esc(name)}${profile.verified ? verifiedMark : ''}${status}${badges}</h3>${handle && handle !== name ? `<span class="byline-meta">${esc(handle)}</span>` : ''}</div>${caption(profile.bio)}${links.length ? `<div class="media-meta">${links.map(url => `<a class="text-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''))}</a>`).join('')}</div>` : ''}${openLink(profile.url, `Open on ${platform}`)}</div></article>${metricTiles(profile.stats || [], 'Profile statistics')}${facts(profile.facts || [])}${(profile.sections || []).join('')}`;
+    return `<article class="profile-head">${avatar(profile.avatar, name, 'xl')}<div class="media-body"><div><h3 class="media-title">${esc(name)}${profile.verified ? verifiedMark : ''}${status}${badges}</h3>${handle && handle !== name ? `<span class="byline-meta">${esc(handle)}</span>` : ''}</div>${caption(profile.bio, 'preview-caption', captionFor('bio', name))}${links.length ? `<div class="media-meta">${links.map(url => `<a class="text-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''))}</a>`).join('')}</div>` : ''}${openLink(profile.url, `Open on ${platform}`)}</div></article>${metricTiles(profile.stats || [], 'Profile statistics')}${facts(profile.facts || [])}${(profile.sections || []).join('')}`;
   }
   function itemRow(item) {
     const who = item.author?.byName ? text(item.author.name) || at(item.author.handle) : at(item.author?.handle) || text(item.author?.name);
@@ -218,7 +228,7 @@ const ResponsePreview = (() => {
     const rest = text(item.title) ? text(item.caption) : text(item.caption).slice(firstLine.length).trim();
     const details = (item.facts || []).filter(row => row && present(row.value)).map(row => `${esc(row.label)} <code>${esc(row.value)}</code>`).join(' · ');
     const url = linkUrl(item.url);
-    return `<li class="item-row">${item.round ? avatar(item.thumb, title) : thumb(item, 'small')}<div class="item-body">${url ? `<a class="item-title" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(title)}</a>` : `<span class="item-title">${esc(title)}</span>`}${meta ? `<span class="byline-meta">${meta}</span>` : ''}${caption(rest, 'item-caption')}${item.audio && text(item.audio.title) ? `<span class="byline-meta">${icon('waveform')}${esc(item.audio.title)}${text(item.audio.artist) ? ` · ${esc(item.audio.artist)}` : ''}</span>` : ''}${inlineStats(item.stats || [])}${details ? `<span class="byline-meta">${details}</span>` : ''}</div></li>`;
+    return `<li class="item-row">${item.round ? avatar(item.thumb, title) : thumb(item, 'small')}<div class="item-body">${url ? `<a class="item-title" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(title)}</a>` : `<span class="item-title">${esc(title)}</span>`}${meta ? `<span class="byline-meta">${meta}</span>` : ''}${caption(rest, 'item-caption', captionFor('caption', title))}${item.audio && text(item.audio.title) ? `<span class="byline-meta">${icon('waveform')}${esc(item.audio.title)}${text(item.audio.artist) ? ` · ${esc(item.audio.artist)}` : ''}</span>` : ''}${inlineStats(item.stats || [])}${details ? `<span class="byline-meta">${details}</span>` : ''}</div></li>`;
   }
   function commentRow(comment) {
     const name = at(comment.author?.handle) || text(comment.author?.name) || 'Unknown account';
@@ -412,7 +422,7 @@ const ResponsePreview = (() => {
     '/v1/instagram/search/popular': body => {
       const posts = list(body.posts).map(m => igMedia(m));
       const sources = Array.isArray(get(body, 'description.source_uris')) ? get(body, 'description.source_uris') : [];
-      const info = `${caption(get(body, 'description.plain_text'))}${chips(body.suggested_terms)}${sources.length ? block('Sources', `<ul class="item-list">${sources.map(url => `<li class="item-row"><div class="item-body">${external(url, esc(url), 'item-title')}</div></li>`).join('')}</ul>`, countBadge(sources.length)) : ''}`;
+      const info = `${caption(get(body, 'description.plain_text'), 'preview-caption', 'the topic description')}${chips(body.suggested_terms)}${sources.length ? block('Sources', `<ul class="item-list">${sources.map(url => `<li class="item-row"><div class="item-body">${external(url, esc(url), 'item-title')}</div></li>`).join('')}</ul>`, countBadge(sources.length)) : ''}`;
       return `${section(text(body.title) || `Results for “${text(body.query)}”`, body.total_media_count != null ? `<span class="badge">${compact(body.total_media_count)} posts${body.total_media_count >= 1000 ? ' · approximate' : ''}</span>` : '')}${info}${itemList(posts, {noun:'post', more:!!body.cursor})}${nextPage('cursor', body.cursor)}`;
     },
     '/v1/instagram/search/hashtag': body => {
@@ -493,7 +503,7 @@ const ResponsePreview = (() => {
   function ttParent(v, title) {
     const author = ttAuthor(v?.author);
     if (!author) return '';
-    return block(title, byline(author) + caption(v.author?.signature, 'help'));
+    return block(title, byline(author) + caption(v.author?.signature, 'help', captionFor('bio', author.name || at(author.handle))));
   }
   function ttMusicCard(music, platform) {
     const id = pick(music.id_str, music.mid, present(music.id) ? music.id : null);
@@ -804,7 +814,11 @@ const ResponsePreview = (() => {
     root.innerHTML = `<div class="code-tabs response-tabs" role="tablist" aria-label="Response format"><button type="button" role="tab" id="response-tab-preview" aria-controls="response-preview" data-response-view="preview">Preview</button><button type="button" role="tab" id="response-tab-raw" aria-controls="response-raw" data-response-view="raw">Raw JSON</button></div><div class="response-preview" id="response-preview" role="tabpanel" tabindex="0" aria-labelledby="response-tab-preview">${html}</div><pre class="code" id="response-raw" role="tabpanel" tabindex="0" aria-labelledby="response-tab-raw"></pre>`;
     root.querySelector('#response-raw').textContent = pretty;
     root.querySelector('[data-all-fields]')?.addEventListener('toggle', event => {
-      if (event.target.open && !event.target.querySelector('.fact-list')) event.target.insertAdjacentHTML('beforeend', fieldList(fieldRows(body)));
+      const details = event.target;
+      if (!details.open || details.querySelector('.fact-list')) return;
+      const rows = fieldRows(body);
+      details.querySelector('summary').insertAdjacentHTML('beforeend', ` <span class="badge">${exact(rows.length)}</span>`);
+      details.insertAdjacentHTML('beforeend', fieldList(rows));
     });
     select(root, view === 'raw' ? 'raw' : 'preview', false);
   }
@@ -815,9 +829,10 @@ const ResponsePreview = (() => {
       if (tab) select(tab.closest('#response'), tab.dataset.responseView, false);
       const expand = event.target.closest('[data-expand]');
       if (expand) {
-        const open = expand.getAttribute('aria-expanded') !== 'true';
-        expand.previousElementSibling.classList.toggle('expanded', open);
-        expand.setAttribute('aria-expanded', String(open)); expand.textContent = open ? 'Show less' : 'Show more';
+        const open = expand.getAttribute('aria-expanded') !== 'true', action = open ? 'Show less' : 'Show more';
+        (document.getElementById(expand.getAttribute('aria-controls')) || expand.previousElementSibling).classList.toggle('expanded', open);
+        expand.setAttribute('aria-expanded', String(open)); expand.textContent = action;
+        expand.setAttribute('aria-label', `${action} of ${expand.dataset.subject || 'this text'}`);
       }
       const showAll = event.target.closest('[data-show-all]');
       if (showAll) {
