@@ -1,4 +1,4 @@
-name: socialscrape
+name: socialscrape-app
 resources:
   api:
     build:
