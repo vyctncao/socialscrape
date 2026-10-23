@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -128,3 +129,22 @@ def test_preview_keeps_every_digit_of_large_ids():
     raw = '{"success":true,"music_info":{"id":6956990112127585029,"title":"x","count":12,"ratio":1.5}}'
     body = _node(f"P.parseLossless({json.dumps(raw)})")
     assert body["music_info"] == {"id": "6956990112127585029", "title": "x", "count": 12, "ratio": 1.5}
+
+
+def test_long_text_disclosures_say_what_they_expand_and_point_at_it():
+    long_caption = "word " * 100
+    html = build("/v1/youtube/channel-videos", {"success": True, "videos": [
+        {"type": "video", "url": "https://www.youtube.com/watch?v=a", "title": "First video", "description": long_caption},
+        {"type": "video", "url": "https://www.youtube.com/watch?v=b", "title": "Second video", "description": long_caption}]})
+    controls = re.findall(r'data-expand data-subject="[^"]*" aria-controls="([^"]+)"', html)
+    assert len(controls) == 2 and len(set(controls)) == 2  # one target each, never shared
+    assert all(f'id="{target}"' in html for target in controls)
+    assert 'aria-label="Show more of the caption for First video"' in html
+
+
+def test_mounted_field_list_waits_until_opened():
+    body = {"success": True, "items": [{"id": f"id-{n}"} for n in range(600)]}
+    lazy = _node(f"P.build('/v1/instagram/user/reels', 200, {json.dumps(body)}, {{lazy: true}})")
+    assert 'data-all-fields' in lazy and "id-1" not in lazy and "All fields</summary>" in lazy  # no walk, no count yet
+    full = build("/v1/instagram/user/reels", body)
+    assert "All fields <span class=\"badge\">600</span>" in full and "Show all 600 fields" in full  # 500 shown, rest on request

@@ -1,5 +1,6 @@
 .fallback-form{display:grid;gap:var(--space-6)}
 .fallback-key-form{max-width:560px}
+.fallback-dependent{display:grid;gap:var(--space-6);padding-left:var(--space-4);border-left:1px solid var(--border)}
 .fallback-fieldset{min-width:0;margin:0;padding:0;border:0}
 .fallback-fieldset legend{width:100%;padding:0 0 var(--space-3);border-bottom:1px solid var(--border);font-size:var(--fs-sm);font-weight:600;color:var(--text-1)}
 .fallback-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);padding-top:var(--space-3)}
@@ -9,10 +10,18 @@
 .fallback-check:has(input:focus-visible){outline:2px solid var(--border-focus);outline-offset:2px}
 .fallback-check:has(input:checked){background:var(--selected);border-color:var(--border)}
 .fallback-check input{width:18px;height:18px;flex:none;margin:1px 0 0;accent-color:var(--text-1)}
-.fallback-check span{display:grid;gap:var(--space-1);min-width:0}
-.fallback-check strong{font-size:var(--fs-sm);font-weight:500;line-height:1.35}
-.fallback-check small{color:var(--text-2);font-size:var(--fs-xs);font-weight:400;line-height:1.5}
-.fallback-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
+.fallback-check span,.fallback-switch>span{display:grid;gap:var(--space-1);min-width:0}
+.fallback-check strong,.fallback-switch strong{font-size:var(--fs-sm);font-weight:500;line-height:1.35}
+.fallback-check small,.fallback-switch small{color:var(--text-2);font-size:var(--fs-xs);font-weight:400;line-height:1.5}
+.fallback-switch{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:44px;color:var(--text-1);cursor:pointer}
+.fallback-switch input{position:absolute;opacity:0;pointer-events:none}
+.fallback-switch i{position:relative;width:44px;height:24px;flex:none;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface-2)}
+.fallback-switch i::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--text-2);transition:transform var(--motion-fast),background var(--motion-fast)}
+.fallback-switch input:checked+i{background:var(--selected);border-color:var(--text-1)}
+.fallback-switch input:checked+i::after{transform:translateX(20px);background:var(--text-1)}
+.fallback-switch:has(input:focus-visible) i{outline:2px solid var(--border-focus);outline-offset:2px}
+.fallback-actions,.fallback-save-row{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2)}
 .fallback-save{justify-self:start}
-@media(max-width:760px){.fallback-checks,.fallback-platforms{grid-template-columns:1fr}.fallback-check{min-height:44px;padding:var(--space-3) var(--space-2)}.fallback-actions .primary,.fallback-actions .danger{flex:1}.fallback-save{width:100%}}
-@media(prefers-reduced-motion:reduce){.fallback-check{transition:none}}
+.fallback-dirty{color:var(--warning);font-size:var(--fs-xs);font-weight:600}
+@media(max-width:760px){.fallback-checks,.fallback-platforms{grid-template-columns:1fr}.fallback-dependent{padding-left:var(--space-3)}.fallback-check{min-height:44px;padding:var(--space-3) var(--space-2)}.fallback-actions .primary,.fallback-actions .danger{flex:1}.fallback-save{width:100%}}
+@media(prefers-reduced-motion:reduce){.fallback-check,.fallback-switch i::after{transition:none}}

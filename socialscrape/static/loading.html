@@ -19,16 +19,23 @@
     <div class="page-head"><div><h1>API keys</h1><p class="lede">Separate credentials for each person, app, and integration.</p></div></div>
     <section class="card" aria-hidden="true"><div class="skeleton-form-row"><div><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i></div><i class="skeleton sk-button"></i></div><i class="skeleton sk-line"></i></section>
     <div class="table-caption"><h2>Workspace credentials</h2></div>
-    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="API keys loading"><table><thead><tr><th>Name</th><th>Key</th><th>Owner</th><th>Created</th><th>Last used</th><th>Status / action</th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="5" data-skeleton-columns="6"></tbody></table></div>
+    <div class="table-wrap skeleton-table" aria-hidden="true"><table><thead><tr><th>Name</th><th>Key</th><th>Owner</th><th>Created</th><th>Last used</th><th>Status / action</th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="5" data-skeleton-columns="6"></tbody></table></div>
     <p class="loading-caption">Loading API keys…</p>
   </div>
 </template>
 <template data-loading-page="team">
   <div class="page-skeleton" data-loading-page="team">
-    <div class="page-head"><div><h1>Team</h1><p class="lede">A private workspace, shared by invitation.</p></div></div>
+    <div class="page-head"><div><h1>Team</h1><p class="lede">Give your team a private place to work with social data.</p></div></div>
     <section class="card skeleton-panel" aria-hidden="true"><i class="skeleton sk-heading"></i><div class="skeleton-form-row"><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div><i class="skeleton sk-copy"></i></section>
     <div class="table-caption"><h2>Workspace members</h2></div>
-    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="Team members loading"><table><thead><tr><th>Member</th><th>Role</th><th>API keys</th><th>Joined</th><th>Last sign-in</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="4" data-skeleton-columns="6"></tbody></table></div>
+    <div class="table-wrap skeleton-table" aria-hidden="true"><table><thead><tr><th>Member</th><th>Role</th><th>API keys</th><th>Joined</th><th>Last sign-in</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="4" data-skeleton-columns="6"></tbody></table></div>
+    <p class="loading-caption">Loading team…</p>
+  </div>
+</template>
+<template data-loading-page="teammember">
+  <div class="page-skeleton" data-loading-page="teammember">
+    <div class="page-head"><div><h1>Team</h1><p class="lede">A private workspace, shared by invitation.</p></div></div>
+    <section class="card skeleton-panel" aria-hidden="true"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></section>
     <p class="loading-caption">Loading team…</p>
   </div>
 </template>
@@ -37,7 +44,7 @@
     <div class="page-head"><div><h1>Usage</h1><p class="lede">Traffic, timing and stored responses for your API requests.</p></div></div>
     <nav class="page-tabs" aria-label="Usage sections"><a href="/app/usage">Analytics</a><a href="/app/history" aria-current="page">Request history</a></nav>
     <div class="table-caption" aria-hidden="true"><i class="skeleton sk-copy"></i><i class="skeleton sk-label"></i></div>
-    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="Request history loading"><table><thead><tr><th>Time</th><th>API key</th><th>Endpoint</th><th>Response</th><th>Duration</th><th>Cache</th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="7" data-skeleton-columns="6"></tbody></table></div>
+    <div class="table-wrap skeleton-table" aria-hidden="true"><table><thead><tr><th>Time</th><th>API key</th><th>Endpoint</th><th>Response</th><th>Duration</th><th>Cache</th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="7" data-skeleton-columns="6"></tbody></table></div>
     <p class="loading-caption">Loading request history…</p>
   </div>
 </template>
@@ -59,8 +66,8 @@
   </div>
 </template>
 <template data-loading-page="docs">
-  <div class="page-skeleton" data-loading-page="docs">
-    <div class="docs"><aside class="docs-nav skeleton-form" aria-hidden="true"><i class="skeleton sk-field"></i><i class="skeleton sk-label"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></aside><article class="doc-content"><h1>Documentation</h1><div class="skeleton-article" aria-hidden="true"><i class="skeleton sk-copy"></i><div class="card skeleton-code"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i></div></article></div>
+  <div class="page-skeleton" data-loading-page="docs" data-loading-title="Documentation">
+    <div class="docs"><aside class="docs-nav skeleton-form" aria-hidden="true"><i class="skeleton sk-field"></i><i class="skeleton sk-label"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></aside><article class="doc-content"><div class="skeleton sk-heading" aria-hidden="true"></div><div class="skeleton-article" aria-hidden="true"><i class="skeleton sk-copy"></i><div class="card skeleton-code"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i></div></article></div>
     <p class="loading-caption">Loading documentation…</p>
   </div>
 </template>
@@ -68,9 +75,16 @@
   <div class="page-skeleton" data-loading-page="tests">
     <div class="page-head"><div><h1>Playground</h1><p class="lede">Try one endpoint at a time, or test them all at once.</p></div></div>
     <nav class="page-tabs" aria-label="Playground sections"><a href="/app/playground">Request builder</a><a href="/app/tests" aria-current="page">Endpoint tests</a></nav>
-    <section class="card skeleton-panel"><div aria-hidden="true"><i class="skeleton sk-heading"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-field"></i></div></section>
-    <div class="table-caption" aria-hidden="true"><i class="skeleton sk-copy"></i><i class="skeleton sk-label"></i></div>
-    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="Endpoint tests loading"><table><thead><tr><th>Endpoint</th><th>Preset parameters</th><th>Result</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="6" data-skeleton-columns="4"></tbody></table></div>
+    <div class="tests-skeleton">
+      <section class="card test-run" aria-label="Test run loading">
+        <div class="test-run-head test-run-head-skeleton" aria-hidden="true"><div class="test-run-copy"><i class="skeleton sk-heading"></i><i class="skeleton sk-copy"></i></div><div class="test-run-actions"><i class="skeleton sk-button"></i><i class="skeleton sk-button"></i></div></div>
+        <div class="test-run-options" aria-hidden="true"><div class="test-filter"><i class="skeleton sk-button"></i><i class="skeleton sk-button"></i><i class="skeleton sk-button"></i><i class="skeleton sk-button"></i></div><i class="skeleton sk-copy"></i></div>
+        <div aria-hidden="true"><i class="skeleton sk-line"></i></div>
+      </section>
+      <section class="test-group" data-loading-test-group="instagram"><div class="table-caption"><h2>Instagram</h2><i class="skeleton sk-label" aria-hidden="true"></i></div><div class="table-wrap skeleton-table" aria-hidden="true"><table><thead><tr><th>Endpoint</th><th>Preset parameters</th><th>Result</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="2" data-skeleton-columns="4"></tbody></table></div></section>
+      <section class="test-group" data-loading-test-group="tiktok"><div class="table-caption"><h2>TikTok</h2><i class="skeleton sk-label" aria-hidden="true"></i></div><div class="table-wrap skeleton-table" aria-hidden="true"><table><thead><tr><th>Endpoint</th><th>Preset parameters</th><th>Result</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="2" data-skeleton-columns="4"></tbody></table></div></section>
+      <section class="test-group" data-loading-test-group="youtube"><div class="table-caption"><h2>YouTube</h2><i class="skeleton sk-label" aria-hidden="true"></i></div><div class="table-wrap skeleton-table" aria-hidden="true"><table><thead><tr><th>Endpoint</th><th>Preset parameters</th><th>Result</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="2" data-skeleton-columns="4"></tbody></table></div></section>
+    </div>
     <p class="loading-caption">Loading endpoint tests…</p>
   </div>
 </template>
@@ -82,6 +96,13 @@
     <p class="loading-caption">Loading settings…</p>
   </div>
 </template>
+<template data-loading-page="settingsmember">
+  <div class="page-skeleton" data-loading-page="settingsmember">
+    <div class="page-head"><div><h1>Settings</h1><p class="lede">Choose how requests reach each platform, and what happens when one fails here.</p></div></div>
+    <section class="card skeleton-panel" aria-hidden="true"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></section>
+    <p class="loading-caption">Loading settings…</p>
+  </div>
+</template>
 <template data-loading-page="fallback">
   <div class="page-skeleton" data-loading-page="fallback">
     <div class="page-head"><div><h1>Settings</h1><p class="lede">Choose how requests reach each platform, and what happens when one fails here.</p></div></div>
@@ -90,6 +111,13 @@
       <section class="card skeleton-settings"><div class="card-head"><h2>ScrapeCreators API key</h2></div><div class="skeleton-form" aria-hidden="true"><i class="skeleton sk-copy"></i><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div></section>
       <section class="card skeleton-settings"><div class="card-head"><h2>When to fall back</h2></div><div class="skeleton-form" aria-hidden="true"><i class="skeleton sk-field"></i><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-field"></i><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div></section>
     </div>
+    <p class="loading-caption">Loading fallback settings…</p>
+  </div>
+</template>
+<template data-loading-page="fallbackmember">
+  <div class="page-skeleton" data-loading-page="fallbackmember">
+    <div class="page-head"><div><h1>Settings</h1><p class="lede">Choose how requests reach each platform, and what happens when one fails here.</p></div></div>
+    <section class="card skeleton-panel" aria-hidden="true"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></section>
     <p class="loading-caption">Loading fallback settings…</p>
   </div>
 </template>

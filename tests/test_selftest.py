@@ -99,6 +99,10 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     initial = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', page, re.S)[1]
     assert "<h1>Playground</h1>" in initial and 'class="skeleton ' in initial
     assert '<a href="/app/tests" aria-current="page">Endpoint tests</a>' in initial  # a Playground tab
+    assert 'class="card test-run"' in initial and 'class="test-run-actions"' in initial
+    assert 'class="test-run-options"' in initial
+    assert set(re.findall(r'data-loading-test-group="(instagram|tiktok|youtube)"', initial)) == {"instagram", "tiktok", "youtube"}
+    assert initial.count('class="table-wrap skeleton-table"') == 3
     assert "window.EndpointTests" in c.get(f"/assets/selftest.js?v={version}").text
     # What the page reads as "not supported" when the fallback is skipped.
     unsupported = c.get("/v1/youtube/shorts/trending", headers={fallback.HEADER: "off"})
@@ -128,3 +132,16 @@ def test_an_opted_out_request_is_not_answered_with_a_cached_fallback(signed_in, 
         assert len(upstream.requests) == 1
     finally:
         upstream.close()
+
+
+def test_endpoint_test_assets_encode_accessible_run_state_and_mobile_rows():
+    root = __import__("pathlib").Path(__file__).parents[1]
+    script = (root / "socialscrape/static/selftest.js").read_text()
+    styles = (root / "socialscrape/static/selftest.css").read_text()
+    assert "socialscrape.endpoint-tests.v2" in script and "lastRun" in script
+    assert 'aria-live="polite" aria-atomic="true"' in script
+    assert 'data-label="Endpoint"' in script and 'data-label="Preset parameters"' in script
+    assert 'data-label="Result"' in script and 'data-label="Actions"' in script
+    assert "Retry ${plural(retry.length" in script
+    assert ".test-group thead th{position:sticky" in styles
+    assert "@media(max-width:760px)" in styles and ".test-group td::before{content:attr(data-label)" in styles

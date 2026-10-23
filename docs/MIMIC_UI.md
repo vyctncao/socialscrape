@@ -95,7 +95,7 @@ the UI assets. Authentication pages use the same version. This keeps a returning
 browser from combining new markup with cached scripts from an earlier deployment.
 
 The live Stackdome resource owns `scrape.mimic.host` with TLS enabled. Release
-published code with `stackdome create release --stack socialscrape-app --wait`.
+published code with `STACKDOME_PROJECT=socialscrape stackdome create release --stack socialscrape-app --wait`.
 The Stackfile schema cannot represent `custom_domain`; applying that file would
 clear the saved hostname. Preserve the resource's domain, secret connection,
 and persistent volume when changing its deployment definition.
@@ -146,3 +146,21 @@ Fallback tab’s own files, and renders through the same router with its own loa
 platform filter is a radio group drawn as the kit’s segmented control, every result pairs a
 status badge with words, failures are announced politely as they happen, and the run’s one
 primary action becomes Stop while tests are running.
+
+Shared portal primitives (in `portal.js`) carry the audit rules so pages do not
+re-implement them. `toast(message, {type, persistent})` takes `success`, `info`,
+`warning` or `error`; errors and persistent toasts stay until dismissed, at most three
+show at once and the rest queue. `openDialog({..., guard, restoreFocus, initialFocus})`
+routes every close path (close button, Done, backdrop, Escape) through `guard`, which
+is how the one-time API key dialog refuses to close before the secret is copied, and
+returns focus to a logical successor after a row is removed. `addLeaveGuard(fn)` lets
+a view with unsaved changes (the Fallback form) stop SPA navigation and Back; guards
+clear when another page commits. `normalizeSchema(param)` unwraps nullable OpenAPI
+parameters for both the Playground and the docs. `api()` honors explicit timeouts for
+writes and retries once after refreshing a stale CSRF token.
+
+Portal mutations report only what the server confirmed: revoking a key, removing a
+member, and removing or moving a proxy or account return `404` with a fixed `detail`
+when nothing changed, and the client refreshes and says what it observed instead of
+showing success. A blank API-key name is a `422`; history rows and details expose a
+boolean `has_response`. The `/v1/*` API and its envelopes are unchanged.

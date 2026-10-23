@@ -187,6 +187,18 @@ def test_switches_that_keep_requests_local(make, upstream, monkeypatch, caplog):
     assert upstream.requests == []
 
 
+def test_unsupported_route_never_leaks_501_when_fallback_is_active(make, upstream):
+    upstream.reply(500, {"success": False, "error": "upstream_error", "message": "provider failed"})
+    response = make().get(UNSUPPORTED, params={"url": "x"})
+    assert response.status_code == 500 and response.json()["message"] == "provider failed"
+    assert response.headers[fallback.HEADER] == fallback.PROVIDER
+
+    upstream.reply(200, b"not json")
+    response = make().get(UNSUPPORTED, params={"url": "x"})
+    assert response.status_code == 502 and response.json()["error"] == "fallback_unavailable"
+    assert response.json()["fallback"]["error"] == "bad_response"
+
+
 def test_scrapecreators_verdict_stands_only_where_we_had_no_answer(make, upstream, monkeypatch):
     c = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all")
     for status in (400, 403, 404, 422):
@@ -334,7 +346,8 @@ def test_a_redirect_is_not_followed_with_the_key(make, upstream):
     try:
         upstream.reply(302, b"", headers={"location": elsewhere.url + "/collect"})
         r = make().get(UNSUPPORTED, params={"url": "x"})
-        assert r.status_code == 501 and r.json()["fallback"]["status"] == 302
+        assert r.status_code == 502 and r.json()["error"] == "fallback_unavailable"
+        assert r.json()["fallback"]["status"] == 302
         assert elsewhere.requests == [] and SC_KEY not in r.text
     finally:
         elsewhere.close()

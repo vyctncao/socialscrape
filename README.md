@@ -22,11 +22,11 @@ curl 'http://127.0.0.1:8000/v1/tiktok/profile?handle=stoolpresidente'
 curl 'http://127.0.0.1:8000/v1/instagram/post?url=https://www.instagram.com/p/DeKe2vzD9xZ/'
 ```
 
-- `/docs`: interactive OpenAPI docs without the portal; with the portal enabled it redirects signed-in members to the private documentation UI. The OpenAPI spec still powers the dashboard docs and playground.
+- `/docs`: interactive OpenAPI docs without the portal; with the portal enabled it redirects to the dashboard's documentation at `/app/docs`, which anyone can read without signing in. The OpenAPI spec powers the dashboard docs and playground.
 - `/meta/coverage`: every endpoint's status, the yt-dlp extractor it uses, and its limitations.
 - `/health`: yt-dlp version and which features are enabled.
 
-With only `SOCIALSCRAPE_API_KEYS`, these three, `/redoc` and `/openapi.json` are public. With the portal enabled, the OpenAPI document and dashboard are private; `/health` and `/meta/coverage` remain public for probes and capability checks.
+With only `SOCIALSCRAPE_API_KEYS`, these three, `/redoc` and `/openapi.json` are public. With the portal enabled, the API reference stays public (`/app/docs`, `/redoc`, `/openapi.json`, which lists the API endpoints only) while the rest of the dashboard and the API itself need a session or key; `/health` and `/meta/coverage` remain public for probes and capability checks.
 
 ## Private dashboard
 

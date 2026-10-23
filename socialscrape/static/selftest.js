@@ -1,6 +1,7 @@
 window.EndpointTests = (() => {
   // Results survive a reload in this browser; response bodies stay in memory only.
-  const STORAGE_KEY = 'socialscrape.endpoint-tests.v1';
+  const STORAGE_KEY = 'socialscrape.endpoint-tests.v2';
+  const LEGACY_STORAGE_KEY = 'socialscrape.endpoint-tests.v1';
   const SETUP_ERRORS = new Set(['transcription_disabled', 'transcription_unavailable']);
   const OUTCOMES = {
     idle:['Not run', ''], queued:['Queued', ''], running:['Running', ''], passed:['Passed', 'good'], failed:['Failed', 'bad'],
@@ -9,17 +10,17 @@ window.EndpointTests = (() => {
   const COUNTED = ['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped', 'idle'];
   const RETRYABLE = new Set(['failed', 'stopped', 'skipped']);
   const PLATFORMS = ['instagram', 'tiktok', 'youtube'];
-  const model = {tests:[], fallback:null, filter:'all', allowFallback:false, results:{}, bodies:new Map(), finishedAt:null, stopped:false, run:null};
+  const model = {tests:[], fallback:null, filter:'all', allowFallback:false, results:{}, bodies:new Map(), lastRun:null, run:null};
+  let announcementTimer = null, announcements = [];
 
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (saved?.results && typeof saved.results === 'object') {
-      model.results = saved.results; model.finishedAt = saved.finishedAt ?? null; model.stopped = Boolean(saved.stopped);
-    }
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || 'null');
+    if (saved?.results && typeof saved.results === 'object') model.results = saved.results;
+    if (saved?.version === 2 && saved.lastRun && typeof saved.lastRun === 'object') model.lastRun = saved.lastRun;
   } catch {}
   function persist() {
     const results = Object.fromEntries(Object.entries(model.results).filter(([, result]) => !['queued', 'running'].includes(result.outcome)));
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({results, finishedAt:model.finishedAt, stopped:model.stopped})); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({version:2, results, lastRun:model.lastRun})); } catch {}
   }
 
   // Key paths as in the contracts: `videos[].id` is the id of any element of videos.
@@ -72,25 +73,28 @@ window.EndpointTests = (() => {
   function start(paths) {
     if (!paths.length || model.run?.controller.signal.aborted) return;
     const fresh = !model.run;
-    const run = model.run ||= {controller:new AbortController(), allowFallback:model.allowFallback, lanes:{}, workers:new Set(), pending:new Set(), previous:{}, previousBodies:{}, ran:new Set(), total:0, done:0};
+    const run = model.run ||= {controller:new AbortController(), allowFallback:model.allowFallback, lanes:{}, workers:new Set(), pending:new Set(), previous:{}, previousBodies:{}, requested:new Set(), dependencies:new Set(), started:new Set(), completed:new Set(), canceled:new Set(), outcomes:{}, total:0, done:0, startedAt:Date.now()};
     const wanted = new Set(paths);
-    const add = test => {
-      if (!test || run.pending.has(test.path)) return;
+    paths.forEach(path => run.requested.add(path));
+    const add = (test, dependency = false) => {
+      if (!test || run.pending.has(test.path) || run.completed.has(test.path)) return;
       // A derived param's source runs first, in the same platform's queue, unless its last answer is still usable.
-      for (const {source} of test.derive) if (wanted.has(source) || !usable(testFor(source))) add(testFor(source));
+      for (const {source} of test.derive) if (wanted.has(source) || !usable(testFor(source))) add(testFor(source), true);
+      if (dependency && !wanted.has(test.path)) run.dependencies.add(test.path);
       run.pending.add(test.path);
       run.previous[test.path] ??= model.results[test.path];
       // Its last response belongs to its last result: none is shown until this run answers.
       run.previousBodies[test.path] ??= model.bodies.get(test.path);
       model.bodies.delete(test.path);
-      (run.lanes[test.platform] ||= []).push(test);
+      const lane = run.lanes[test.platform] ||= {queue:[], active:null};
+      lane.queue.push(test);
       run.total++;
       setResult(test.path, {outcome:'queued'});
     };
     paths.forEach(path => add(testFor(path)));
     if (!run.total) { model.run = null; return; }
-    for (const platform of Object.keys(run.lanes)) if (run.lanes[platform].length && !run.workers.has(platform)) work(run, platform);
-    if (fresh) toast(`Running ${number(run.total)} endpoint ${run.total === 1 ? 'test' : 'tests'}.`);
+    for (const platform of Object.keys(run.lanes)) if (run.lanes[platform].queue.length && !run.workers.has(platform)) work(run, platform);
+    if (fresh) toast(`Running ${plural(run.total, 'endpoint test')}.`, {type:'info'});
     refresh();
   }
   function stop() {
@@ -98,39 +102,49 @@ window.EndpointTests = (() => {
     if (!run) return;
     run.controller.abort();
     // Queued tests never started: they keep their last result.
-    for (const lane of Object.values(run.lanes)) for (const test of lane.splice(0)) {
+    for (const lane of Object.values(run.lanes)) for (const test of lane.queue.splice(0)) {
+      run.canceled.add(test.path);
       run.pending.delete(test.path);
-      run.total--;
       if (run.previous[test.path]) model.results[test.path] = run.previous[test.path]; else delete model.results[test.path];
       if (run.previousBodies[test.path]) model.bodies.set(test.path, run.previousBodies[test.path]);
       updateRow(test.path);
     }
+    if (run.canceled.size) queueAnnouncement(`${plural(run.canceled.size, 'test')} canceled before starting. ${number(run.done)} of ${number(run.total)} finished.`);
     refresh();
   }
   async function work(run, platform) {
+    const lane = run.lanes[platform];
     run.workers.add(platform);
-    while (run.lanes[platform].length && !run.controller.signal.aborted) {
-      const test = run.lanes[platform].shift();
+    while (lane.queue.length && !run.controller.signal.aborted) {
+      const test = lane.queue.shift();
+      lane.active = test;
+      run.started.add(test.path);
+      queueAnnouncement(`${label(test)} started.`);
       await execute(test, run);
-      run.ran.add(test.path);
+      lane.active = null;
+      run.completed.add(test.path);
       run.pending.delete(test.path);
       run.done++;
-      const {outcome} = resultFor(test.path);
-      if (['failed', 'setup'].includes(outcome)) announce(`${label(test)}: ${OUTCOMES[outcome][0].toLowerCase()}. ${number(run.done)} of ${number(run.total)} finished.`);
+      const result = resultFor(test.path);
+      run.outcomes[test.path] = {...result};
+      queueAnnouncement(`${label(test)}: ${OUTCOMES[result.outcome][0].toLowerCase()}. ${number(run.done)} of ${number(run.total)} finished${run.canceled.size ? `; ${plural(run.canceled.size, 'test')} canceled before starting` : ''}.`);
       updateRow(test.path);
       refresh();
     }
+    lane.active = null;
     run.workers.delete(platform);
     if (!run.workers.size && model.run === run) finish(run);
   }
   function finish(run) {
     model.run = null;
-    model.stopped = run.controller.signal.aborted;
-    if (run.done) model.finishedAt = Math.floor(Date.now() / 1000);
+    const stopped = run.controller.signal.aborted;
+    model.lastRun = {requested:[...run.requested], dependencies:[...run.dependencies], started:[...run.started], completed:[...run.completed], canceled:[...run.canceled], outcomes:{...run.outcomes}, startedAt:run.startedAt, finishedAt:Date.now(), stopped};
     persist();
     refresh();
-    const counts = tally(model.tests.filter(test => run.ran.has(test.path)));
-    toast(`${model.stopped ? 'Test run stopped' : 'Endpoint tests finished'}: ${['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped'].filter(outcome => counts[outcome]).map(outcome => `${number(counts[outcome])} ${OUTCOMES[outcome][0].toLowerCase()}`).join(', ') || 'nothing ran'}.`);
+    const counts = tallySnapshot(model.lastRun, model.tests);
+    const summary = ['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped'].filter(outcome => counts[outcome]).map(outcome => `${number(counts[outcome])} ${OUTCOMES[outcome][0].toLowerCase()}`).join(', ') || 'nothing ran';
+    const failed = counts.failed || counts.setup;
+    toast(`${stopped ? 'Test run stopped' : 'Endpoint tests finished'}: ${summary}.`, {type:failed ? 'error' : stopped || counts.skipped || counts.unsupported ? 'warning' : 'success'});
   }
   async function execute(test, run) {
     const query = new URLSearchParams(test.params);
@@ -168,15 +182,32 @@ window.EndpointTests = (() => {
     tests.forEach(test => counts[resultFor(test.path).outcome]++);
     return counts;
   }
+  function tallySnapshot(lastRun, tests) {
+    const counts = Object.fromEntries(Object.keys(OUTCOMES).map(outcome => [outcome, 0]));
+    const paths = new Set(tests.map(test => test.path));
+    for (const path of lastRun?.completed || []) if (paths.has(path)) counts[lastRun.outcomes?.[path]?.outcome in OUTCOMES ? lastRun.outcomes[path].outcome : 'idle']++;
+    return counts;
+  }
   function countList(counts) {
     return COUNTED.filter(outcome => counts[outcome]).map(outcome => `<li><span class="badge ${OUTCOMES[outcome][1]}">${number(counts[outcome])} ${OUTCOMES[outcome][0].toLowerCase()}</span></li>`).join('');
   }
+  function laneStatus(run) {
+    return Object.entries(run.lanes).filter(([, lane]) => lane.active).map(([platform, lane]) => `<li><strong>${esc(platformName(platform))}:</strong> ${esc(lane.active.summary)} · ${plural(lane.queue.length, 'queued test')}</li>`).join('');
+  }
   function statusPanel() {
     const tests = scope(), counts = tally(tests), run = model.run;
-    if (run) return `<h2>Running endpoint tests</h2><p class="help">${number(run.done)} of ${number(run.total)} finished. Stopping cancels the tests that haven’t started; requests already sent may still finish on the server.</p><progress class="test-progress" max="${run.total}" value="${run.done}" aria-label="Tests finished">${number(run.done)} of ${number(run.total)}</progress>`;
-    if (!tests.some(test => resultFor(test.path).outcome !== 'idle')) return `<h2>No tests run yet</h2><p class="help">Run ${tests.length === model.tests.length ? 'all' : 'these'} ${number(tests.length)} to check each endpoint with its preset parameters.</p>`;
-    const when = model.finishedAt ? `${model.stopped ? 'Last run stopped' : 'Last run finished'} ${esc(fmt(model.finishedAt))}` : 'Latest results';
-    return `<h2>${when}</h2><ul class="test-counts" aria-label="Results${model.filter === 'all' ? '' : ` for ${platformName(model.filter)}`}">${countList(counts)}</ul>`;
+    if (run) return `<h2>Running endpoint tests</h2><p class="help">${number(run.done)} of ${number(run.total)} finished${run.canceled.size ? `; ${plural(run.canceled.size, 'test')} canceled before starting` : ''}. Stopping cancels the tests that haven’t started; requests already sent may still finish on the server.</p>${laneStatus(run) ? `<ul class="test-stages">${laneStatus(run)}</ul>` : ''}<progress class="test-progress" max="${run.total}" value="${run.done}" aria-label="Tests finished">${number(run.done)} of ${number(run.total)}</progress>`;
+    const lastPaths = new Set([...(model.lastRun?.started || []), ...(model.lastRun?.canceled || [])]);
+    const included = tests.filter(test => lastPaths.has(test.path));
+    if (!model.lastRun && !tests.some(test => resultFor(test.path).outcome !== 'idle')) return `<h2>No tests run yet</h2><p class="help">Run ${tests.length === model.tests.length ? 'all' : 'these'} ${number(tests.length)} to check each endpoint with its preset parameters.</p>`;
+    const latest = tests.some(test => resultFor(test.path).outcome !== 'idle') ? `<div class="test-latest"><h3>Latest known results</h3><ul class="test-counts" aria-label="Latest known results${model.filter === 'all' ? '' : ` for ${platformName(model.filter)}`}">${countList(counts)}</ul></div>` : '';
+    if (!model.lastRun) return `<h2>Latest known results</h2><ul class="test-counts" aria-label="Latest known results">${countList(counts)}</ul>`;
+    const when = `${model.lastRun.stopped ? 'Last run stopped' : 'Last run finished'} ${esc(fmt(Math.floor(model.lastRun.finishedAt / 1000)))}`;
+    if (!included.length) return `<h2>${when}</h2><p class="help">The last run did not include ${esc(platformName(model.filter))}.</p>${latest}`;
+    const lastCounts = tallySnapshot(model.lastRun, included);
+    const canceled = included.filter(test => model.lastRun.canceled.includes(test.path)).length;
+    if (canceled) lastCounts.idle += canceled;
+    return `<h2>${when}</h2><ul class="test-counts" aria-label="Last run results${model.filter === 'all' ? '' : ` for ${platformName(model.filter)}`}">${countList(lastCounts)}</ul>${latest}`;
   }
   function runLabel() {
     const count = scope().length;
@@ -184,11 +215,21 @@ window.EndpointTests = (() => {
   }
   function retryLabel() {
     const retry = scope().filter(test => RETRYABLE.has(resultFor(test.path).outcome));
-    return {hidden:Boolean(model.run) || !retry.length, text:`Retry ${number(retry.length)} ${retry.every(test => resultFor(test.path).outcome === 'failed') ? 'failed' : 'unfinished'}`};
+    const failedOnly = retry.every(test => resultFor(test.path).outcome === 'failed');
+    return {hidden:Boolean(model.run) || !retry.length, text:`Retry ${plural(retry.length, failedOnly ? 'failed test' : 'unfinished test')}`};
   }
   function announce(message) {
     const region = document.getElementById('test-announcer');
     if (region) region.textContent = message;
+  }
+  function queueAnnouncement(message) {
+    announcements.push(message);
+    if (announcementTimer) return;
+    announcementTimer = setTimeout(() => {
+      const batch = announcements.splice(0);
+      announce(batch.length > 3 ? `${batch.slice(-2).join(' ')} ${number(batch.length - 2)} earlier updates.` : batch.join(' '));
+      announcementTimer = null;
+    }, 200);
   }
   function refresh() {
     const panel = document.getElementById('test-status');
@@ -204,8 +245,9 @@ window.EndpointTests = (() => {
   }
   function groupSummary(tests) {
     const counts = tally(tests);
-    const parts = ['passed', 'failed', 'setup', 'unsupported'].filter(outcome => counts[outcome]).map(outcome => `${number(counts[outcome])} ${OUTCOMES[outcome][0].toLowerCase()}`);
-    return `${number(tests.length)} ${tests.length === 1 ? 'endpoint' : 'endpoints'}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
+    const ordered = ['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped', 'running', 'queued', 'idle'];
+    const parts = ordered.filter(outcome => counts[outcome]).map(outcome => `${number(counts[outcome])} ${OUTCOMES[outcome][0].toLowerCase()}`);
+    return `${plural(tests.length, 'endpoint')}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
   }
   function paramsCell(test) {
     const items = Object.entries(test.params).map(([name, value]) => `<code>${esc(name)}=${esc(value)}</code>`)
@@ -222,7 +264,7 @@ window.EndpointTests = (() => {
   }
   function row(test) {
     const path = esc(test.path), name = esc(label(test));
-    return `<tr data-test-row="${path}"><td><div class="test-endpoint"><strong>${esc(test.summary)}</strong><code>${path.replaceAll('/', '/<wbr>')}</code></div></td><td>${paramsCell(test)}</td><td data-cell="result">${resultCell(test)}</td><td><div class="table-actions"><button class="ghost" type="button" data-test-run="${path}" aria-label="Run the ${name} test" aria-disabled="${pending(test.path)}">${icon('play')}Run</button><button class="icon-button" type="button" data-test-response="${path}" aria-label="View the ${name} response" title="View response" ${model.bodies.has(test.path) ? '' : 'hidden'}>${icon('file-text')}</button><a class="icon-button" href="/app/playground" data-test-playground="${path}" aria-label="Open ${name} in the playground" title="Open in playground">${icon('arrow-square-out')}</a></div></td></tr>`;
+    return `<tr data-test-row="${path}"><td data-label="Endpoint"><div class="test-endpoint"><strong>${esc(test.summary)}</strong><code>${path.replaceAll('/', '/<wbr>')}</code></div></td><td data-label="Preset parameters">${paramsCell(test)}</td><td data-cell="result" data-label="Result">${resultCell(test)}</td><td data-label="Actions"><div class="table-actions"><button class="ghost" type="button" data-test-run="${path}" aria-label="Run the ${name} test" aria-disabled="${pending(test.path)}">${icon('play')}Run</button><button class="icon-button" type="button" data-test-response="${path}" aria-label="View the ${name} response" title="View response" ${model.bodies.has(test.path) ? '' : 'hidden'}>${icon('file-text')}</button><a class="icon-button" href="/app/playground" data-test-playground="${path}" aria-label="Open ${name} in the playground" title="Open in playground">${icon('arrow-square-out')}</a></div></td></tr>`;
   }
   function updateRow(path) {
     const element = document.querySelector(`[data-test-row="${CSS.escape(path)}"]`), test = testFor(path);
@@ -248,7 +290,7 @@ window.EndpointTests = (() => {
       <section class="card test-run" aria-label="Test run">
         <div class="test-run-head"><div class="test-status" id="test-status">${statusPanel()}</div><div class="test-run-actions"><button class="ghost" type="button" id="test-retry" ${retry.hidden ? 'hidden' : ''}>${retry.text}</button><button class="primary" type="button" id="test-run-all">${runLabel()}</button></div></div>
         <div class="test-run-options"><fieldset class="test-filter"><legend class="sr-only">Platform</legend>${filters.map(([value, name, count]) => `<label><input type="radio" name="test-platform" value="${value}" ${model.filter === value ? 'checked' : ''}><span>${name}</span><small>${number(count)}</small></label>`).join('')}</fieldset>${fallbackNote}</div>
-        <p class="sr-only" id="test-announcer" role="status" aria-live="polite"></p>
+        <p class="sr-only" id="test-announcer" role="status" aria-live="polite" aria-atomic="true"></p>
         <p class="help">Each test is a live request with your workspace session, so it also appears in Request history. Platforms run side by side; each platform’s tests run one at a time.</p>
       </section>
       ${groups.map(([platform, tests]) => `<section class="test-group" data-test-group="${platform}" ${model.filter === 'all' || model.filter === platform ? '' : 'hidden'}><div class="table-caption"><h2>${platformName(platform)}</h2><span data-group-summary="${platform}">${groupSummary(tests)}</span></div>${tableRegion(`${platformName(platform)} endpoint tests`, `<table><thead><tr><th scope="col">Endpoint</th><th scope="col">Preset parameters</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${tests.map(row).join('')}</tbody></table>`)}</section>`).join('')}`);
