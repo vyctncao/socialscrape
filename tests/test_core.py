@@ -2114,3 +2114,24 @@ console.log(JSON.stringify(context.agentInstallUrls('http://127.0.0.1:8784')));'
     assert 'API keys are shown only once when created.' in script
     assert 'href="/app/keys">create an API key' in script
     assert '.agent-cards{' in css and '@media(max-width:760px)' in css
+
+
+def test_stratton_method_and_legacy_route_compatibility(client, monkeypatch):
+    from socialscrape.platforms import instagram
+
+    async def profile(handle, trim=None):
+        return {"data": {"user": {"username": handle}}}
+    monkeypatch.setattr(instagram, "instagram_profile", profile)
+    posted = client.post("/v1/instagram/profile", json={"handle": "nasa"})
+    assert posted.status_code == 200 and posted.json()["data"]["user"]["username"] == "nasa"
+
+    aliases = {
+        "/v1/instagram/story-highlights?handle=nasa": "/v1/instagram/user/highlights?handle=nasa",
+        "/v1/instagram/highlights/details?highlight_id=123": "/v1/instagram/user/highlight/detail?highlight_id=123",
+        "/v1/tiktok/followers?handle=nasa": "/v1/tiktok/user/followers?handle=nasa",
+        "/v1/tiktok/profile/following?handle=nasa": "/v1/tiktok/user/following?handle=nasa",
+        "/v1/tiktok/profile/audience-demographics?handle=nasa": "/v1/tiktok/user/audience?handle=nasa",
+    }
+    for alias, canonical in aliases.items():
+        response = client.get(alias, follow_redirects=False)
+        assert response.status_code == 307 and response.headers["location"] == canonical

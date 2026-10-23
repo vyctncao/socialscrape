@@ -1511,3 +1511,13 @@ def test_general_search_composes_profile_results(client, monkeypatch):
     assert body["data"]["users"] == [{"full_name": "NASA", "id": "528817151", "is_verified": True,
                                        "position": 0, "profile_pic_url": "https://img/nasa", "username": "nasa"}]
     assert body["data"]["hashtags"] == body["data"]["places"] == []
+
+
+def test_feed_mappers_expose_normalized_thumbnail_and_date_aliases():
+    user = {**PROFILE, "polaris_ordered_timeline_connection": {"edges": [{"node": {
+        "pk": "1", "code": "abc", "media_type": 1, "display_uri": "https://img", "taken_at": 1700000000,
+        "user": {"pk": PROFILE["pk"], "username": PROFILE["username"]},
+    }}]}}
+    item = ig.map_user_posts(user)["items"][0]
+    assert item["thumbnail_url"] == item["display_uri"] == "https://img"
+    assert item["taken_at"] == item["taken_at_timestamp"] == 1700000000

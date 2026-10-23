@@ -22,7 +22,7 @@ from time import perf_counter
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.responses import Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -179,6 +179,25 @@ def create_app() -> FastAPI:
 
     load_platform_modules(app)
     add_unsupported_routes(app)
+
+    aliases = {
+        "/v1/instagram/story-highlights": "/v1/instagram/user/highlights",
+        "/v1/instagram/highlights": "/v1/instagram/user/highlights",
+        "/v1/instagram/highlights/details": "/v1/instagram/user/highlight/detail",
+        "/v1/instagram/highlight/details": "/v1/instagram/user/highlight/detail",
+        "/v1/tiktok/followers": "/v1/tiktok/user/followers",
+        "/v1/tiktok/profile/followers": "/v1/tiktok/user/followers",
+        "/v1/tiktok/following": "/v1/tiktok/user/following",
+        "/v1/tiktok/profile/following": "/v1/tiktok/user/following",
+        "/v1/tiktok/profile/audience-demographics": "/v1/tiktok/user/audience",
+        "/v1/tiktok/user/audience-demographics": "/v1/tiktok/user/audience",
+    }
+    for alias, canonical in aliases.items():
+        async def legacy_alias(request: Request, _canonical: str = canonical):
+            query = f"?{request.url.query}" if request.url.query else ""
+            return RedirectResponse(_canonical + query, status_code=307)
+        legacy_alias.__name__ = "alias_" + alias.strip("/").replace("/", "_").replace("-", "_")
+        app.add_api_route(alias, legacy_alias, methods=["GET"], include_in_schema=False)
     app.include_router(account.router)
     clear_active_portal()
     if settings.portal_path:

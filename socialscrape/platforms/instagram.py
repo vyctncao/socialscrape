@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 import yt_dlp
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Body, Query, Request
 from yt_dlp.extractor.instagram import InstagramBaseIE, InstagramIE, InstagramStoryIE, _id_to_pk
 from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
@@ -783,6 +783,9 @@ def map_user_posts(user: dict[str, Any], counts: dict[str, dict[str, Any]] | Non
             "media_type": node.get("media_type"),
             "caption": {"text": text} if text is not None else None,
             "display_uri": node.get("display_uri"),
+            "thumbnail_url": node.get("display_uri"),
+            "taken_at": node.get("taken_at"),
+            "taken_at_timestamp": node.get("taken_at"),
             "user": author,
             "owner": author,
             "product_type": node.get("product_type"),
@@ -808,6 +811,9 @@ def map_user_reels(user: dict[str, Any]) -> dict[str, Any]:
             "comment_count": node.get("comment_count"),
             "like_count": node.get("like_count"),
             "display_uri": node.get("display_uri"),
+            "thumbnail_url": node.get("display_uri"),
+            "taken_at": node.get("taken_at"),
+            "taken_at_timestamp": node.get("taken_at"),
             "user": author,
             "owner": author,
             "url": f"{WEB}/reel/{node['code']}/" if node.get("code") else None,
@@ -1035,6 +1041,14 @@ async def instagram_transcript(url: str = Query(...), allow_long_transcription: 
 async def instagram_profile(handle: str = Query(...), trim: str | None = None) -> dict[str, Any]:
     user, html = await fetch_profile(clean_handle(handle))
     return {"data": {"user": map_profile(user, post_count_from_meta(html))}}
+
+
+@router.post("/v1/instagram/profile", summary="Profile (POST compatibility)", include_in_schema=True)
+async def instagram_profile_post(payload: dict[str, Any] = Body(...)) -> Any:
+    handle = payload.get("handle")
+    if not isinstance(handle, str) or not handle.strip():
+        raise BadRequest("handle is required")
+    return {"success": True, "credits_charged": 0, **await instagram_profile(handle, payload.get("trim"))}
 
 
 @sc_get(router, "/v1/instagram/profile/post-count", source="yt-dlp InstagramUserIE profile page (og:description)",
