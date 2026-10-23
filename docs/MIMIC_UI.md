@@ -12,11 +12,28 @@ Components read semantic roles, including `--overlay` for native dialogs and
 `--selected` for persistent selection. The theme lives on the document root so
 native top-layer surfaces inherit the same roles.
 
-The portal uses the kit’s Inter variable font and OFL license, butterfly monogram,
-paired courtyard artwork, and a subset of its Lucide SVGs. The artwork appears only
-on authentication screens. The butterfly is a static brand mark, not the animated
-agent character. Source assets remain unchanged. No external font or icon service
-is required at runtime.
+The portal uses the kit’s Inter variable font and OFL license, paired courtyard
+artwork, and a subset of its Lucide SVGs. Its own logo is a webpage with data rows
+and an extraction arrow. The lockup pairs that mark with **Social Scrape**, with
+**by Mimic** on a smaller line below. Authentication, navigation and mobile pages
+share this lockup; the collapsed sidebar keeps the icon and an accessible name.
+The courtyard artwork appears without a logo overlay, only on authentication
+screens. No external font or icon service is required at runtime.
+
+`brand/logomark.svg` and `brand/logomark-chalk.svg` contain the new icon in ink and
+white. Their PNG equivalents support email clients. `brand/logo.svg` and
+`brand/logo-white.svg` contain the full lockup with outlined Inter lettering;
+their transparent PNG exports are 960 × 288 and can display at 240 × 72 in emails.
+Use `logo.png` on light backgrounds and `logo-white.png` on dark backgrounds,
+with alt text “Social Scrape by Mimic”. Email images are served from
+`/assets/brand/` when the portal is enabled. Email templates should use absolute
+PNG URLs from the configured public origin, since SVG support varies between
+email clients.
+
+`brand/favicon.svg`, `brand/favicon.png` and the 16/32/48px ICO contain only the
+white extraction icon on a transparent background. Root favicon routes also
+serve the icon without an API key, including when the portal is disabled. The
+standalone Swagger and ReDoc pages use it too.
 
 The shell and all page renderers remain in `portal.html`, `portal.css`, and
 `portal.js`, except the playground's response preview, which lives in

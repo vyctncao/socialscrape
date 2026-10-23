@@ -34,9 +34,12 @@ small,.small{font-size:var(--fs-xs)}
 .skip-link{position:fixed;top:8px;left:8px;transform:translateY(-160%);background:var(--primary);color:var(--primary-fg);padding:12px 16px;z-index:100;border-radius:var(--r-md)}
 .skip-link:focus{transform:none}
 .brand{display:flex;align-items:center;gap:var(--space-3);font-size:17px;font-weight:650;line-height:1.2;letter-spacing:-.04em;min-width:0}
-.brand small{display:block;font-size:11px;font-weight:400;letter-spacing:0;color:var(--text-2);margin-top:5px}
-.brand-mark{display:block;width:32px;height:28px;flex:none;background:center/contain no-repeat url('/assets/brand/logomark-chalk.svg')}
-[data-theme=light] .brand-mark{background-image:url('/assets/brand/logomark.svg')}
+.brand-copy{display:grid;gap:3px;min-width:0}
+.brand-name{white-space:nowrap}
+.brand small{display:block;font-size:10px;font-weight:400;line-height:1.2;letter-spacing:0;color:var(--text-2)}
+.brand-mark{display:block;width:36px;height:36px;flex:none;object-fit:contain}
+.brand-mark-light,[data-theme=light] .brand-mark-dark{display:none}
+[data-theme=light] .brand-mark-light{display:block}
 .app{min-height:100dvh;padding:8px 8px 8px var(--sidebar)}
 .sidebar{position:fixed;inset:0 auto 0 0;width:var(--sidebar);display:flex;flex-direction:column;padding:var(--space-6) var(--space-3) var(--space-3);background:var(--shell-chrome);z-index:12}
 .sidebar>.brand{padding:0 var(--space-3);margin:var(--space-2) 0 var(--space-8)}
@@ -251,6 +254,8 @@ button.text-link{background:none;border:0;color:var(--text-1);font:inherit;min-h
 .auth-shell{display:grid;grid-template-columns:minmax(0,1fr) 38%;min-height:100dvh;padding:var(--space-4)}
 .auth-main{display:flex;flex-direction:column;padding:var(--space-6) var(--space-10);min-width:0}
 .auth-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4)}
+.auth-header .brand{font-size:20px}
+.auth-header .brand small{font-size:11px}
 .auth-card{width:min(100%,380px);margin:auto; padding:var(--space-16) 0}
 .auth-card h1{margin:0 0 var(--space-3);font-size:30px;letter-spacing:-.035em}
 .auth-card>p{color:var(--text-2);margin-bottom:var(--space-8)}
@@ -264,8 +269,6 @@ button.text-link{background:none;border:0;color:var(--text-1);font:inherit;min-h
 .auth-art .art-light{display:none}
 [data-theme=light] .auth-art .art-light{display:block}
 [data-theme=light] .auth-art .art-dark{display:none}
-.auth-art-label{position:absolute;left:var(--space-8);top:var(--space-8);color:var(--ink-on-color);font-size:12px;letter-spacing:.08em}
-.auth-art-label img{position:static;width:32px;height:24px;object-fit:contain;vertical-align:middle;margin-right:var(--space-3)}
 .auth-hint{font-size:var(--fs-xs);color:var(--text-2);margin:var(--space-6) 0 0;text-align:center}
 .platforms{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-5)}
 @keyframes surface-enter{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
@@ -318,7 +321,7 @@ button.text-link{background:none;border:0;color:var(--text-1);font:inherit;min-h
 :root[data-sidebar=collapsed]{--sidebar:72px}
 [data-sidebar=collapsed] .sidebar{padding-inline:12px}
 [data-sidebar=collapsed] .sidebar .brand{justify-content:center;padding:0}
-[data-sidebar=collapsed] .sidebar .brand-name,[data-sidebar=collapsed] .sidebar .nav-label,[data-sidebar=collapsed] .sidebar .nav-group,[data-sidebar=collapsed] .sidebar .account-trigger .account-copy,[data-sidebar=collapsed] .sidebar .account-trigger>.icon{display:none}
+[data-sidebar=collapsed] .sidebar .brand-copy,[data-sidebar=collapsed] .sidebar .nav-label,[data-sidebar=collapsed] .sidebar .nav-group,[data-sidebar=collapsed] .sidebar .account-trigger .account-copy,[data-sidebar=collapsed] .sidebar .account-trigger>.icon{display:none}
 [data-sidebar=collapsed] .sidebar .nav{gap:8px}
 [data-sidebar=collapsed] .sidebar .nav a{justify-content:center;min-height:44px;padding:0}
 [data-sidebar=collapsed] .sidebar .nav a[aria-current=page]::after{display:none}

@@ -1,4 +1,9 @@
-# socialscrape API
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="socialscrape/static/brand/logo-white.svg">
+  <img src="socialscrape/static/brand/logo.svg" alt="Social Scrape by Mimic" width="320" height="96">
+</picture>
+
+# Social Scrape API
 
 A self-hosted, [ScrapeCreators](https://docs.scrapecreators.com)-compatible API for **YouTube, TikTok and Instagram**, built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 

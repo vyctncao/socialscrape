@@ -14,11 +14,13 @@ import socket
 import sys
 import threading
 import time
+from pathlib import Path
 from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.responses import Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -35,7 +37,7 @@ from .registry import IMPLEMENTED, add_unsupported_routes, coverage, mark_unsupp
 
 log = logging.getLogger("socialscrape")
 
-PUBLIC_PATHS = {"/health", "/redoc", "/meta/coverage"}
+PUBLIC_PATHS = {"/health", "/redoc", "/meta/coverage", "/favicon.svg", "/favicon.ico"}
 LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs", "/openapi.json"}
 PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/assets/", "/app", "/docs")
 
@@ -112,11 +114,11 @@ def create_app() -> FastAPI:
         log.warning("SOCIALSCRAPE_TRANSCRIBE=%s but its package is not installed: AI transcription answers 501 "
                     "transcription_unavailable", settings.transcribe_backend)
     app = FastAPI(
-        title="SocialScrape",
+        title="Social Scrape",
         version="0.1.0",
         description="Private, self-hosted social data API for YouTube, TikTok and Instagram, powered by yt-dlp.",
-        docs_url=None if settings.portal_path else "/docs",
-        redoc_url=None if settings.portal_path else "/redoc",
+        docs_url=None,
+        redoc_url=None,
     )
     app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
@@ -136,6 +138,23 @@ def create_app() -> FastAPI:
         portal.bootstrap_owner(os.environ.get("SOCIALSCRAPE_OWNER_EMAIL"),
                                os.environ.get("SOCIALSCRAPE_OWNER_PASSWORD"))
         install_portal(app, portal)
+
+    @app.api_route("/favicon.svg", methods=["GET", "HEAD"], include_in_schema=False)
+    @app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
+    async def favicon(request: Request):
+        asset = Path(__file__).with_name("static") / "brand" / request.url.path.rsplit("/", 1)[-1]
+        return FileResponse(asset, headers={"cache-control": "public, max-age=0, must-revalidate"})
+
+    if not settings.portal_path:
+        @app.api_route("/docs", methods=["GET", "HEAD"], include_in_schema=False)
+        async def swagger_docs():
+            return get_swagger_ui_html(openapi_url=app.openapi_url, title="Social Scrape API docs",
+                                       swagger_favicon_url="/favicon.svg")
+
+        @app.api_route("/redoc", methods=["GET", "HEAD"], include_in_schema=False)
+        async def redoc_docs():
+            return get_redoc_html(openapi_url=app.openapi_url, title="Social Scrape API reference",
+                                  redoc_favicon_url="/favicon.svg")
 
     # HEAD for uptime probes (curl -I). Not on the data routes: there it would still run the scrape.
     @app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)

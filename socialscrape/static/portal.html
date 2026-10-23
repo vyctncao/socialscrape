@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#171717">
   <title>Social Scrape</title>
-  <link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/brand/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
+  <link rel="icon" href="/assets/brand/favicon.svg" sizes="any" type="image/svg+xml">
   <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/brand/tokens.css">
   <link rel="stylesheet" href="/assets/portal.css">
@@ -15,7 +16,7 @@
   <a class="skip-link" href="#view">Skip to content</a>
   <div class="app">
     <aside class="sidebar" id="primary-sidebar" aria-label="Main sidebar">
-      <a class="brand" href="/app" aria-label="Social Scrape overview"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Social Scrape</span></a>
+      __BRAND__
       <nav class="nav" id="nav" aria-label="Main navigation">
         <p class="nav-group">Workspace</p>
         <a data-page="overview" href="/app" aria-label="Overview" title="Overview"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#squares-four"></use></svg><span class="nav-label">Overview</span></a>
@@ -45,7 +46,7 @@
       <footer class="content-foot"><span>Social Scrape</span><span class="footer-platforms" aria-label="Supported platforms"></span></footer>
     </div>
   </div>
-  <dialog class="nav-drawer" id="nav-dialog" aria-label="Navigation"><div class="drawer-head"><a class="brand" href="/app"><span class="brand-mark" aria-hidden="true"></span><span>Social Scrape</span></a><button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><button type="button" class="account-trigger" data-account-trigger popovertarget="mobile-account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="mobile-account-menu"></button><div class="account-popup" id="mobile-account-menu" popover="auto" role="dialog" aria-labelledby="mobile-account-menu-title"></div></div></dialog>
+  <dialog class="nav-drawer" id="nav-dialog" aria-label="Navigation"><div class="drawer-head">__BRAND__<button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><button type="button" class="account-trigger" data-account-trigger popovertarget="mobile-account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="mobile-account-menu"></button><div class="account-popup" id="mobile-account-menu" popover="auto" role="dialog" aria-labelledby="mobile-account-menu-title"></div></div></dialog>
   <dialog class="modal" id="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"></dialog>
   <div class="toast-region" id="toasts" role="status" aria-live="polite"></div>
   <div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true">Loading page…</div>

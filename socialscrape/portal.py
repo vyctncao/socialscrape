@@ -27,6 +27,9 @@ from .config import ConfigError, validate_proxy
 SESSION_COOKIE = "socialscrape_session"
 SESSION_SECONDS = 60 * 60 * 24 * 30
 PBKDF2_ROUNDS = 600_000
+BRAND_ASSETS = ("brand/favicon.svg", "brand/favicon.ico", "brand/favicon.png",
+                "brand/logomark.svg", "brand/logomark-chalk.svg", "brand/logomark.png", "brand/logomark-chalk.png",
+                "brand/logo.svg", "brand/logo-white.svg", "brand/logo.png", "brand/logo-white.png")
 _active_store: Any = None
 
 
@@ -472,7 +475,8 @@ def _portal_asset_version() -> str:
     assets = Path(__file__).with_name("static")
     digest = hashlib.sha256()
     for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
-                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg"):
+                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg",
+                 *BRAND_ASSETS):
         digest.update(name.encode())
         digest.update((assets / name).read_bytes())
     return digest.hexdigest()[:16]
@@ -480,8 +484,9 @@ def _portal_asset_version() -> str:
 
 def _versioned_page(page: str) -> str:
     version = _portal_asset_version()
-    page = page.replace("__ASSET_VERSION__", version)
-    for name in ("portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg"):
+    page = page.replace("__ASSET_VERSION__", version).replace("__BRAND__", _brand("/app"))
+    for name in ("portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
+                 *BRAND_ASSETS):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
@@ -500,23 +505,33 @@ def _loading_templates() -> tuple[str, dict[str, str]]:
     return markup, pages
 
 
+def _brand(href: str) -> str:
+    return (f'<a class="brand" href="{href}" '
+            'aria-label="Social Scrape by Mimic" title="Social Scrape">'
+            '<img class="brand-mark brand-mark-dark" src="/assets/brand/logomark-chalk.svg" '
+            'width="36" height="36" alt="">'
+            '<img class="brand-mark brand-mark-light" src="/assets/brand/logomark.svg" '
+            'width="36" height="36" alt="">'
+            '<span class="brand-copy"><span class="brand-name">Social Scrape</span>'
+            '<small>by Mimic</small></span></a>')
+
+
 def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
     shell = body if bare else f'<main class="auth-card">{body}</main>'
     return HTMLResponse(_versioned_page(f'''<!doctype html><html lang="en" data-asset-version="__ASSET_VERSION__"><head><meta charset="utf-8"><meta name="viewport"
 content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</title>
-<link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/brand/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
+<link rel="icon" href="/assets/brand/favicon.svg" sizes="any" type="image/svg+xml">
 <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/brand/tokens.css"><link rel="stylesheet" href="/assets/portal.css">
 <script src="/assets/appearance.js"></script></head><body class="auth-page">
 <div class="auth-shell"><div class="auth-main"><header class="auth-header">
-<a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>
-<span>Social Scrape</span></a>
+{_brand("/")}
 <button class="icon-button" data-theme-toggle aria-label="Switch theme"></button></header>{shell}
 <footer class="auth-footer"><span>Social Scrape</span><span>Private · Invite-only</span></footer>
-</div><aside class="auth-art" aria-label="Mimic editorial artwork">
+</div><aside class="auth-art" aria-label="Social Scrape artwork">
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
-<span class="auth-art-label"><img src="/assets/brand/logomark-chalk.svg" alt="">MIMIC</span>
 </aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''))
 
 
