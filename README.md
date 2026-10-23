@@ -38,6 +38,13 @@ generated from the server's OpenAPI schema. Request history keeps every request,
 for 14 days and up to 256 MiB in all (oldest cleared first); the response cache drops entries older than 30 days and
 keeps at most 256 MiB. Both share the database volume with members and keys, so neither can fill it.
 
+**Endpoint tests** (a Playground tab, `/app/tests`) checks what works right now: it calls every endpoint with preset parameters (public
+content that should stay up, mostly the live test suite's fixtures, kept in `socialscrape/selftest.py`) and marks each
+one passed, failed, needs setup (a feature this server has turned off, such as AI transcription) or not supported. A
+pass needs a `200`, `success: true` and real data in the fields that preset names. The tests are live requests made with
+your session, so they also appear in Request history; platforms run side by side, each platform's tests one at a time,
+and the latest results stay in your browser.
+
 Passwords use PBKDF2-SHA256. Session and API tokens are stored only as SHA-256 hashes; session cookies are HTTP-only
 and SameSite strict; state-changing JSON requests require a CSRF token. For deployment, mount the database directory
 on persistent storage. Set a long random `SOCIALSCRAPE_SETUP_TOKEN` as a deployment secret while creating the first
@@ -45,7 +52,7 @@ owner, then remove it; without that code, nobody can claim an empty deployment. 
 `SOCIALSCRAPE_OWNER_EMAIL` and `SOCIALSCRAPE_OWNER_PASSWORD` can bootstrap the first owner non-interactively. Supply
 all three only as deployment secrets and remove them after the first successful startup—never commit them. Existing
 `SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility. Owners can configure ordered pools of up to five proxies and five authenticated-account cookie files for Instagram,
-TikTok and YouTube in **Platform settings**. Values are encrypted in the portal database with
+TikTok and YouTube under **Settings → Proxies & accounts**. Values are encrypted in the portal database with
 `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY`, never returned after saving, and applied to new requests immediately. On a
 retryable block or network/login failure, the service advances to the next proxy and account without merging cookie
 jars. Use only dedicated throwaway accounts; the dashboard accepts Netscape `cookies.txt` exports and never stores
@@ -94,7 +101,7 @@ Configuration is through environment variables (the `socialscrape` command takes
 
 ## ScrapeCreators fallback
 
-With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fails here can be answered by ScrapeCreators instead: the same path and params are sent to `https://api.scrapecreators.com` with your ScrapeCreators key, and its answer comes back. Owners set the key and choose when it applies on the dashboard's **Fallback** page (`/app/fallback`), or with the `SOCIALSCRAPE_SCRAPECREATORS_*` variables; a saved dashboard value takes the place of its variable, and changes apply to the next request.
+With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fails here can be answered by ScrapeCreators instead: the same path and params are sent to `https://api.scrapecreators.com` with your ScrapeCreators key, and its answer comes back. Owners set the key and choose when it applies under the dashboard's **Settings → Fallback** (`/app/fallback`), or with the `SOCIALSCRAPE_SCRAPECREATORS_*` variables; a saved dashboard value takes the place of its variable, and changes apply to the next request.
 
 - **When.** Each trigger can be turned on or off, and the fallback limited to some platforms:
 
@@ -105,7 +112,7 @@ With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fail
   | `restricted` | `403`: private, login-gated, age- or geo-restricted content | off |
   | `not_found` | `404 not_found` | off |
 
-  Other errors (a bad param, a missing key, a wrong method, `422 estimate_only`) never fall back, and neither do requests carrying this server's own `ss1.` cursors.
+  Other errors (a bad param, a missing key, a wrong method, `422 estimate_only`) never fall back, and neither do requests carrying this server's own `ss1.` cursors or an `x-socialscrape-fallback: off` header (the dashboard's endpoint tests send it unless you allow the fallback there; with `cache_max_age`, such a request isn't answered from a cached ScrapeCreators response either).
 - **What you get.** ScrapeCreators' success, unchanged, with an `x-socialscrape-fallback: scrapecreators` header. When this server had no answer of its own (`501`, `bad_cursor`), its `400`, `403`, `404` or `422` too. Otherwise (its key is refused, its credits ran out, it fails or doesn't answer in time) the local error, with a `fallback` object saying what ScrapeCreators answered: `{"provider": "scrapecreators", "status": 401, "error": "unauthorized", "message": "..."}`.
 - **Credits.** Fallback requests spend ScrapeCreators credits (its errors cost none; a request that timed out may still have been charged). Its answers are cached like any other response, so `cache_max_age` avoids paying twice. ScrapeCreators is always asked live, without `cache_max_age`: an answer from its cache would otherwise be stored here as new. Request history marks the requests it served, and Usage counts them.
 - **Safety.** The fallback runs only behind authentication (`SOCIALSCRAPE_API_KEYS` or the dashboard): with neither, the key is ignored, since anyone could spend the credits. Only the ScrapeCreators key is sent, never the caller's headers or key, and redirects aren't followed. A dashboard key is encrypted with `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY` and never shown again. Requests carry `Via: 1.1 socialscrape`, and one that arrives with it doesn't fall back, so an upstream URL pointed back at a socialscrape server can't loop.

@@ -29,7 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 import yt_dlp
 
-from . import fallback, platforms, transcribe, ytdlp
+from . import fallback, platforms, selftest, transcribe, ytdlp
 from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
@@ -154,6 +154,7 @@ def create_app() -> FastAPI:
                                os.environ.get("SOCIALSCRAPE_OWNER_PASSWORD"))
         install_portal(app, portal)
         fallback.install_routes(app, portal)
+        selftest.install_routes(app)
 
     @app.api_route("/favicon.svg", methods=["GET", "HEAD"], include_in_schema=False)
     @app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)

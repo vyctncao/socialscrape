@@ -65,7 +65,18 @@ JSON tab re-indents the response text without parsing numbers, so IDs beyond 2^5
 keep every digit, and the copy button always copies it.
 Proxy settings retain owner permissions and the server’s encrypted storage contract.
 
-The sidebar can collapse to an icon rail. Its state is initialized on the document
+The sidebar is one flat list: Overview, Playground, API keys, Usage, Documentation and
+Team, with Settings pinned above the account trigger. Team and Settings are owner-only
+and leave the member sidebar. Related views share one destination and a row of link
+tabs under the page title, each with its own URL: Playground holds Request builder and
+Endpoint tests, Usage holds Analytics and Request history, and Settings holds Proxies &
+accounts and Fallback. Add a new view as a tab of the destination it belongs to before
+adding a sidebar item. The top bar holds only navigation and actions (collapse, theme);
+each page's title block names the view, and Overview carries the request and key totals.
+
+The sidebar head and the top bar share `--topbar-h` and `--shell-gap`, so the brand and
+the collapse toggle sit on one center line. The 28px mark, nav icons and avatar share a
+column in both states. The sidebar can collapse to an icon rail. Its state is initialized on the document
 root before rendering and saved independently from the appearance theme. Every
 icon-only destination retains its accessible name and tooltip. The account trigger
 uses one-line identity text and opens the kit's neutral account popup, with theme,
@@ -74,7 +85,7 @@ controls stay inside the active modal's interaction scope.
 
 Instagram, TikTok, and YouTube use the kit's original colored brand artwork in
 `brand/platforms/`. One platform-label helper keeps the picker, overview, reference,
-settings, route activity, and footer consistent. The picker uses a native popover
+settings and route activity consistent. The picker uses a native popover
 with labeled listbox options and keyboard navigation because ordinary native
 select options cannot display the brand images consistently. Only the three data
 platforms appear in the picker; metadata such as coverage remains outside it.
@@ -91,9 +102,9 @@ and persistent volume when changing its deployment definition.
 
 Loading follows the kit's `ui-motion-loading` and feedback specimens. The first
 server response and client navigation share inert page templates in `loading.html`,
-so all eight destinations reserve their own cards, forms, charts, and table rows.
-Table headings and the workspace shell stay visible. The header counters use
-placeholders until real counts arrive, and only fetching regions are marked busy.
+so every view, including its tab row, reserves its own cards, forms, charts, and table
+rows. Table headings and the workspace shell stay visible, and only fetching regions are
+marked busy.
 The templates participate in the UI asset digest and ship in the Python wheel.
 
 Refreshes retain existing content. A partial overview keeps successful sections
@@ -120,8 +131,7 @@ script can still stop the whole UI if a shared initializer was removed while its
 call remained. Smoke-test both the account menu and platform picker in addition
 to waiting for every page's busy state to settle.
 
-Account-scoped session cache can fill the header while fresh reads run; those
-reads share in-flight promises with the active page. Startup failures expose a
+Repeated reads share in-flight promises with the active page. Startup failures expose a
 normal reload link even when script initialization has stopped. Stored response
 dialogs open immediately with a local skeleton, preserve close-button focus,
 offer inline retry, and ignore completions after the dialog closes.
@@ -130,3 +140,9 @@ The `/ui-ux-pro-max` review supplements Mimic's visual rules with checks for
 keyboard focus, stable pending controls, explicit recovery, responsive layouts,
 contrast, and reduced motion. Its generated palette and typography do not replace
 Mimic's workspace tokens or original platform artwork.
+
+Endpoint tests (`/app/tests`), a Playground tab, lives in `selftest.js` and `selftest.css`, like the
+Fallback tab’s own files, and renders through the same router with its own loading skeleton. Its
+platform filter is a radio group drawn as the kit’s segmented control, every result pairs a
+status badge with words, failures are announced politely as they happen, and the run’s one
+primary action becomes Stop while tests are running.

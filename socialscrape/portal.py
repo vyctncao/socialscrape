@@ -531,7 +531,7 @@ def _portal_asset_version() -> str:
     assets = Path(__file__).with_name("static")
     digest = hashlib.sha256()
     for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js",
-                 "appearance.js", "brand/tokens.css", "brand/icons.svg",
+                 "selftest.css", "selftest.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
                  "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg",
                  *BRAND_ASSETS):
         digest.update(name.encode())
@@ -542,8 +542,8 @@ def _portal_asset_version() -> str:
 def _versioned_page(page: str) -> str:
     version = _portal_asset_version()
     page = page.replace("__ASSET_VERSION__", version).replace("__BRAND__", _brand("/app"))
-    for name in ("portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js", "appearance.js",
-                 "brand/tokens.css", "brand/icons.svg", *BRAND_ASSETS):
+    for name in ("portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js", "selftest.css", "selftest.js",
+                 "appearance.js", "brand/tokens.css", "brand/icons.svg", *BRAND_ASSETS):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
@@ -707,8 +707,8 @@ def install_portal(app, store: PortalStore) -> None:
 <form method="post" action="{action}">{setup_field}
 <label>Email<input name="email" type="email" autocomplete="email" required></label>
 <label>Password<input name="password" type="password"
-autocomplete="{'new-password' if setup else 'current-password'}" minlength="12" required
-aria-describedby="password-hint"></label><p class="help" id="password-hint">Use at least 12 characters.</p>
+autocomplete="{'new-password' if setup else 'current-password'}" required
+{'minlength="12" aria-describedby="password-hint"' if setup else ''}></label>{'<p class="help" id="password-hint">Use at least 12 characters.</p>' if setup else ''}
 <button class="primary" type="submit" {'disabled' if setup and not setup_enabled else ''}>
 {'Create owner account' if setup else 'Sign in'}</button></form>
 <div class="auth-hint">Access is by invitation. Contact your workspace owner to join.</div>''')
