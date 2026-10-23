@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import html
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
 import time
+from time import monotonic
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -26,6 +29,9 @@ from .config import ConfigError, validate_proxy
 SESSION_COOKIE = "socialscrape_session"
 SESSION_SECONDS = 60 * 60 * 24 * 30
 PBKDF2_ROUNDS = 600_000
+BRAND_ASSETS = ("brand/favicon.svg", "brand/favicon.ico", "brand/favicon.png",
+                "brand/logomark.svg", "brand/logomark-chalk.svg", "brand/logomark.png", "brand/logomark-chalk.png",
+                "brand/logo.svg", "brand/logo-white.svg", "brand/logo.png", "brand/logo-white.png")
 _active_store: Any = None
 
 
@@ -106,7 +112,8 @@ class PortalStore:
                 duration_ms INTEGER NOT NULL,
                 cached INTEGER NOT NULL DEFAULT 0,
                 response_body BLOB,
-                response_truncated INTEGER NOT NULL DEFAULT 0
+                response_truncated INTEGER NOT NULL DEFAULT 0,
+                fallback INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON members(role) WHERE role='owner';
             CREATE INDEX IF NOT EXISTS requests_created_at ON requests(created_at DESC);
@@ -117,6 +124,8 @@ class PortalStore:
             self._conn.execute("ALTER TABLE requests ADD COLUMN response_body BLOB")
         if "response_truncated" not in columns:
             self._conn.execute("ALTER TABLE requests ADD COLUMN response_truncated INTEGER NOT NULL DEFAULT 0")
+        if "fallback" not in columns:  # served by ScrapeCreators (fallback.py)
+            self._conn.execute("ALTER TABLE requests ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
 
     @staticmethod
@@ -223,6 +232,14 @@ class PortalStore:
         pool.append({"id": entry_id, "value": value, "updated_at": time.time()})
         self._save_pool(owner, platform, kind, pool)
         return entry_id
+
+    def platform_setting_value(self, owner: Principal, platform: str, kind: str, entry_id: str) -> str:
+        if owner.role != "owner":
+            raise PermissionError
+        item = next((item for item in self._pool(platform, kind) if item["id"] == entry_id), None)
+        if not item:
+            raise ValueError("Platform setting not found")
+        return item["value"]
 
     def remove_platform_setting(self, owner: Principal, platform: str, kind: str, entry_id: str) -> bool:
         if owner.role != "owner":
@@ -400,7 +417,8 @@ class PortalStore:
             return cur.rowcount == 1
 
     def record_request(self, principal: Principal | None, key_id: int | None, method: str, path: str, query: str,
-                       status: int, duration_ms: int, cached: bool, response_body: bytes = b"") -> None:
+                       status: int, duration_ms: int, cached: bool, response_body: bytes = b"",
+                       fallback: bool = False) -> None:
         max_body = 2 * 1024 * 1024
         stored_body, truncated = response_body[:max_body], len(response_body) > max_body
         with self._lock:
@@ -408,9 +426,9 @@ class PortalStore:
                 self._conn.execute("UPDATE api_keys SET last_used_at=? WHERE id=?", (time.time(), key_id))
             self._conn.execute(
                 "INSERT INTO requests(member_id,api_key_id,created_at,method,path,query,status,duration_ms,cached,"
-                "response_body,response_truncated) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "response_body,response_truncated,fallback) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (principal.id if principal else None, key_id, time.time(), method, path, query[:4000], status,
-                 duration_ms, int(cached), stored_body, int(truncated)),
+                 duration_ms, int(cached), stored_body, int(truncated), int(fallback)),
             )
             self._conn.commit()
 
@@ -418,7 +436,7 @@ class PortalStore:
         where, args = ("", ()) if principal.role == "owner" else ("WHERE r.member_id=?", (principal.id,))
         with self._lock:
             rows = self._conn.execute(
-                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,"
+                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
                 "r.response_body IS NOT NULL has_response,r.response_truncated,k.prefix,m.email "
                 "FROM requests r LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"{where} ORDER BY r.created_at DESC LIMIT ?", (*args, min(max(limit, 1), 500))
@@ -430,7 +448,7 @@ class PortalStore:
                        else ("r.id=? AND r.member_id=?", (request_id, principal.id)))
         with self._lock:
             row = self._conn.execute(
-                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,"
+                "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
                 "r.response_body,r.response_truncated,k.prefix,m.email FROM requests r "
                 "LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"WHERE {where}", args
@@ -458,20 +476,25 @@ class PortalStore:
                 "GROUP BY path ORDER BY count DESC,path LIMIT 10", (now - 30 * 86400, *args)
             ).fetchall()
             total = self._conn.execute(f"SELECT COUNT(*) count FROM requests WHERE 1=1 {clause}", args).fetchone()[0]
+            fallback_count = self._conn.execute(
+                f"SELECT COUNT(*) FROM requests WHERE created_at>=? AND fallback=1 {clause}", (now - 30 * 86400, *args)
+            ).fetchone()[0]
         points = {(int(r["bucket"]), r["platform"]): r["count"] for r in daily}
         days = [{platform: points.get((i - 29, platform), 0)
                  for platform in ("instagram", "tiktok", "youtube", "other")} for i in range(30)]
         for day in days:
             day["total"] = sum(day.values())
-        return {"total": total, "daily": days, "routes": [dict(r) for r in routes]}
+        return {"total": total, "daily": days, "routes": [dict(r) for r in routes], "fallback_count": fallback_count}
 
 
 @cache
 def _portal_asset_version() -> str:
     assets = Path(__file__).with_name("static")
     digest = hashlib.sha256()
-    for name in ("portal.html", "portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
-                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg"):
+    for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js",
+                 "appearance.js", "brand/tokens.css", "brand/icons.svg",
+                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg",
+                 *BRAND_ASSETS):
         digest.update(name.encode())
         digest.update((assets / name).read_bytes())
     return digest.hexdigest()[:16]
@@ -479,32 +502,55 @@ def _portal_asset_version() -> str:
 
 def _versioned_page(page: str) -> str:
     version = _portal_asset_version()
-    page = page.replace("__ASSET_VERSION__", version)
-    for name in ("portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg"):
+    page = page.replace("__ASSET_VERSION__", version).replace("__BRAND__", _brand("/app"))
+    for name in ("portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js", "appearance.js",
+                 "brand/tokens.css", "brand/icons.svg", *BRAND_ASSETS):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
     return page
 
 
+@cache
+def _loading_templates() -> tuple[str, dict[str, str]]:
+    markup = Path(__file__).with_name("static").joinpath("loading.html").read_text()
+    def rows(match: re.Match) -> str:
+        cells = '<td><i class="skeleton sk-line"></i></td>' * int(match[2])
+        return '<tbody aria-hidden="true">' + ('<tr>' + cells + '</tr>') * int(match[1]) + '</tbody>'
+    markup = re.sub(r'<tbody aria-hidden="true" data-skeleton-rows="(\d+)" data-skeleton-columns="(\d+)"></tbody>', rows, markup)
+    markup = markup.replace('<th>', '<th scope="col">')
+    pages = dict(re.findall(r'<template data-loading-page="([a-z]+)">(.*?)</template>', markup, re.S))
+    return markup, pages
+
+
+def _brand(href: str) -> str:
+    return (f'<a class="brand" href="{href}" '
+            'aria-label="Social Scrape by Mimic" title="Social Scrape">'
+            '<img class="brand-mark brand-mark-dark" src="/assets/brand/logomark-chalk.svg" '
+            'width="36" height="36" alt="">'
+            '<img class="brand-mark brand-mark-light" src="/assets/brand/logomark.svg" '
+            'width="36" height="36" alt="">'
+            '<span class="brand-copy"><span class="brand-name">Social Scrape</span>'
+            '<small>by Mimic</small></span></a>')
+
+
 def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
     shell = body if bare else f'<main class="auth-card">{body}</main>'
     return HTMLResponse(_versioned_page(f'''<!doctype html><html lang="en" data-asset-version="__ASSET_VERSION__"><head><meta charset="utf-8"><meta name="viewport"
 content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</title>
-<link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/brand/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
+<link rel="icon" href="/assets/brand/favicon.svg" sizes="any" type="image/svg+xml">
 <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/brand/tokens.css"><link rel="stylesheet" href="/assets/portal.css">
 <script src="/assets/appearance.js"></script></head><body class="auth-page">
 <div class="auth-shell"><div class="auth-main"><header class="auth-header">
-<a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>
-<span>Social Scrape</span></a>
+{_brand("/")}
 <button class="icon-button" data-theme-toggle aria-label="Switch theme"></button></header>{shell}
 <footer class="auth-footer"><span>Social Scrape</span><span>Private · Invite-only</span></footer>
-</div><aside class="auth-art" aria-label="Mimic editorial artwork">
+</div><aside class="auth-art" aria-label="Social Scrape artwork">
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
-<span class="auth-art-label"><img src="/assets/brand/logomark-chalk.svg" alt="">MIMIC</span>
-</aside></div></body></html>'''))
+</aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''))
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
@@ -531,6 +577,33 @@ def _validate_cookies(platform: str, value: str) -> None:
     suffix = {"instagram": "instagram.com", "tiktok": "tiktok.com", "youtube": "youtube.com"}[platform]
     if not any((cookie.domain or "").lstrip(".").lower().endswith(suffix) for cookie in jar):
         raise ValueError(f"The cookies.txt file has no {suffix} cookies")
+
+
+def _test_proxy(platform: str, proxy: str) -> dict[str, Any]:
+    import requests
+
+    targets = {
+        "instagram": "https://www.instagram.com/instagram/",
+        "tiktok": "https://www.tiktok.com/@tiktok",
+        "youtube": "https://www.youtube.com/robots.txt",
+    }
+    proxies = {"http": proxy, "https": proxy}
+    started = monotonic()
+    try:
+        exit_response = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=10)
+        exit_response.raise_for_status()
+        exit_ip = exit_response.json().get("ip")
+        response = requests.get(
+            targets[platform], proxies=proxies, timeout=12, allow_redirects=False,
+            headers={"User-Agent": "Mozilla/5.0 SocialScrape proxy test"},
+        )
+        location = response.headers.get("location", "").lower()
+        blocked = response.status_code in (401, 403, 429) or "login" in location or "checkpoint" in location
+        return {"ok": response.status_code < 500 and not blocked, "status": response.status_code,
+                "blocked": blocked, "exit_ip": exit_ip, "latency_ms": round((monotonic() - started) * 1000)}
+    except requests.RequestException as exc:
+        return {"ok": False, "status": None, "blocked": False, "exit_ip": None,
+                "latency_ms": round((monotonic() - started) * 1000), "error": type(exc).__name__}
 
 
 def _session(request: Request) -> Principal | None:
@@ -668,6 +741,10 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         if not principal:
             return RedirectResponse("/login", 303)
         page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(principal.email))
+        templates, skeletons = _loading_templates()
+        route = rest.split('/')[0] or 'overview'
+        page = page.replace("__INITIAL_LOADING__", skeletons.get(route, skeletons['overview']))
+        page = page.replace("__LOADING_TEMPLATES__", templates)
         portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf})
         return HTMLResponse(_versioned_page(page.replace("__PORTAL__", portal_data)))
 
@@ -728,6 +805,17 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         except (ConfigError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from None
         return {"id": entry_id}
+
+    @router.post("/portal/api/settings/platforms/{platform}/proxy/{entry_id}/test")
+    async def test_platform_proxy(request: Request, platform: str, entry_id: str):
+        p = _owner(request)
+        _csrf(request, p)
+        _check_platform_setting(platform, "proxy")
+        try:
+            proxy = store.platform_setting_value(p, platform, "proxy", entry_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from None
+        return await asyncio.to_thread(_test_proxy, platform, proxy)
 
     @router.delete("/portal/api/settings/platforms/{platform}/{kind}/{entry_id}")
     async def remove_platform_setting(request: Request, platform: str, kind: str, entry_id: str):

@@ -1699,6 +1699,18 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     login = TestClient(create_app(), base_url="https://testserver").get("/login").text
     assert f'/assets/appearance.js?v={script_url[2]}' in login
     assert f'/assets/portal.css?v={script_url[2]}' in dashboard and "__ASSET_VERSION__" not in dashboard
+    assert f'<script src="/assets/preview.js?v={script_url[2]}">' in dashboard  # the playground's response preview
+    assert "const ResponsePreview" in owner.get(f"/assets/preview.js?v={script_url[2]}").text
+    for route, title in [("", "Overview"), ("playground", "Playground"), ("keys", "API keys"),
+                         ("team", "Team"), ("history", "Request history"), ("usage", "Usage"),
+                         ("docs", "Documentation"), ("settings", "Platform settings")]:
+        page = owner.get('/app/' + route).text
+        initial = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', page, re.S)[1]
+        assert f'<h1>{title}</h1>' in initial
+        assert 'class="skeleton ' in initial and 'Loading workspace' not in initial
+        assert 'aria-hidden="true"' in initial and '__INITIAL_LOADING__' not in page
+        if route == 'history':
+            assert '<th scope="col">Endpoint</th>' in initial and '<tbody aria-hidden="true"><tr>' in initial
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 
@@ -1849,3 +1861,11 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
                         headers=headers).json() == {"removed": True}
     status = owner.get("/portal/api/settings/platforms").json()["instagram"]
     assert status["proxy"][0]["position"] == status["cookies"][0]["position"] == 1
+
+    monkeypatch.setattr("socialscrape.portal._test_proxy", lambda platform, proxy: {
+        "ok": True, "status": 200, "blocked": False, "exit_ip": "203.0.113.9", "latency_ms": 321,
+    })
+    tested = owner.post(f"/portal/api/settings/platforms/instagram/proxy/{ids[1]}/test", headers=headers).json()
+    assert tested == {"ok": True, "status": 200, "blocked": False,
+                      "exit_ip": "203.0.113.9", "latency_ms": 321}
+    assert proxies[0] not in owner.get("/portal/api/settings/platforms").text
