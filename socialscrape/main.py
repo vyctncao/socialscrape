@@ -234,12 +234,15 @@ def create_app() -> FastAPI:
     @app.get("/meta/coverage", tags=["meta"])
     async def meta_coverage() -> dict:
         rows = coverage()
-        return {
-            "success": True,
-            "implemented": sum(r["status"] == "implemented" for r in rows),
-            "total": len(rows),
-            "endpoints": rows,
-        }
+        fallback_status = fallback.describe(app)
+        for row in rows:
+            row["operational"] = row["status"] == "implemented" or bool(
+                fallback_status and "unsupported" in fallback_status["triggers"]
+                and row["platform"] in fallback_status["platforms"]
+            )
+            row["provider"] = "local" if row["status"] == "implemented" else                 "scrapecreators" if row["operational"] else None
+        return {"success": True, "implemented": sum(r["status"] == "implemented" for r in rows),
+                "operational": sum(r["operational"] for r in rows), "total": len(rows), "endpoints": rows}
 
     return app
 
