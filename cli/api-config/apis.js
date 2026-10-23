@@ -1,4 +1,5 @@
 // Endpoint catalog adapted from ScrapeCreators CLI under the MIT license.
+// Account endpoints are exported separately because the CLI exposes them through dedicated commands only.
 export const apis = [
   {
     "id": "youtube",
@@ -15,32 +16,36 @@ export const apis = [
             "name": "channelId",
             "type": "string",
             "required": false,
-            "description": "Channel id"
+            "description": "YouTube channel ID. Can pass a channelId, handle or url",
+            "placeholder": "UC-9-kyTW8ZkZNDHQJ6FgpwQ"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "YouTube channel handle. Can pass a channelId, handle or url",
+            "placeholder": "ThePatMcAfeeShow"
           },
           {
             "name": "url",
             "type": "string",
             "required": false,
-            "description": "Url"
+            "description": "YouTube channel URL. Can pass a channelId, handle or url",
+            "placeholder": "https://www.youtube.com/@ThePatMcAfeeShow"
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -54,41 +59,47 @@ export const apis = [
             "name": "channelId",
             "type": "string",
             "required": false,
-            "description": "Channel id"
+            "description": "YouTube channel ID",
+            "placeholder": "UC-9-kyTW8ZkZNDHQJ6FgpwQ"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "YouTube channel handle",
+            "placeholder": "ThePatMcAfeeShow"
           },
           {
             "name": "sort",
             "type": "select",
             "required": false,
-            "description": "Sort",
+            "description": "Sort by latest or popular",
             "options": [
               "latest",
               "popular"
-            ]
+            ],
+            "placeholder": "latest"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more videos. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           },
           {
             "name": "is_paid_promotions",
             "type": "string",
             "required": false,
-            "description": "Is paid promotions"
+            "description": "Set to 'true' to search YouTube's public paid product placement / sponsorship / endorsement search surface. This returns normal YouTube videos where the creator declared paid promotion. Cannot be combined with filter, uploadDate, sortBy, type, duration, or includeExtras.",
+            "placeholder": "false"
           },
           {
             "name": "includeExtras",
             "type": "string",
             "required": false,
-            "description": "Includeextras"
+            "description": "This will get you the like + comment count and the description. To get the full details of the video, use the /v1/youtube/video endpoint. Honestly, if you use this param, the error rate is higher. We might deprecate this param in the future.",
+            "placeholder": "false"
           }
         ]
       },
@@ -102,19 +113,22 @@ export const apis = [
             "name": "channelId",
             "type": "string",
             "required": false,
-            "description": "Channel id"
+            "description": "YouTube channel ID",
+            "placeholder": "UCX6OQ3DkcsbYNE6H8uQQuVA"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "YouTube channel handle",
+            "placeholder": "MrBeast"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more community posts. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           }
         ]
       },
@@ -128,19 +142,22 @@ export const apis = [
             "name": "channelId",
             "type": "string",
             "required": false,
-            "description": "Channel id"
+            "description": "YouTube channel ID",
+            "placeholder": "UCWsDFcIhY2DBi3GB5uykGXA"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "YouTube channel handle",
+            "placeholder": "IShowSpeed"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more lives. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           }
         ]
       },
@@ -154,19 +171,22 @@ export const apis = [
             "name": "channelId",
             "type": "string",
             "required": false,
-            "description": "Channel id"
+            "description": "YouTube channel ID",
+            "placeholder": "UCxcTeAKWJca6XyJ37_ZoKIQ"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "YouTube channel handle",
+            "placeholder": "ThePatMcAfeeShow"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more playlists. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           }
         ]
       },
@@ -180,29 +200,33 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "Can pass channelId or handle",
+            "placeholder": "starterstory"
           },
           {
             "name": "channelId",
             "type": "string",
             "required": false,
-            "description": "Channel id"
+            "description": "Can pass channelId or handle",
+            "placeholder": "UC-9-kyTW8ZkZNDHQJ6FgpwQ"
           },
           {
             "name": "sort",
             "type": "select",
             "required": false,
-            "description": "Sort",
+            "description": "Sort by newest or popular",
             "options": [
-              "latest",
+              "newest",
               "popular"
-            ]
+            ],
+            "placeholder": "newest"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more videos. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           }
         ]
       },
@@ -216,7 +240,8 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "The URL of the YouTube community post to get",
+            "placeholder": "https://www.youtube.com/post/Ugkxvj2KoApYAXoqLWnKVr6zZe5JjeHrQeP8"
           }
         ]
       },
@@ -230,13 +255,15 @@ export const apis = [
             "name": "playlist_id",
             "type": "string",
             "required": true,
-            "description": "Playlist id"
+            "description": "The ID of the YouTube playlist. In the YouTube URL it will be the 'list' parameter.",
+            "placeholder": "PLP32wGpgzmIlInfgKVFfCwVsxgGqZNIiS"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Token from the previous response to get the next page. Omit for the first page. Stop when the returned continuationToken is null.",
+            "placeholder": ""
           }
         ]
       },
@@ -250,13 +277,13 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Search query. For stricter title matching, use YouTube's intitle: operator, for example intitle:\"Foursquare Swarm\". Quoted queries by themselves may still be broadened by YouTube when no fresh exact matches are available."
           },
           {
             "name": "uploadDate",
             "type": "select",
             "required": false,
-            "description": "Uploaddate",
+            "description": "Upload date",
             "options": [
               "today",
               "this_week",
@@ -268,58 +295,64 @@ export const apis = [
             "name": "sortBy",
             "type": "select",
             "required": false,
-            "description": "Sortby",
+            "description": "Sort by",
             "options": [
               "relevance",
               "popular"
-            ]
+            ],
+            "placeholder": "relevance"
           },
           {
             "name": "type",
             "type": "select",
             "required": false,
-            "description": "Type",
+            "description": "Type of content to search for",
             "options": [
               "videos",
               "shorts",
               "channels",
               "playlists"
-            ]
+            ],
+            "placeholder": "videos"
           },
           {
             "name": "duration",
             "type": "select",
             "required": false,
-            "description": "Duration",
+            "description": "Duration of the video. Only applies to videos (not shorts).",
             "options": [
               "under_3_min",
               "between_3_and_20_min",
               "over_20_min"
-            ]
+            ],
+            "placeholder": "under_3_min"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "2 letter country code of the country to put the proxy in.",
+            "placeholder": "US"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more videos. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           },
           {
             "name": "includeExtras",
             "type": "string",
             "required": false,
-            "description": "Includeextras"
+            "description": "This will get you the like + comment count and the description. To get the full details of the video, use the /v1/youtube/video endpoint. *This will slow down the response slightly.*",
+            "placeholder": "false"
           },
           {
             "name": "is_paid_promotions",
             "type": "string",
             "required": false,
-            "description": "Is paid promotions"
+            "description": "Set to 'true' to search YouTube's public paid product placement, sponsorship, and endorsement surface."
           }
         ]
       },
@@ -333,25 +366,27 @@ export const apis = [
             "name": "hashtag",
             "type": "string",
             "required": true,
-            "description": "Hashtag"
+            "description": "Hashtag to search for",
+            "placeholder": "funny"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more videos. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           },
           {
             "name": "type",
             "type": "select",
             "required": false,
-            "description": "Type",
+            "description": "Search for all types of content or only shorts",
             "options": [
-              "videos",
-              "shorts",
-              "channels",
-              "playlists"
-            ]
+              "all",
+              "shorts"
+            ],
+            "placeholder": "all",
+            "default": "all"
           }
         ]
       },
@@ -365,7 +400,8 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Partial or complete YouTube search query",
+            "placeholder": "mr beast"
           }
         ]
       },
@@ -386,26 +422,29 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "YouTube video or short URL",
+            "placeholder": "https://youtu.be/gTCi7PaOPLY"
           },
           {
             "name": "language",
             "type": "string",
             "required": false,
-            "description": "Language"
+            "description": "Preferred response language (mapped to Accept-Language header; not guaranteed due to YouTube localization behavior). 2 letter language code, ie 'en', 'es', 'fr' etc.",
+            "placeholder": "en"
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -419,7 +458,8 @@ export const apis = [
             "name": "continuationToken",
             "type": "string",
             "required": true,
-            "description": "Continuationtoken"
+            "description": "Continuation token for the comment replies. Use 'repliesContinuationToken' from the Comments endpoint, or 'continuationToken' from a previous replies response to paginate.",
+            "placeholder": "Eg0SC2RRdzR3OVdnWGNRGAYygwEaUBIa..."
           }
         ]
       },
@@ -433,23 +473,26 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "YouTube video URL",
+            "placeholder": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
           },
           {
             "name": "continuationToken",
             "type": "string",
             "required": false,
-            "description": "Continuationtoken"
+            "description": "Continuation token to get more comments. Get 'continuationToken' from previous response.",
+            "placeholder": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
           },
           {
             "name": "order",
             "type": "select",
             "required": false,
-            "description": "Order",
+            "description": "Order of comments",
             "options": [
               "top",
               "newest"
-            ]
+            ],
+            "placeholder": "top"
           }
         ]
       },
@@ -463,13 +506,15 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "YouTube video or short URL",
+            "placeholder": "https://www.youtube.com/watch?v=AVO0ifle-OU"
           },
           {
             "name": "language",
             "type": "string",
             "required": false,
-            "description": "Language"
+            "description": "2 letter language code used for transcript lookup, ie 'en', 'es', 'fr' etc.",
+            "placeholder": "en"
           }
         ]
       },
@@ -483,32 +528,36 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "YouTube video or short URL",
+            "placeholder": "https://www.youtube.com/watch?v=bjVIDXPP7Uk"
           },
           {
             "name": "language",
             "type": "string",
             "required": false,
-            "description": "Language"
+            "description": "Language code, ie 'en', 'es', 'fr' or 'en-US'. Overrides the default track selection unless original_audio=true. If omitted, prefers captions matching the original spoken language when YouTube identifies the original audio. If that metadata is unavailable or ambiguous, prefers an auto-generated caption, otherwise the first caption track. If the requested or identified original language has no matching captions, the transcript will be null.",
+            "placeholder": "en"
           },
           {
             "name": "original_audio",
             "type": "boolean",
             "required": false,
-            "description": "Original audio"
+            "description": "Set to true to return captions only in the original spoken language identified by YouTube. Takes precedence over language. If the original audio cannot be reliably identified or has no matching captions, transcript, transcript_only_text, and language are null. a returned transcript Omit or set to false for the existing default selection.",
+            "placeholder": "true"
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       }
@@ -529,7 +578,8 @@ export const apis = [
             "name": "ad_id",
             "type": "string",
             "required": true,
-            "description": "Ad id"
+            "description": "Creative Center Top Ads material ID or URL, or a public Ads Library ad ID or library.tiktok.com detail URL.",
+            "placeholder": "1869335220395266"
           }
         ]
       },
@@ -543,25 +593,29 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": false,
-            "description": "Query"
+            "description": "General ad search. Provide either query or advertiser_name, not both.",
+            "placeholder": "The Creator Loop"
           },
           {
             "name": "advertiser_name",
             "type": "string",
             "required": false,
-            "description": "Advertiser name"
+            "description": "Advertiser name to resolve through TikTok's typeahead and search by advertiser entity. Falls back to TikTok's name search when no entity matches. Provide either advertiser_name or query, not both.",
+            "placeholder": "Gymshark"
           },
           {
             "name": "adv_biz_ids",
             "type": "string",
             "required": false,
-            "description": "Adv biz ids"
+            "description": "TikTok advertiser business ID from a See all ads link. Use it with advertiser_name to pin the exact advertiser. Required companion: advertiser_name; ID-only searches return 400 because TikTok ignores the ID without the name.",
+            "placeholder": "7078923208527618049"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Opaque cursor returned from the previous response.",
+            "placeholder": "cursor from previous response"
           }
         ]
       },
@@ -575,13 +629,15 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "Public TikTok collection URL",
+            "placeholder": "https://www.tiktok.com/@kibblemaster808/collection/Want-to-go-7665668414573546258"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more videos. Use max_cursor from the previous response.",
+            "placeholder": "4"
           }
         ]
       },
@@ -595,42 +651,99 @@ export const apis = [
             "name": "page",
             "type": "string",
             "required": false,
-            "description": "Page"
+            "description": "Page number",
+            "placeholder": 1
           },
           {
             "name": "sortBy",
             "type": "select",
             "required": false,
-            "description": "Sortby",
+            "description": "Sort creators by engagement, follower count, or average views",
             "options": [
-              "relevance",
-              "popular"
-            ]
+              "engagement",
+              "follower",
+              "avg_views"
+            ],
+            "placeholder": "engagement"
           },
           {
             "name": "followerCount",
             "type": "select",
             "required": false,
-            "description": "Followercount",
+            "description": "Filter by follower count range",
             "options": [
-              "ALL",
-              "1K_TO_10K",
-              "10K_TO_100K",
-              "100K_TO_1M",
-              "1M_PLUS"
-            ]
+              "10K-100K",
+              "100K-1M",
+              "1M-10M",
+              "10M+"
+            ],
+            "placeholder": "10K-100K"
           },
           {
             "name": "creatorCountry",
             "type": "string",
             "required": false,
-            "description": "Creatorcountry"
+            "description": "Country code of the creator",
+            "placeholder": "US",
+            "options": [
+              "AU",
+              "BR",
+              "CA",
+              "EG",
+              "FR",
+              "DE",
+              "ID",
+              "IL",
+              "IT",
+              "JP",
+              "MY",
+              "PH",
+              "RU",
+              "SA",
+              "SG",
+              "KR",
+              "ES",
+              "TW",
+              "TH",
+              "TR",
+              "AE",
+              "GB",
+              "US",
+              "VN"
+            ]
           },
           {
             "name": "audienceCountry",
             "type": "string",
             "required": false,
-            "description": "Audiencecountry"
+            "description": "Country code of the audience/follower",
+            "placeholder": "US",
+            "options": [
+              "AU",
+              "BR",
+              "CA",
+              "EG",
+              "FR",
+              "DE",
+              "ID",
+              "IL",
+              "IT",
+              "JP",
+              "MY",
+              "PH",
+              "RU",
+              "SA",
+              "SG",
+              "KR",
+              "ES",
+              "TW",
+              "TH",
+              "TR",
+              "AE",
+              "GB",
+              "US",
+              "VN"
+            ]
           }
         ]
       },
@@ -644,13 +757,15 @@ export const apis = [
             "name": "region",
             "type": "string",
             "required": true,
-            "description": "Region"
+            "description": "Where you want the proxy to be. This doesn't mean that you will only see TikToks from this region, you will just see the content that isn't banned in that region.",
+            "placeholder": "US"
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response.",
+            "placeholder": "false"
           }
         ]
       },
@@ -664,13 +779,15 @@ export const apis = [
             "name": "room_id",
             "type": "string",
             "required": true,
-            "description": "Room id"
+            "description": "TikTok live room id. Get this from `/v1/tiktok/user/live` in `liveRoomUserInfo.roomId` or `liveRoom.id` when the user is live.",
+            "placeholder": "7523685855395842871"
           },
           {
             "name": "user_id",
             "type": "string",
             "required": true,
-            "description": "User id"
+            "description": "TikTok numeric user id for the live owner. Get this from `/v1/tiktok/profile` in `user.id`.",
+            "placeholder": "6742945285876515845"
           }
         ]
       },
@@ -684,13 +801,15 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "The URL of the product to get details for.",
+            "placeholder": "https://www.tiktok.com/shop/pdp/goli-ashwagandha-gummies-with-vitamin-d-ksm-66-vegan-non-gmo/1729587769570529799"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Region for the product details request. US is the reliable region right now; non-US regions should not be considered reliable and may return `bad_request` or missing product data. Sorry for the inconvenience.",
+            "placeholder": "US"
           }
         ]
       },
@@ -704,26 +823,29 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "TikTok handle. You can pass handle or user_id.",
+            "placeholder": "stoolpresidente"
           },
           {
             "name": "user_id",
             "type": "string",
             "required": false,
-            "description": "User id"
+            "description": "TikTok user id.",
+            "placeholder": "6659752019493208069"
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -737,7 +859,8 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "TikTok handle",
+            "placeholder": "stoolpresidente"
           }
         ]
       },
@@ -751,25 +874,28 @@ export const apis = [
             "name": "hashtag",
             "type": "string",
             "required": true,
-            "description": "Hashtag"
+            "description": "Hashtag to search for (without #)"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Region the proxy will be set to. Note: this isn't going to grab you all tiktoks from this region, you're just setting the proxy there.",
+            "placeholder": "US"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more videos. Get 'cursor' from previous response.",
+            "placeholder": 10
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       },
@@ -783,21 +909,22 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Keyword to search for"
           },
           {
             "name": "date_posted",
             "type": "select",
             "required": false,
-            "description": "Date posted",
+            "description": "Time Frame",
             "options": [
-              "all",
               "yesterday",
-              "this_week",
-              "this_month",
-              "last_3_months",
-              "last_6_months"
-            ]
+              "this-week",
+              "this-month",
+              "last-3-months",
+              "last-6-months",
+              "all-time"
+            ],
+            "placeholder": "all-time"
           },
           {
             "name": "sort_by",
@@ -806,27 +933,31 @@ export const apis = [
             "description": "Sort by",
             "options": [
               "relevance",
-              "like_count",
-              "date_posted"
-            ]
+              "most-liked",
+              "date-posted"
+            ],
+            "placeholder": "relevance"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Note, this doesn't filter the tiktoks only in a specfic region, it puts the proxy there. Use it in case you want to scrape posts only available for some country. Use 2 letter country codes like US, GB, FR, etc",
+            "placeholder": null
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more videos. Get 'cursor' from previous response.",
+            "placeholder": 10
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       },
@@ -840,13 +971,15 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Search query to get suggestions for",
+            "placeholder": "dogs"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Region code for suggestions",
+            "placeholder": "US"
           }
         ]
       },
@@ -860,21 +993,23 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Keyword to search for",
+            "placeholder": "funny"
           },
           {
             "name": "publish_time",
             "type": "select",
             "required": false,
-            "description": "Publish time",
+            "description": "Time Frame TikTok was posted",
             "options": [
-              "0",
-              "1",
-              "7",
-              "30",
-              "90",
-              "180"
-            ]
+              "yesterday",
+              "this-week",
+              "this-month",
+              "last-3-months",
+              "last-6-months",
+              "all-time"
+            ],
+            "placeholder": "all-time"
           },
           {
             "name": "sort_by",
@@ -883,21 +1018,24 @@ export const apis = [
             "description": "Sort by",
             "options": [
               "relevance",
-              "like_count",
-              "date_posted"
-            ]
+              "most-liked",
+              "date-posted"
+            ],
+            "placeholder": "relevance"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Note, this doesn't filter the tiktoks only in a specfic region, it puts the proxy there. Use it in case you want to scrape posts only available for some country. Use 2 letter country codes like US, GB, FR, etc",
+            "placeholder": null
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more videos. Get 'cursor' from previous response.",
+            "placeholder": 0
           }
         ]
       },
@@ -911,19 +1049,21 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Search query for users"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more users. Get 'cursor' from previous response.",
+            "placeholder": 10
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       },
@@ -937,25 +1077,29 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": false,
-            "description": "Url"
+            "description": "The URL of the product (required if product_id is not provided)",
+            "placeholder": "https://www.tiktok.com/shop/pdp/cat-nail-clipper-by-potaroma-adjustable-sizes-built-in-file-safe-for-kittens-cats/1731578642912612516"
           },
           {
             "name": "product_id",
             "type": "string",
             "required": false,
-            "description": "Product id"
+            "description": "The ID of the product (required if url is not provided)",
+            "placeholder": "1731578642912612516"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "The region of the product. US is the reliable region right now; non-US regions should not be considered reliable and may return limited or inconsistent review data. Sorry for the inconvenience.",
+            "placeholder": "US"
           },
           {
             "name": "page",
             "type": "string",
             "required": false,
-            "description": "Page"
+            "description": "The page number of the reviews",
+            "placeholder": "1"
           }
         ]
       },
@@ -969,30 +1113,51 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "The TikTok Shop store URL.",
+            "placeholder": "https://www.tiktok.com/shop/store/goli-nutrition/7495794203056835079"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor parameter from the previous response to retrieve the next page of products. Omit for the first page.",
+            "placeholder": ""
           },
           {
             "name": "sort_by",
             "type": "select",
             "required": false,
-            "description": "Sort by",
+            "description": "Sort products by best-selling items (`top`) or newest products (`new_releases`). Defaults to `top`.",
             "options": [
-              "relevance",
-              "like_count",
-              "date_posted"
-            ]
+              "top",
+              "new_releases"
+            ],
+            "placeholder": "top"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Region to get shop products from. Defaults to US if not provided. Non-US regions are not reliable right now and may return `not_found` or limited catalog data even when the shop appears in search. Sorry for the inconvenience.",
+            "placeholder": "US",
+            "options": [
+              "US",
+              "GB",
+              "DE",
+              "FR",
+              "IT",
+              "ID",
+              "MY",
+              "MX",
+              "PH",
+              "SG",
+              "ES",
+              "TH",
+              "VN",
+              "BR",
+              "JP",
+              "IE"
+            ]
           }
         ]
       },
@@ -1006,19 +1171,40 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "Term you want to search for",
+            "placeholder": "shoes"
           },
           {
             "name": "page",
             "type": "string",
             "required": false,
-            "description": "Page"
+            "description": "Page number to retrieve",
+            "placeholder": "1"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Region to search shop products in. Non-US TikTok Shop regions are not reliable right now and may return limited or inconsistent results. Sorry for the inconvenience.",
+            "placeholder": "US",
+            "options": [
+              "US",
+              "GB",
+              "DE",
+              "FR",
+              "IT",
+              "ID",
+              "MY",
+              "MX",
+              "PH",
+              "SG",
+              "ES",
+              "TH",
+              "VN",
+              "BR",
+              "JP",
+              "IE"
+            ]
           }
         ]
       },
@@ -1032,7 +1218,8 @@ export const apis = [
             "name": "clipId",
             "type": "string",
             "required": true,
-            "description": "Clip id"
+            "description": "This is a little confusing because this isn't songId like you'd think. It is the clipId. I guess because you can clip different portions of a song 🤷‍♂️",
+            "placeholder": "7439295283975702544"
           }
         ]
       },
@@ -1046,13 +1233,15 @@ export const apis = [
             "name": "clipId",
             "type": "string",
             "required": false,
-            "description": "Clip id"
+            "description": "This is clipId. Can be found on a url like so: https://www.tiktok.com/music/That%27s-Who-I-Praise-7370375686554782506, where 7370375686554782506 is the clipId",
+            "placeholder": "7439295283975702544"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "The cursor to get the next page of results.",
+            "placeholder": 12
           }
         ]
       },
@@ -1066,7 +1255,8 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "TikTok handle",
+            "placeholder": "shakira"
           }
         ]
       },
@@ -1080,25 +1270,29 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "TikTok handle",
+            "placeholder": "stoolpresidente"
           },
           {
             "name": "user_id",
             "type": "string",
             "required": false,
-            "description": "User id"
+            "description": "User id. Use this for faster response times.",
+            "placeholder": "6659752019493208069"
           },
           {
             "name": "min_time",
             "type": "string",
             "required": false,
-            "description": "Min time"
+            "description": "Used to paginate. Get 'min_time' from previous response.",
+            "placeholder": 1605663376
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       },
@@ -1112,19 +1306,22 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "TikTok handle",
+            "placeholder": "stoolpresidente"
           },
           {
             "name": "min_time",
             "type": "string",
             "required": false,
-            "description": "Min time"
+            "description": "Used to paginate. Get 'min_time' from previous response.",
+            "placeholder": 1605663376
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       },
@@ -1138,7 +1335,8 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "TikTok handle",
+            "placeholder": "thejustalex"
           }
         ]
       },
@@ -1152,19 +1350,22 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "The handle of the user",
+            "placeholder": "mrtiktokreviews"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Region to put the proxy in. Non-US TikTok Shop regions are not reliable right now and may return limited or inconsistent showcase data. Sorry for the inconvenience.",
+            "placeholder": "US"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "The cursor to the next page of products",
+            "placeholder": "21"
           }
         ]
       },
@@ -1178,19 +1379,22 @@ export const apis = [
             "name": "comment_id",
             "type": "string",
             "required": true,
-            "description": "Comment id"
+            "description": "TikTok comment ID. This is the cid from the comments endpoint.",
+            "placeholder": "7623828115408274207"
           },
           {
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "TikTok video URL. This is the url from the comments endpoint.",
+            "placeholder": "https://www.tiktok.com/@stoolpresidente/video/7623818255903329566"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more replies. Get 'cursor' from previous response.",
+            "placeholder": 3
           }
         ]
       },
@@ -1204,19 +1408,21 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "TikTok video URL"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor to get more comments. Get 'cursor' from previous response.",
+            "placeholder": 20
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       },
@@ -1230,25 +1436,30 @@ export const apis = [
             "name": "allow_long_transcription",
             "type": "boolean",
             "required": false,
-            "description": "Allow long transcription"
+            "description": "Optional opt-in, enabled only by the literal query value 'true' (allow_long_transcription=true). Defaults to false when omitted; other values do not enable long-transcription mode. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into AI with no fixed duration cap: ALL successful AI transcriptions in this mode For example, 177 seconds Empty AI results and errors This flag does not force AI and does not enable transcription or AI fallback by itself. Keep get_transcript=true or use_ai_as_fallback=true where required by the endpoint. Returned native captions still These routes remain synchronous. Allow at least 30 seconds on your client. Long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+            "placeholder": false,
+            "default": false
           },
           {
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "TikTok video URL",
+            "placeholder": "https://www.tiktok.com/@stoolpresidente/video/7499229683859426602"
           },
           {
             "name": "language",
             "type": "string",
             "required": false,
-            "description": "Language"
+            "description": "Language of the transcript. 2 letter language code, ie 'en', 'es', 'fr', 'de', 'it', 'ja', 'ko', 'zh'",
+            "placeholder": "en"
           },
           {
             "name": "use_ai_as_fallback",
             "type": "boolean",
             "required": false,
-            "description": "Use ai as fallback"
+            "description": "Set to 'true' to use AI only when existing captions are unavailable. Defaults to false. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into AI with no fixed duration cap: ALL successful AI transcriptions in this mode For example, 177 seconds Empty AI results and errors These routes remain synchronous. Allow at least 30 seconds on your client. Long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+            "placeholder": "false"
           }
         ]
       },
@@ -1262,44 +1473,50 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "TikTok video or photo/slideshow URL",
+            "placeholder": "https://www.tiktok.com/@randomspamvideos25/video/7251387037834595630"
           },
           {
             "name": "get_transcript",
             "type": "boolean",
             "required": false,
-            "description": "Get transcript"
+            "description": "Native captions are opt-in via get_transcript=true and are included in the existing base endpoint price. This detail endpoint does not use AI transcription or an AI fallback; missing captions return no transcript. For AI fallback, use /v1/tiktok/video/transcript.",
+            "placeholder": false
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Two-letter country code passed to the primary post source. Defaults to US. Try the creator's country if a post is unavailable. This does not guarantee a matching browser/proxy country or complete retrieval; the fallback source does not receive this parameter.",
+            "placeholder": "US"
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           },
           {
             "name": "download_media",
             "type": "boolean",
             "required": false,
-            "description": "Download media"
+            "description": "Set to true to download the video/images and get back permanent Supabase URLs.",
+            "placeholder": false
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -1313,48 +1530,54 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "TikTok handle",
+            "placeholder": "stoolpresidente"
           },
           {
             "name": "user_id",
             "type": "string",
             "required": false,
-            "description": "User id"
+            "description": "TikTok user id. Use this for faster responses.",
+            "placeholder": "6659752019493208069"
           },
           {
             "name": "sort_by",
             "type": "select",
             "required": false,
-            "description": "Sort by",
+            "description": "What to sort by",
             "options": [
-              "relevance",
-              "like_count",
-              "date_posted"
-            ]
+              "latest",
+              "popular"
+            ],
+            "placeholder": "latest"
           },
           {
             "name": "max_cursor",
             "type": "string",
             "required": false,
-            "description": "Max cursor"
+            "description": "Cursor to get more videos. Get 'max_cursor' from previous response.",
+            "placeholder": "1734562353000"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "Country code passed to the profile-feed source. Defaults to US. If a profile should have videos but returns none, try another relevant two-letter country code. Changing this value does not guarantee that region-restricted posts will appear.",
+            "placeholder": "US"
           },
           {
             "name": "include_pinned",
             "type": "boolean",
             "required": false,
-            "description": "Include pinned"
+            "description": "Whether to include pinned posts. Defaults to true. Set to false to exclude posts marked as pinned, including with trim=true. Keep this value unchanged while paginating. Filtering can produce shorter or empty pages; follow has_more and max_cursor. Successful pages still",
+            "placeholder": "true"
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true for a trimmed down version of the response",
+            "placeholder": "false"
           }
         ]
       }
@@ -1375,13 +1598,15 @@ export const apis = [
             "name": "audio_id",
             "type": "string",
             "required": true,
-            "description": "Audio id"
+            "description": "The audio id from the Instagram audio page URL.",
+            "placeholder": "1392969992841787"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Pagination cursor returned by Instagram from the previous response.",
+            "placeholder": "Gsbyq-aju4eF02y..."
           }
         ]
       },
@@ -1395,20 +1620,22 @@ export const apis = [
             "name": "userId",
             "type": "string",
             "required": false,
-            "description": "User id"
+            "description": "Instagram user id",
+            "placeholder": "314216"
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -1422,44 +1649,49 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "Instagram post or reel URL"
           },
           {
             "name": "region",
             "type": "string",
             "required": false,
-            "description": "Region"
+            "description": "2 letter country code to set the proxy in",
+            "placeholder": "US"
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           },
           {
             "name": "download_media",
             "type": "boolean",
             "required": false,
-            "description": "Download media"
+            "description": "Set to true to download the video/images and get back permanent Supabase URLs.",
+            "placeholder": false
           },
           {
             "name": "include_play_count",
             "type": "boolean",
             "required": false,
-            "description": "Include play count"
+            "description": "Set to false to omit `video_play_count` and skip its additional fetch for a faster response. Defaults to true.",
+            "placeholder": true
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -1473,19 +1705,22 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "The Instagram post or reel URL",
+            "placeholder": "https://www.instagram.com/reel/C8rKmYvsrck"
           },
           {
             "name": "comment_id",
             "type": "string",
             "required": true,
-            "description": "Comment id"
+            "description": "The parent comment ID from the Comments endpoint",
+            "placeholder": "18038110327814211"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "The cursor to get more replies. Get `cursor` from the previous response.",
+            "placeholder": "QVFDc29..."
           }
         ]
       },
@@ -1499,26 +1734,29 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "Instagram handle",
+            "placeholder": "jane"
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result.",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -1532,13 +1770,15 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "Instagram handle",
+            "placeholder": "lifestyleperfume"
           },
           {
             "name": "allow_estimated",
             "type": "boolean",
             "required": false,
-            "description": "Allow estimated"
+            "description": "Set to true to return scaled estimates when Instagram abbreviates counts for profiles with more than 10,000 posts. Defaults to false; false or omitted returns an uncharged 422 when only an estimate is available.",
+            "placeholder": false
           }
         ]
       },
@@ -1559,7 +1799,8 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "The username, hashtag, place, or keyword to search for.",
+            "placeholder": "nike"
           }
         ]
       },
@@ -1573,38 +1814,40 @@ export const apis = [
             "name": "hashtag",
             "type": "string",
             "required": true,
-            "description": "Hashtag"
+            "description": "The hashtag to search for. Include or omit the #.",
+            "placeholder": "makeup"
           },
           {
             "name": "date_posted",
             "type": "select",
             "required": false,
-            "description": "Date posted",
+            "description": "Only return Google-indexed posts found in this relative window.",
             "options": [
-              "all",
-              "yesterday",
-              "this_week",
-              "this_month",
-              "last_3_months",
-              "last_6_months"
-            ]
+              "last-hour",
+              "last-day",
+              "last-week",
+              "last-month",
+              "last-year"
+            ],
+            "placeholder": "last-week"
           },
           {
             "name": "media_type",
             "type": "select",
             "required": false,
-            "description": "Media type",
+            "description": "Use all to search public posts and reels, or reels to only return reels. Defaults to all.",
             "options": [
               "all",
-              "reels",
-              "photos"
-            ]
+              "reels"
+            ],
+            "placeholder": "all"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "The cursor returned by the previous response. It is the next Google results page number and cannot exceed 11; cursor 12 or greater returns a 400 response.",
+            "placeholder": "2"
           }
         ]
       },
@@ -1618,13 +1861,15 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "The Popular topic to search for.",
+            "placeholder": "basketball"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "The opaque cursor returned by the previous response. Use it with the same query to fetch the next page of posts.",
+            "placeholder": "opaque-cursor-from-response"
           }
         ]
       },
@@ -1638,7 +1883,8 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "The profile name or username to search for.",
+            "placeholder": "fitness coach"
           }
         ]
       },
@@ -1652,7 +1898,8 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "Instagram handle",
+            "placeholder": "jane"
           }
         ]
       },
@@ -1666,7 +1913,8 @@ export const apis = [
             "name": "id",
             "type": "string",
             "required": false,
-            "description": "Id"
+            "description": "The ID of the highlight to get details for",
+            "placeholder": "18067016518767507"
           }
         ]
       },
@@ -1680,13 +1928,15 @@ export const apis = [
             "name": "user_id",
             "type": "string",
             "required": false,
-            "description": "User id"
+            "description": "Instagram user id. Use for faster response times.",
+            "placeholder": "2700692569"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "Instagram handle. Use user_id for faster response times.",
+            "placeholder": "jane"
           }
         ]
       },
@@ -1700,25 +1950,29 @@ export const apis = [
             "name": "user_id",
             "type": "string",
             "required": false,
-            "description": "User id"
+            "description": "Instagram user id. Use this for faster response times.",
+            "placeholder": "2700692569"
           },
           {
             "name": "handle",
             "type": "string",
             "required": false,
-            "description": "Handle"
+            "description": "Instagram handle. Use user_id for faster response times.",
+            "placeholder": "jane"
           },
           {
             "name": "max_id",
             "type": "string",
             "required": false,
-            "description": "Max id"
+            "description": "Max id to get more reels. Get 'max_id' from previous response.",
+            "placeholder": "QVFCVzNnS2lI...=="
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true for a trimmed down version of the response",
+            "placeholder": "false"
           }
         ]
       },
@@ -1732,13 +1986,15 @@ export const apis = [
             "name": "user_id",
             "type": "string",
             "required": true,
-            "description": "User id"
+            "description": "Numeric Instagram user ID.",
+            "placeholder": "325734299"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "Cursor returned by the previous response.",
+            "placeholder": "3953374600788032611"
           }
         ]
       },
@@ -1752,26 +2008,29 @@ export const apis = [
             "name": "allow_long_transcription",
             "type": "boolean",
             "required": false,
-            "description": "Allow long transcription"
+            "description": "Optional opt-in, enabled only by the literal query value 'true' (allow_long_transcription=true). Defaults to false when omitted; other values do not enable long-transcription mode. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into AI with no fixed duration cap: ALL successful AI transcriptions in this mode For example, 177 seconds Empty AI results and errors This flag does not force AI and does not enable transcription or AI fallback by itself. Keep get_transcript=true or use_ai_as_fallback=true where required by the endpoint. Returned native captions still These routes remain synchronous. Allow at least 30 seconds on your client. Long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+            "placeholder": false,
+            "default": false
           },
           {
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "Instagram post or reel URL"
           },
           {
             "name": "cache_max_age",
             "type": "select",
             "required": false,
-            "description": "Cache max age",
+            "description": "If we have a response in the cache that is this many days old or newer, return the cached response with \"cached\": true and a \"cached_at\" timestamp. Otherwise, scrape a live result (By default, successful AI up to 120 seconds",
             "options": [
               "1d",
               "3d",
               "7d",
               "14d",
               "30d"
-            ]
+            ],
+            "placeholder": "7d"
           }
         ]
       },
@@ -1785,19 +2044,22 @@ export const apis = [
             "name": "url",
             "type": "string",
             "required": true,
-            "description": "Url"
+            "description": "The URL of the post or reel to get comments from",
+            "placeholder": "https://www.instagram.com/reel/DOq6eV6iIgD"
           },
           {
             "name": "cursor",
             "type": "string",
             "required": false,
-            "description": "Cursor"
+            "description": "The cursor to get more comments. Get 'cursor' from previous response.",
+            "placeholder": "eyJjYWNoZWRfY29tbWVud..."
           },
           {
             "name": "include_replies",
             "type": "boolean",
             "required": false,
-            "description": "Include replies"
+            "description": "Set to true to include replies for every returned comment. This is much slower and may time out at 29 seconds.",
+            "placeholder": "true"
           }
         ]
       },
@@ -1811,27 +2073,27 @@ export const apis = [
             "name": "query",
             "type": "string",
             "required": true,
-            "description": "Query"
+            "description": "The keyword to search for",
+            "placeholder": "dogs"
           },
           {
             "name": "date_posted",
             "type": "select",
             "required": false,
-            "description": "Date posted",
+            "description": "Google-indexed date window. Recent hour/day filters are not supported because Google does not index Instagram reels reliably enough in those windows.",
             "options": [
-              "all",
-              "yesterday",
-              "this_week",
-              "this_month",
-              "last_3_months",
-              "last_6_months"
-            ]
+              "last-week",
+              "last-month",
+              "last-year"
+            ],
+            "placeholder": "last-week"
           },
           {
             "name": "page",
             "type": "string",
             "required": false,
-            "description": "Page"
+            "description": "The page number to return. Must be between 1 and 11; page 12 or greater returns a 400 response.",
+            "placeholder": 1
           }
         ]
       },
@@ -1845,24 +2107,28 @@ export const apis = [
             "name": "handle",
             "type": "string",
             "required": true,
-            "description": "Handle"
+            "description": "Instagram handle"
           },
           {
             "name": "next_max_id",
             "type": "string",
             "required": false,
-            "description": "Next max id"
+            "description": "Cursor to get next page of results."
           },
           {
             "name": "trim",
             "type": "boolean",
             "required": false,
-            "description": "Trim"
+            "description": "Set to true to get a trimmed response",
+            "placeholder": false
           }
         ]
       }
     ]
-  },
+  }
+];
+
+export const accountApis = [
   {
     "id": "account",
     "name": "Account",

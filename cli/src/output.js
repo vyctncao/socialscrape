@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import Table from "cli-table3";
-import { closeSync, constants, existsSync, lstatSync, openSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import { closeSync, constants, existsSync, fchmodSync, lstatSync, openSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "path";
 
 const isTTY = process.stdout.isTTY;
@@ -86,6 +86,7 @@ export function writeOutputFile(dest, output) {
 
   try {
     writeFileSync(fd, output, "utf-8");
+    fchmodSync(fd, 0o600);
   } finally {
     closeSync(fd);
   }
