@@ -58,7 +58,7 @@
     document.querySelectorAll('[data-sidebar-toggle]').forEach(button => {
       button.setAttribute('aria-expanded', String(!collapsed));
       button.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} sidebar`);
-      button.title = button.getAttribute('aria-label');
+      const tooltip = document.getElementById(button.getAttribute('aria-describedby')); if (tooltip) tooltip.textContent = button.getAttribute('aria-label');
     });
   }
   function updateButtons() {
@@ -66,7 +66,7 @@
     const version = encodeURIComponent(document.documentElement.dataset.assetVersion || '');
     document.querySelectorAll('[data-theme-toggle]').forEach(button => {
       button.setAttribute('aria-label', `Switch to ${light ? 'dark' : 'light'} theme`);
-      button.title = button.getAttribute('aria-label');
+      const tooltip = document.getElementById(button.getAttribute('aria-describedby')); if (tooltip) tooltip.textContent = button.getAttribute('aria-label');
       button.innerHTML = `<svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg?v=${version}#${light ? 'moon' : 'sun'}"></use></svg>`;
     });
   }

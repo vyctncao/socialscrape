@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -330,12 +330,15 @@ class PortalStore:
                 self._conn.commit()
 
     def create_key(self, member_id: int, name: str) -> tuple[int, str]:
+        name = name.strip()
+        if not name:
+            raise ValueError("Enter a name for this API key.")
         token = "ss_" + secrets.token_urlsafe(30)
         prefix = token[:10]
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO api_keys(member_id,name,prefix,token_hash,created_at) VALUES(?,?,?,?,?)",
-                (member_id, name.strip()[:80] or "Default", prefix, self._token_hash(token), time.time()),
+                (member_id, name[:80], prefix, self._token_hash(token), time.time()),
             )
             self._conn.commit()
             return int(cur.lastrowid), token
@@ -480,7 +483,10 @@ class PortalStore:
                 "FROM requests r LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"{where} ORDER BY r.created_at DESC LIMIT ?", (*args, min(max(limit, 1), 500))
             ).fetchall()
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        for item in result:
+            item["has_response"] = bool(item["has_response"])
+        return result
 
     def history_detail(self, principal: Principal, request_id: int) -> dict[str, Any] | None:
         where, args = (("r.id=?", (request_id,)) if principal.role == "owner"
@@ -488,13 +494,15 @@ class PortalStore:
         with self._lock:
             row = self._conn.execute(
                 "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
-                "r.response_body,r.response_truncated,r.response_pruned,k.prefix,m.email FROM requests r "
+                "r.response_body,r.response_body IS NOT NULL has_response,r.response_truncated,r.response_pruned,"
+                "k.prefix,m.email FROM requests r "
                 "LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"WHERE {where}", args
             ).fetchone()
         if not row:
             return None
         detail = dict(row)
+        detail["has_response"] = bool(detail["has_response"])
         detail["response"] = (detail.pop("response_body") or b"").decode("utf-8", "replace")
         return detail
 
@@ -695,14 +703,14 @@ def install_portal(app, store: PortalStore) -> None:
             return RedirectResponse("/app", 303)
         setup = not store.has_members()
         setup_enabled = bool(os.environ.get("SOCIALSCRAPE_SETUP_TOKEN"))
-        heading = "Create the owner account" if setup else "Welcome back"
+        heading = "Create the owner account" if setup else "Sign in"
         copy = ("Enter the private setup code configured by the operator." if setup_enabled and setup
                 else "Owner setup is disabled until SOCIALSCRAPE_SETUP_TOKEN is configured." if setup
                 else "Sign in to your private Social Scrape workspace.")
         action = "/setup" if setup else "/login"
         setup_field = ('''<label>Setup code<input name="setup_token" type="password" autocomplete="off" required>
 </label>''' if setup_enabled and setup else "")
-        return _page("Sign in", f'''<div class="eyebrow">Your workspace awaits</div>
+        return _page(heading if setup else "Sign in", f'''<div class="eyebrow">Your workspace awaits</div>
 <h1>{heading}</h1><p>{copy}</p>{f'<div class="form-error" role="alert">{html.escape(error)}</div>' if error else ''}
 <form method="post" action="{action}">{setup_field}
 <label>Email<input name="email" type="email" autocomplete="email" required></label>
@@ -782,7 +790,8 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(principal.email))
         templates, skeletons = _loading_templates()
         route = rest.split('/')[0] or 'overview'
-        page = page.replace("__INITIAL_LOADING__", skeletons.get(route, skeletons['overview']))
+        loading_route = f"{route}member" if principal.role == "member" and route in ("team", "settings", "fallback") else route
+        page = page.replace("__INITIAL_LOADING__", skeletons.get(loading_route, skeletons['overview']))
         page = page.replace("__LOADING_TEMPLATES__", templates)
         portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf})
         return HTMLResponse(_versioned_page(page.replace("__PORTAL__", portal_data)))
@@ -801,14 +810,19 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         p = _require(request)
         _csrf(request, p)
         data = await request.json()
-        key_id, token = store.create_key(p.id, str(data.get("name", "Default")))
+        try:
+            key_id, token = store.create_key(p.id, str(data.get("name", "")))
+        except ValueError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422)
         return {"id": key_id, "key": token}
 
     @router.delete("/portal/api/keys/{key_id}")
     async def revoke_key(request: Request, key_id: int):
         p = _require(request)
         _csrf(request, p)
-        return {"revoked": store.revoke_key(p, key_id)}
+        if not store.revoke_key(p, key_id):
+            return JSONResponse({"detail": "This API key no longer exists or was already revoked."}, status_code=404)
+        return {"revoked": True}
 
     @router.get("/portal/api/team")
     async def team(request: Request):
@@ -819,7 +833,9 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
     async def remove_member(request: Request, member_id: int):
         p = _require(request)
         _csrf(request, p)
-        return {"removed": store.remove_member(p, member_id)}
+        if not store.remove_member(p, member_id):
+            return JSONResponse({"detail": "This member was already removed."}, status_code=404)
+        return {"removed": True}
 
     @router.post("/portal/api/invites")
     async def invite(request: Request):
@@ -861,7 +877,9 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         p = _owner(request)
         _csrf(request, p)
         _check_platform_setting(platform, kind)
-        return {"removed": store.remove_platform_setting(p, platform, kind, entry_id)}
+        if not store.remove_platform_setting(p, platform, kind, entry_id):
+            return JSONResponse({"detail": "This platform setting was already removed."}, status_code=404)
+        return {"removed": True}
 
     @router.post("/portal/api/settings/platforms/{platform}/{kind}/{entry_id}/move")
     async def move_platform_setting(request: Request, platform: str, kind: str, entry_id: str):
@@ -873,7 +891,9 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
             moved = store.move_platform_setting(p, platform, kind, entry_id, str(data.get("direction", "")))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
-        return {"moved": moved}
+        if not moved:
+            return JSONResponse({"detail": "This platform setting could not move in that direction."}, status_code=404)
+        return {"moved": True}
 
     @router.get("/portal/api/history")
     async def history(request: Request, limit: int = 100):

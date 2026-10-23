@@ -1666,6 +1666,93 @@ def test_empty_portal_cannot_be_claimed_without_the_private_setup_code(env, tmp_
     assert "Create the owner account" in c.get("/login").text
 
 
+def test_portal_setup_and_login_titles_match_the_heading(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(tmp_path / "portal.sqlite3"), SOCIALSCRAPE_API_KEYS="")
+    app = create_app()
+    setup_client = TestClient(app, base_url="https://testserver")
+    setup_page = setup_client.get("/login").text
+    assert "<title>Create the owner account · Social Scrape</title>" in setup_page
+    assert "<h1>Create the owner account</h1>" in setup_page
+    setup_client.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                                      "setup_token": "setup"})
+    login_page = TestClient(app, base_url="https://testserver").get("/login").text
+    assert "<title>Sign in · Social Scrape</title>" in login_page
+    assert "<h1>Sign in</h1>" in login_page
+
+
+def test_blank_api_key_name_is_rejected_without_creating_a_key(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(tmp_path / "portal.sqlite3"), SOCIALSCRAPE_API_KEYS="")
+    owner = TestClient(create_app(), base_url="https://testserver")
+    owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                               "setup_token": "setup"})
+    headers = {"x-csrf-token": owner.get("/portal/api/me").json()["csrf"]}
+    response = owner.post("/portal/api/keys", headers=headers, json={"name": "   \t"})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Enter a name for this API key."}
+    assert owner.get("/portal/api/keys").json() == {"keys": []}
+
+
+def test_stale_key_revoke_and_member_remove_return_not_found(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(tmp_path / "portal.sqlite3"), SOCIALSCRAPE_API_KEYS="")
+    app = create_app()
+    owner = TestClient(app, base_url="https://testserver")
+    owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                               "setup_token": "setup"})
+    other_session = TestClient(app, base_url="https://testserver")
+    other_session.post("/login", data={"email": "owner@example.com", "password": "correct horse battery"})
+    headers = {"x-csrf-token": owner.get("/portal/api/me").json()["csrf"]}
+    other_headers = {"x-csrf-token": other_session.get("/portal/api/me").json()["csrf"]}
+    key_id = owner.post("/portal/api/keys", headers=headers, json={"name": "Stale test"}).json()["id"]
+    assert any(key["id"] == key_id for key in owner.get("/portal/api/keys").json()["keys"])
+    assert any(key["id"] == key_id for key in other_session.get("/portal/api/keys").json()["keys"])
+    assert owner.delete(f"/portal/api/keys/{key_id}", headers=headers).json() == {"revoked": True}
+    stale_key = other_session.delete(f"/portal/api/keys/{key_id}", headers=other_headers)
+    assert stale_key.status_code == 404
+    assert stale_key.json() == {"detail": "This API key no longer exists or was already revoked."}
+
+    member_id = app.state.portal.create_member("member@example.com", "member password 123")
+    assert any(member["id"] == member_id for member in owner.get("/portal/api/team").json()["members"])
+    assert any(member["id"] == member_id for member in other_session.get("/portal/api/team").json()["members"])
+    assert other_session.delete(f"/portal/api/team/{member_id}", headers=other_headers).json() == {"removed": True}
+    stale_member = owner.delete(f"/portal/api/team/{member_id}", headers=headers)
+    assert stale_member.status_code == 404
+    assert stale_member.json() == {"detail": "This member was already removed."}
+
+
+def test_history_detail_reports_response_availability(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(tmp_path / "portal.sqlite3"), SOCIALSCRAPE_API_KEYS="")
+    app = create_app()
+    owner = TestClient(app, base_url="https://testserver")
+    owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                               "setup_token": "setup"})
+    owner.get("/v1/youtube/shorts/trending")
+    history_item = owner.get("/portal/api/history").json()["requests"][0]
+    request_id = history_item["id"]
+    assert history_item["has_response"] is True
+    detail = owner.get(f"/portal/api/history/{request_id}").json()
+    assert detail["has_response"] is True
+    assert detail["response"]
+
+    app.state.portal.prune_history(max_bytes=0)
+    history_item = owner.get("/portal/api/history").json()["requests"][0]
+    assert history_item["has_response"] is False
+    detail = owner.get(f"/portal/api/history/{request_id}").json()
+    assert detail["has_response"] is False
+    assert detail["response"] == ""
+
+
 def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     import re
 
@@ -1707,12 +1794,22 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
                          ("docs", "Documentation"), ("settings", "Settings"), ("fallback", "Settings")]:
         page = owner.get('/app/' + route).text
         initial = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', page, re.S)[1]
-        assert f'<h1>{title}</h1>' in initial
+        if route == 'docs':
+            assert '<h1>' not in initial and 'data-loading-title="Documentation"' in initial
+        else:
+            assert f'<h1>{title}</h1>' in initial
         assert 'class="skeleton ' in initial and 'Loading workspace' not in initial
         assert 'aria-hidden="true"' in initial and '__INITIAL_LOADING__' not in page
         if route == 'history':
             assert '<th scope="col">Endpoint</th>' in initial and '<tbody aria-hidden="true"><tr>' in initial
             assert '<a href="/app/history" aria-current="page">Request history</a>' in initial
+        if route == 'team':
+            assert 'Give your team a private place to work with social data.' in initial
+            assert 'Workspace members' in initial
+        if route == 'settings':
+            assert 'provider-summary-grid' in initial
+        if route == 'fallback':
+            assert 'ScrapeCreators API key' in initial
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 
@@ -1725,7 +1822,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert TestClient(create_app(), base_url="https://testserver").get(
         "/v1/youtube/shorts/trending", headers={"x-api-key": created["key"]}).status_code == 501
     history = owner.get("/portal/api/history").json()["requests"]
-    assert history[0]["path"] == "/v1/youtube/shorts/trending" and history[0]["has_response"] == 1
+    assert history[0]["path"] == "/v1/youtube/shorts/trending" and history[0]["has_response"] is True
     detail = owner.get(f"/portal/api/history/{history[0]['id']}").json()
     assert detail["status"] == 501 and detail["response_truncated"] == 0
     assert json.loads(detail["response"])["error"] == "not_supported"
@@ -1739,6 +1836,13 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert accepted.status_code == 303
     friend_me = friend.get("/portal/api/me").json()
     assert friend_me["role"] == "member"
+    member_team = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', friend.get('/app/team').text, re.S)[1]
+    assert 'A private workspace, shared by invitation.' in member_team
+    assert 'Workspace members' not in member_team and 'skeleton-form-row' not in member_team
+    member_settings = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', friend.get('/app/settings').text, re.S)[1]
+    member_fallback = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', friend.get('/app/fallback').text, re.S)[1]
+    assert 'provider-summary-grid' not in member_settings
+    assert 'ScrapeCreators API key' not in member_fallback
     assert friend.get("/portal/api/team").json() == {"members": []}
     assert friend.get(f"/portal/api/history/{history[0]['id']}").status_code == 404
     assert friend.get("/portal/api/settings/platforms").status_code == 403
@@ -1824,6 +1928,10 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
     assert [item["position"] for item in status["instagram"]["proxy"]] == [1, 2]
     assert owner.post(f"/portal/api/settings/platforms/instagram/proxy/{ids[1]}/move", headers=headers,
                       json={"direction": "up"}).json() == {"moved": True}
+    unchanged = owner.post(f"/portal/api/settings/platforms/instagram/proxy/{ids[1]}/move", headers=headers,
+                           json={"direction": "up"})
+    assert unchanged.status_code == 404
+    assert unchanged.json() == {"detail": "This platform setting could not move in that direction."}
     proxies.reverse()
     assert [item["position"] for item in status["instagram"]["cookies"]] == [1, 2]
     assert status["tiktok"] == {"proxy": [], "cookies": []}
@@ -1859,13 +1967,16 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
     assert bad_cookie.status_code == 400 and "tiktok.com" in bad_cookie.text
     assert owner.delete(f"/portal/api/settings/platforms/instagram/proxy/{ids[0]}",
                         headers=headers).json() == {"removed": True}
+    stale_remove = owner.delete(f"/portal/api/settings/platforms/instagram/proxy/{ids[0]}", headers=headers)
+    assert stale_remove.status_code == 404
+    assert stale_remove.json() == {"detail": "This platform setting was already removed."}
     assert owner.delete(f"/portal/api/settings/platforms/instagram/cookies/{cookie_ids[0]}",
                         headers=headers).json() == {"removed": True}
     status = owner.get("/portal/api/settings/platforms").json()["instagram"]
     assert status["proxy"][0]["position"] == status["cookies"][0]["position"] == 1
     script = owner.get("/assets/portal.js").text
     assert "provider-summary-grid" in script and "openPlatformManager" in script
-    assert "Manage proxies" in script and "Manage accounts" in script
+    assert "Manage proxies" in script and "Manage signed-in accounts" in script
     assert "Add Backup 5 proxy" not in script
 
     monkeypatch.setattr("socialscrape.portal._test_proxy", lambda platform, proxy: {
@@ -1875,3 +1986,32 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
     assert tested == {"ok": True, "status": 200, "blocked": False,
                       "exit_ip": "203.0.113.9", "latency_ms": 321}
     assert proxies[0] not in owner.get("/portal/api/settings/platforms").text
+
+
+def test_documentation_loading_and_interaction_contract():
+    static = __import__('pathlib').Path(__file__).parents[1] / 'socialscrape' / 'static'
+    html = (static / 'loading.html').read_text()
+    script = (static / 'portal.js').read_text()
+    css = (static / 'portal.css').read_text()
+    assert '<h1>Documentation</h1>' not in html
+    assert 'class="skeleton sk-heading" aria-hidden="true"' in html
+    assert 'data-loading-page="docs" data-loading-title="Documentation"' in html
+    assert 'class="table-wrap skeleton-table" aria-hidden="true"' in html
+    assert 'skeleton-table" role="region"' not in html
+    assert 'skeleton-table" tabindex="0"' not in html
+    assert 'function tableRegion(label, content)' in script
+    assert 'role="region" aria-label="${label}" tabindex="0"' in script
+    assert '<div role="group" aria-labelledby="docs-group-${index}">' in script
+    assert "view.querySelector('[data-loading-title]')?.dataset.loadingTitle" in script
+    assert '.docs-disclosure:not([open])>.docs-nav-content{display:none}' in css
+    assert 'function docRequestUrl(path, parameters)' in script
+    assert "param.in === 'query' && param.required" in script
+    assert 'URLSearchParams()' in script
+    assert 'normalizeSchema(param)' in script
+    assert 'Open in playground' in script
+    assert 'role="status" aria-live="polite" aria-atomic="true"' in script
+    assert 'Current · outside search' in script
+    assert 'Endpoint not found' in script
+    assert '.docs-group-label{' in css
+    assert 'min-height:var(--mimic-control-height,40px)' in css
+    assert '@media(any-pointer:coarse)' in css
