@@ -578,7 +578,11 @@ async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
             live = M.to_int(M.obj(M.obj(resp).get("data")).get("status")) == 2
         return {"is_live": live, "liveRoomUserInfo": M.live_user(user, profile.get("stats"))}
 
-    return await with_ydl(P, go)
+    try:
+        return await with_ydl(P, go)
+    except UpstreamBlocked:
+        await asyncio.sleep(_RETRY_DELAY)
+        return await with_ydl(P, go)
 
 
 @sc_get(router, "/v1/tiktok/live", source="yt-dlp TikTokLiveIE (webcast.tiktok.com/webcast/room/info)",

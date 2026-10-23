@@ -1635,3 +1635,19 @@ def test_popular_creators_ranks_a_regional_recommended_feed(client, monkeypatch)
     assert [creator["user_id"] for creator in body["creators"]] == ["10", "20"]
     assert body["creators"][0]["items"][0]["item_id"] == "1"
     assert body["pagination"] == {"has_more": False, "page": 1, "size": 2, "total": 2}
+
+
+def test_user_live_retries_one_transient_block(client, monkeypatch):
+    calls = 0
+    async def with_ydl(platform, fn, **opts):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise UpstreamBlocked("challenge")
+        return {"is_live": False, "liveRoomUserInfo": {"uniqueId": "someone"}}
+    async def no_wait(delay):
+        assert delay == tiktok._RETRY_DELAY
+    monkeypatch.setattr(tiktok, "with_ydl", with_ydl)
+    monkeypatch.setattr(tiktok.asyncio, "sleep", no_wait)
+    body = client.get("/v1/tiktok/user/live", params={"handle": "someone"}).json()
+    assert body["is_live"] is False and calls == 2
