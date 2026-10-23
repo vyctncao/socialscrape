@@ -1,0 +1,2 @@
+import test from "node:test"; import assert from "node:assert/strict"; import config from "../src/config.js"; import { resolveApiKey } from "../src/auth.js";
+test("auth precedence is flag, env, config",()=>{const old=process.env.SOCIALSCRAPE_API_KEY;config.set("apiKey","stored");process.env.SOCIALSCRAPE_API_KEY="env";assert.equal(resolveApiKey({apiKey:"flag"}),"flag");assert.equal(resolveApiKey(),"env");delete process.env.SOCIALSCRAPE_API_KEY;assert.equal(resolveApiKey(),"stored");config.delete("apiKey");if(old)process.env.SOCIALSCRAPE_API_KEY=old});
