@@ -34,7 +34,9 @@ Set `SOCIALSCRAPE_PORTAL_PATH` to a persistent SQLite file to enable the private
 empty database, the first visitor creates the owner account. After that there is no public registration: the owner
 creates seven-day invitation links on the Team page, and each member signs in with their own password and creates
 separate revocable API keys. The dashboard includes a live playground, request history, usage, and documentation
-generated from the server's OpenAPI schema.
+generated from the server's OpenAPI schema. Request history keeps every request, but its stored response bodies only
+for 14 days and up to 256 MiB in all (oldest cleared first); the response cache drops entries older than 30 days and
+keeps at most 256 MiB. Both share the database volume with members and keys, so neither can fill it.
 
 Passwords use PBKDF2-SHA256. Session and API tokens are stored only as SHA-256 hashes; session cookies are HTTP-only
 and SameSite strict; state-changing JSON requests require a CSRF token. For deployment, mount the database directory

@@ -32,6 +32,12 @@ log = logging.getLogger("socialscrape.cache")
 _AGE = re.compile(r"^([0-9]{1,6})\s*([dh]?)$", re.I)
 CACHE_PARAM = "cache_max_age"
 MAX_BODY_BYTES = 8 * 1024 * 1024
+# Stored responses older than the longest documented cache_max_age (30d) are dropped, then the oldest until the rest
+# fit in KEEP_BYTES, so the cache can't fill its disk. A request asking for an older one is served live, which
+# cache_max_age always allows. Checked every PRUNE_SECONDS.
+KEEP_SECONDS = 30 * 86400
+KEEP_BYTES = 256 * 1024 * 1024
+PRUNE_SECONDS = 600
 
 
 def parse_max_age(value: str) -> float:
@@ -67,6 +73,7 @@ class ResponseCache:
             self._conn.commit()
         except (sqlite3.Error, OSError) as exc:
             raise ConfigError(f"SOCIALSCRAPE_CACHE_PATH {path!r} can't be used as a SQLite cache: {exc}") from None
+        self._pruned_at = 0.0
 
     def close(self) -> None:
         self._conn.close()
@@ -106,8 +113,30 @@ class ResponseCache:
                 self._conn.execute("INSERT OR REPLACE INTO response_provenance (key, fallback) VALUES (?, ?)",
                                    (key, int(fallback)))
                 self._conn.commit()
+            if time.time() - self._pruned_at >= PRUNE_SECONDS:
+                self.prune()
         except sqlite3.Error as exc:
             log.warning("cache write failed (%s): %s", self.path, exc)
+
+    def prune(self, now: float | None = None, keep_seconds: float = KEEP_SECONDS, max_bytes: int = KEEP_BYTES) -> int:
+        """Delete stored responses older than keep_seconds, then the oldest until the rest fit in max_bytes. Returns
+        how many were deleted. SQLite reuses the freed pages, so the file stops growing without a VACUUM."""
+        now = time.time() if now is None else now
+        with self._lock:
+            self._pruned_at = now
+            deleted = self._conn.execute("DELETE FROM responses WHERE stored_at < ?", (now - keep_seconds,)).rowcount
+            kept, cutoff = 0, None
+            for stored_at, size in self._conn.execute("SELECT stored_at, LENGTH(body) FROM responses "
+                                                      "ORDER BY stored_at DESC"):
+                kept += size or 0
+                if kept > max_bytes:
+                    cutoff = stored_at
+                    break
+            if cutoff is not None:
+                deleted += self._conn.execute("DELETE FROM responses WHERE stored_at <= ?", (cutoff,)).rowcount
+            self._conn.execute("DELETE FROM response_provenance WHERE key NOT IN (SELECT key FROM responses)")
+            self._conn.commit()
+        return deleted
 
 
 def cache_key(request: Request) -> str:
