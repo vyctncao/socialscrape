@@ -289,6 +289,7 @@ def channel_about(data: dict[str, Any]) -> dict[str, Any]:
         "description": description if isinstance(description, str) else meta.get("description"),
         "subscriberCount": count(subs),
         "subscriberCountText": subs,
+        "videoCount": count(about.get("videoCountText")),
         "videoCountText": about.get("videoCountText"),
         "viewCountText": about.get("viewCountText"),
         "joinedDateText": text(about.get("joinedDateText")),

@@ -1727,3 +1727,14 @@ def test_hashtag_shorts_pages_live(client):
 def test_nonexistent_is_404_live(client, path, params):
     body = get(client, path, status=404, **params)
     assert body["success"] is False and body["error"] == "not_found"
+
+
+def test_channel_about_parses_numeric_video_count_from_text():
+    from socialscrape.platforms import _youtube_listings_parse as parse
+    data = {"onResponseReceivedEndpoints": [{"showEngagementPanelEndpoint": {"engagementPanel": {
+        "engagementPanelSectionListRenderer": {"content": {"sectionListRenderer": {"contents": [{
+            "itemSectionRenderer": {"contents": [{"aboutChannelRenderer": {"metadata": {
+                "aboutChannelViewModel": {"videoCountText": "1,009 videos"}}}}]}}]}}}}}}],
+        "metadata": {"channelMetadataRenderer": {"externalId": "UCx", "title": "X"}}}
+    body = parse.channel_about(data)
+    assert body["videoCount"] == 1009 and body["videoCountText"] == "1,009 videos"

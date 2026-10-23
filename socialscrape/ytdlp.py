@@ -537,7 +537,7 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], **ydl_opt
 
 def _retry_profile(error: ApiError) -> bool:
     return error.code in {
-        "upstream_blocked", "network_error", "proxy_error", "forbidden", "cookies_rejected",
+        "upstream_blocked", "upstream_error", "network_error", "proxy_error", "forbidden", "cookies_rejected",
     }
 
 
