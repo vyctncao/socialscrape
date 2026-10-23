@@ -2008,7 +2008,8 @@ def test_documentation_loading_and_interaction_contract():
     assert 'function tableRegion(label, content)' in script
     assert 'role="region" aria-label="${label}" tabindex="0"' in script
     assert '<div role="group" aria-labelledby="docs-group-${index}">' in script
-    assert "view.querySelector('[data-loading-title]')?.dataset.loadingTitle" in script
+    assert "live('[data-loading-title]')?.dataset.loadingTitle" in script
+    assert "!element.closest('.loading-overlay')" in script  # the fading skeleton never names a loaded page
     assert '.docs-disclosure:not([open])>.docs-nav-content{display:none}' in css
     assert 'function docRequestUrl(path, parameters)' in script
     assert "param.in === 'query' && param.required" in script
