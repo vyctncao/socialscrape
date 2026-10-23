@@ -12,6 +12,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -423,24 +424,45 @@ class PortalStore:
                 "routes": [dict(r) for r in routes]}
 
 
+@cache
+def _portal_asset_version() -> str:
+    assets = Path(__file__).with_name("static")
+    digest = hashlib.sha256()
+    for name in ("portal.html", "portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
+                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg"):
+        digest.update(name.encode())
+        digest.update((assets / name).read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _versioned_page(page: str) -> str:
+    version = _portal_asset_version()
+    page = page.replace("__ASSET_VERSION__", version)
+    for name in ("portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg"):
+        path = f"/assets/{name}"
+        page = page.replace(f'{path}"', f'{path}?v={version}"')
+        page = page.replace(f"{path}#", f"{path}?v={version}#")
+    return page
+
+
 def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
     shell = body if bare else f'<main class="auth-card">{body}</main>'
-    return HTMLResponse(f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport"
-content="width=device-width,initial-scale=1"><title>{title} · SocialScrape</title>
+    return HTMLResponse(_versioned_page(f'''<!doctype html><html lang="en" data-asset-version="__ASSET_VERSION__"><head><meta charset="utf-8"><meta name="viewport"
+content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</title>
 <link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/brand/tokens.css"><link rel="stylesheet" href="/assets/portal.css">
 <script src="/assets/appearance.js"></script></head><body class="auth-page">
 <div class="auth-shell"><div class="auth-main"><header class="auth-header">
 <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>
-<span>SocialScrape<small>by Mimic</small></span></a>
+<span>Social Scrape</span></a>
 <button class="icon-button" data-theme-toggle aria-label="Switch theme"></button></header>{shell}
-<footer class="auth-footer"><span>Social data. Your workspace.</span><span>Private · Invite-only</span></footer>
+<footer class="auth-footer"><span>Social Scrape</span><span>Private · Invite-only</span></footer>
 </div><aside class="auth-art" aria-label="Mimic editorial artwork">
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
 <span class="auth-art-label"><img src="/assets/brand/logomark-chalk.svg" alt="">MIMIC</span>
-</aside></div></body></html>''')
+</aside></div></body></html>'''))
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
@@ -522,7 +544,7 @@ def install_portal(app, store: PortalStore) -> None:
         heading = "Create the owner account" if setup else "Welcome back"
         copy = ("Enter the private setup code configured by the operator." if setup_enabled and setup
                 else "Owner setup is disabled until SOCIALSCRAPE_SETUP_TOKEN is configured." if setup
-                else "Sign in to your private SocialScrape workspace.")
+                else "Sign in to your private Social Scrape workspace.")
         action = "/setup" if setup else "/login"
         setup_field = ('''<label>Setup code<input name="setup_token" type="password" autocomplete="off" required>
 </label>''' if setup_enabled and setup else "")
@@ -578,7 +600,7 @@ aria-describedby="password-hint"></label><p class="help" id="password-hint">Use 
                          '<p>This link is invalid or expired. Ask your workspace owner for a new invitation.</p>'
                          '<a class="ghost" href="/login">Back to sign in</a>')
         return _page("Join", f'''<div class="eyebrow">You’re invited</div>
-<h1>Join SocialScrape</h1><p>Your invitation is for <strong>{html.escape(email)}</strong>.</p>
+<h1>Join Social Scrape</h1><p>Your invitation is for <strong>{html.escape(email)}</strong>.</p>
 <form method="post"><label>Create password<input name="password" type="password" minlength="12"
 autocomplete="new-password" aria-describedby="password-hint" required></label>
 <p class="help" id="password-hint">Use at least 12 characters.</p>
@@ -605,7 +627,7 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
             return RedirectResponse("/login", 303)
         page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(principal.email))
         portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf})
-        return HTMLResponse(page.replace("__PORTAL__", portal_data))
+        return HTMLResponse(_versioned_page(page.replace("__PORTAL__", portal_data)))
 
     @router.get("/portal/api/me")
     async def me(request: Request):

@@ -36,3 +36,27 @@ language survive in-app navigation. A workspace session can run requests without
 an API key, while exported snippets use an integration credential placeholder.
 Responses, usage totals, and request history come from the existing server APIs.
 Proxy settings retain owner permissions and the server’s encrypted storage contract.
+
+The sidebar can collapse to an icon rail. Its state is initialized on the document
+root before rendering and saved independently from the appearance theme. Every
+icon-only destination retains its accessible name and tooltip. The account trigger
+uses one-line identity text and opens the kit's neutral account popup, with theme,
+settings, and log-out actions. The mobile drawer owns its own popup instance so its
+controls stay inside the active modal's interaction scope.
+
+Instagram, TikTok, and YouTube use the kit's original colored brand artwork in
+`brand/platforms/`. One platform-label helper keeps the picker, overview, reference,
+settings, route activity, and footer consistent. The picker uses a native popover
+with labeled listbox options and keyboard navigation because ordinary native
+select options cannot display the brand images consistently. Only the three data
+platforms appear in the picker; metadata such as coverage remains outside it.
+
+The server versions shell scripts, styles, and SVG references with a digest of
+the UI assets. Authentication pages use the same version. This keeps a returning
+browser from combining new markup with cached scripts from an earlier deployment.
+
+The live Stackdome resource owns `scrape.mimic.host` with TLS enabled. Release
+published code with `stackdome create release --stack socialscrape-app --wait`.
+The Stackfile schema cannot represent `custom_domain`; applying that file would
+clear the saved hostname. Preserve the resource's domain, secret connection,
+and persistent volume when changing its deployment definition.
