@@ -105,6 +105,8 @@ class Settings:
     proxy: str | None
     # platform -> Netscape cookies.txt path. Read-only: never written back.
     cookie_files: dict[str, str]
+    # Invite-only dashboard/session database. Empty disables the dashboard.
+    portal_path: str
     # yt-dlp `cookiesfrombrowser` spec, e.g. "chrome" or "firefox:default-release"
     cookies_from_browser: str | None
     # none | faster-whisper | mlx-whisper
@@ -131,6 +133,7 @@ def get_settings() -> Settings:
         request_timeout=_number("SOCIALSCRAPE_REQUEST_TIMEOUT", "180", float, minimum=0, inclusive=False),
         socket_timeout=_socket_timeout(),
         proxy=_proxy(),
+        portal_path=_path(os.environ.get("SOCIALSCRAPE_PORTAL_PATH", "").strip()),
         cookie_files={
             p: _path(path) for p in PLATFORMS if (path := _env(f"SOCIALSCRAPE_COOKIES_{p.upper()}"))
         },

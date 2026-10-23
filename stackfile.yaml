@@ -1,0 +1,32 @@
+name: socialscrape
+resources:
+  api:
+    build:
+      repo: https://github.com/vyctncao/socialscrape.git
+      branch: main
+      context: .
+      dockerfile: Dockerfile
+    workload_type: Service
+    replicas: 1
+    env:
+      HOST: 0.0.0.0
+      PORT: "8000"
+      SOCIALSCRAPE_CACHE_PATH: /data/cache.sqlite3
+      SOCIALSCRAPE_PORTAL_PATH: /data/portal.sqlite3
+      SOCIALSCRAPE_LOG_LEVEL: INFO
+    secrets:
+      socialscrape-bootstrap:
+        SOCIALSCRAPE_SETUP_TOKEN: setup_token
+    volumes:
+      - name: data
+        path: /data
+    ports:
+      - name: http
+        port: 8000
+        protocol: HTTP
+        public: true
+        subdomain: socialscrape
+volumes:
+  data:
+    size: 1Gi
+    access_mode: ReadWriteOnce

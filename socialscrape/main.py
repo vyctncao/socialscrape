@@ -14,6 +14,7 @@ import socket
 import sys
 import threading
 import time
+from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -28,27 +29,61 @@ from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
                      validation_error_handler)
+from .portal import PortalStore, install_portal
 from .registry import IMPLEMENTED, add_unsupported_routes, coverage, mark_unsupported
 
 log = logging.getLogger("socialscrape")
 
-PUBLIC_PATHS = {"/health", "/docs", "/redoc", "/openapi.json", "/meta/coverage"}
+PUBLIC_PATHS = {"/health", "/redoc", "/meta/coverage"}
+LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs", "/openapi.json"}
+PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/assets/", "/app", "/docs")
 
 
 class ApiKeyMiddleware(BaseHTTPMiddleware):
     """`x-api-key` auth, same header as ScrapeCreators. Off when no keys are configured."""
 
     async def dispatch(self, request: Request, call_next):
-        keys = get_settings().api_keys
-        # '/health/' as well, which the router redirects to '/health'; '/healthz' or '/health/x' needs a key
-        if keys and (request.url.path.rstrip("/") or "/") not in PUBLIC_PATHS:
-            # The header's raw bytes (compare_digest rejects a non-ASCII str), stripped like the keys: uvicorn's
-            # httptools parser keeps trailing spaces and tabs, which aren't part of the value.
-            given = request.headers.get("x-api-key", "").strip(" \t").encode("latin-1")
-            if not any(hmac.compare_digest(given, k.encode()) for k in keys):
-                err = Unauthorized("Missing or invalid x-api-key header")
-                return JSONResponse(err.body(), status_code=err.status)
+        settings = get_settings()
+        path = request.url.path.rstrip("/") or "/"
+        portal = getattr(request.app.state, "portal", None)
+        public_paths = PUBLIC_PATHS if portal else LEGACY_PUBLIC_PATHS
+        portal_route = portal and (path == "/" or request.url.path.startswith(PORTAL_PUBLIC_PREFIXES))
+        if path in public_paths or portal_route:
+            return await call_next(request)
+        if portal and (principal := portal.principal_for_session(request.cookies.get("socialscrape_session"))):
+            request.state.principal = principal
+            selected = request.headers.get("x-portal-key-id", "")
+            if selected.isascii() and selected.isdigit() and portal.key_available_to(principal, int(selected)):
+                request.state.api_key_id = int(selected)
+            return await call_next(request)
+        # The header's raw bytes (compare_digest rejects a non-ASCII str), stripped like configured keys: uvicorn's
+        # httptools parser keeps trailing spaces and tabs, which aren't part of the value.
+        given_text = request.headers.get("x-api-key", "").strip(" \t")
+        given = given_text.encode("latin-1")
+        if portal and given_text and (identity := portal.authenticate_key(given_text)):
+            request.state.principal, request.state.api_key_id = identity
+            return await call_next(request)
+        if settings.api_keys and any(hmac.compare_digest(given, k.encode()) for k in settings.api_keys):
+            return await call_next(request)
+        if settings.api_keys or portal:
+            err = Unauthorized("Missing or invalid x-api-key header")
+            return JSONResponse(err.body(), status_code=err.status)
         return await call_next(request)
+
+
+class UsageMiddleware(BaseHTTPMiddleware):
+    """Record API calls made through a member key for dashboard history and usage."""
+
+    async def dispatch(self, request: Request, call_next):
+        started = perf_counter()
+        response = await call_next(request)
+        portal = getattr(request.app.state, "portal", None)
+        if portal and request.url.path.startswith("/v"):
+            portal.record_request(getattr(request.state, "principal", None),
+                                  getattr(request.state, "api_key_id", None), request.method,
+                                  request.url.path, request.url.query, response.status_code,
+                                  round((perf_counter() - started) * 1000), response.headers.get("x-cache") == "hit")
+        return response
 
 
 def load_platform_modules(app: FastAPI) -> None:
@@ -70,9 +105,11 @@ def create_app() -> FastAPI:
         log.warning("SOCIALSCRAPE_TRANSCRIBE=%s but its package is not installed: AI transcription answers 501 "
                     "transcription_unavailable", settings.transcribe_backend)
     app = FastAPI(
-        title="socialscrape",
+        title="SocialScrape",
         version="0.1.0",
-        description="Self-hosted, ScrapeCreators-compatible API for YouTube, TikTok and Instagram, powered by yt-dlp.",
+        description="Private, self-hosted social data API for YouTube, TikTok and Instagram, powered by yt-dlp.",
+        docs_url=None if settings.portal_path else "/docs",
+        redoc_url=None if settings.portal_path else "/redoc",
     )
     app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
@@ -81,10 +118,16 @@ def create_app() -> FastAPI:
     # Starlette runs the last-added middleware first: auth before cache. The cache is opened here because Starlette
     # builds middleware on the first request, too late to stop startup on an unusable SOCIALSCRAPE_CACHE_PATH.
     app.add_middleware(CacheMiddleware, cache=ResponseCache(settings.cache_path) if settings.cache_path else None)
+    app.add_middleware(UsageMiddleware)
     app.add_middleware(ApiKeyMiddleware)
 
     load_platform_modules(app)
     add_unsupported_routes(app)
+    if settings.portal_path:
+        portal = PortalStore(settings.portal_path)
+        portal.bootstrap_owner(os.environ.get("SOCIALSCRAPE_OWNER_EMAIL"),
+                               os.environ.get("SOCIALSCRAPE_OWNER_PASSWORD"))
+        install_portal(app, portal)
 
     # HEAD for uptime probes (curl -I). Not on the data routes: there it would still run the scrape.
     @app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
@@ -96,7 +139,7 @@ def create_app() -> FastAPI:
         return {
             "ok": True,
             "yt_dlp": yt_dlp.version.__version__,
-            "auth": bool(s.api_keys),
+            "auth": bool(s.api_keys or s.portal_path),
             "cache": bool(s.cache_path),
             "transcription": s.transcribe_backend if transcribe.enabled() else None,  # null: off or not installed
             "cookies": [p for p in sorted(s.cookie_files) if p not in cookie_errors]

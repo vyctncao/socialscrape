@@ -1649,3 +1649,73 @@ def test_mlx_speech_clip_keeps_its_last_window(env, monkeypatch):
     assert [s.text for s in kept] == [s["text"].strip() for s in results["speech33"]]
     _, kept = transcribe._run_backend("mlx-whisper", "speech_then_silence", None)
     assert [s.text for s in kept] == ["Welcome back to the channel."]
+
+
+def test_empty_portal_cannot_be_claimed_without_the_private_setup_code(env, tmp_path):
+    from socialscrape.main import create_app
+
+    portal = tmp_path / "portal.sqlite3"
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="")
+    c = TestClient(create_app(), base_url="https://testserver")
+    page = c.get("/login").text
+    assert "Owner setup is disabled" in page and "setup_token" not in page
+    response = c.post("/setup", data={"email": "attacker@example.com", "password": "long enough password"},
+                      follow_redirects=False)
+    assert response.status_code == 303 and "Setup+code+is+invalid" in response.headers["location"]
+    assert "Create the owner account" in c.get("/login").text
+
+
+def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    portal = tmp_path / "portal.sqlite3"
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="")
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "one-time-setup-code")
+    owner = TestClient(create_app(), base_url="https://testserver", raise_server_exceptions=False)
+
+    assert owner.get("/", follow_redirects=False).headers["location"] == "/login"
+    assert "Create the owner account" in owner.get("/login").text
+    bad_setup = owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                                                  "setup_token": "wrong"}, follow_redirects=False)
+    assert bad_setup.status_code == 303
+    assert "Create the owner account" in owner.get("/login").text
+    setup = owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                                       "setup_token": "one-time-setup-code"}, follow_redirects=False)
+    assert setup.status_code == 303
+    assert "SocialScrape Team" in owner.get("/app").text
+    assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
+    assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
+
+    me = owner.get("/portal/api/me").json()
+    headers = {"x-csrf-token": me["csrf"]}
+    created = owner.post("/portal/api/keys", headers=headers, json={"name": "Tests"}).json()
+    assert created["key"].startswith("ss_") and created["key"] not in owner.get("/portal/api/keys").text
+    assert owner.get("/v1/youtube/shorts/trending", headers={"x-portal-key-id": str(created["id"])}).status_code == 501
+    assert owner.get("/portal/api/keys").json()["keys"][0]["last_used_at"] is not None
+    assert TestClient(create_app(), base_url="https://testserver").get(
+        "/v1/youtube/shorts/trending", headers={"x-api-key": created["key"]}).status_code == 501
+    assert owner.get("/portal/api/history").json()["requests"][0]["path"] == "/v1/youtube/shorts/trending"
+
+    invite = owner.post("/portal/api/invites", headers=headers, json={"email": "friend@example.com"}).json()["url"]
+    friend = TestClient(create_app(), base_url="https://testserver")
+    token = invite.rsplit("/", 1)[-1]
+    assert "friend@example.com" in friend.get(f"/invite/{token}").text
+    accepted = friend.post(f"/invite/{token}", data={"password": "another strong password"},
+                           follow_redirects=False)
+    assert accepted.status_code == 303
+    friend_me = friend.get("/portal/api/me").json()
+    assert friend_me["role"] == "member"
+    assert friend.get("/portal/api/team").json() == {"members": []}
+    friend_key = friend.post("/portal/api/keys", headers={"x-csrf-token": friend_me["csrf"]},
+                             json={"name": "Friend"}).json()["key"]
+    member = next(m for m in owner.get("/portal/api/team").json()["members"] if m["role"] == "member")
+    removed = owner.delete(f"/portal/api/team/{member['id']}", headers=headers).json()
+    assert removed == {"removed": True}
+    assert friend.get("/portal/api/me").status_code == 401
+    assert TestClient(create_app()).get("/v1/youtube/shorts/trending",
+                                        headers={"x-api-key": friend_key}).status_code == 401
+
+    anonymous = TestClient(create_app(), base_url="https://testserver", raise_server_exceptions=False)
+    assert anonymous.get("/app", follow_redirects=False).headers["location"] == "/login"
+    assert anonymous.get("/openapi.json").status_code == 401
+    assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401

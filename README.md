@@ -17,16 +17,33 @@ curl 'http://127.0.0.1:8000/v1/tiktok/profile?handle=stoolpresidente'
 curl 'http://127.0.0.1:8000/v1/instagram/post?url=https://www.instagram.com/p/DeKe2vzD9xZ/'
 ```
 
-- `/docs`: interactive OpenAPI docs. The spec declares the `x-api-key` header as ScrapeCreators' `apiKeyAuth` scheme, so use **Authorize** there when auth is on.
+- `/docs`: interactive OpenAPI docs without the portal; with the portal enabled it redirects signed-in members to the private documentation UI. The OpenAPI spec still powers the dashboard docs and playground.
 - `/meta/coverage`: every endpoint's status, the yt-dlp extractor it uses, and its limitations.
 - `/health`: yt-dlp version and which features are enabled.
 
-When auth is on, these three, `/redoc` and `/openapi.json` are the only paths that work without an API key (with a trailing slash too, which redirects to the path without it).
+With only `SOCIALSCRAPE_API_KEYS`, these three, `/redoc` and `/openapi.json` are public. With the portal enabled, the OpenAPI document and dashboard are private; `/health` and `/meta/coverage` remain public for probes and capability checks.
+
+## Private dashboard
+
+Set `SOCIALSCRAPE_PORTAL_PATH` to a persistent SQLite file to enable the private web dashboard at `/app`. With an
+empty database, the first visitor creates the owner account. After that there is no public registration: the owner
+creates seven-day invitation links on the Team page, and each member signs in with their own password and creates
+separate revocable API keys. The dashboard includes a live playground, request history, usage, and documentation
+generated from the server's OpenAPI schema.
+
+Passwords use PBKDF2-SHA256. Session and API tokens are stored only as SHA-256 hashes; session cookies are HTTP-only
+and SameSite strict; state-changing JSON requests require a CSRF token. For deployment, mount the database directory
+on persistent storage. Set a long random `SOCIALSCRAPE_SETUP_TOKEN` as a deployment secret while creating the first
+owner, then remove it; without that code, nobody can claim an empty deployment. Alternatively,
+`SOCIALSCRAPE_OWNER_EMAIL` and `SOCIALSCRAPE_OWNER_PASSWORD` can bootstrap the first owner non-interactively. Supply
+all three only as deployment secrets and remove them after the first successful startup—never commit them. Existing
+`SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility.
 
 Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
 
 | Variable | Purpose |
 |---|---|
+| `SOCIALSCRAPE_PORTAL_PATH` | Persistent SQLite database for invite-only sign-in, member API keys, history, usage, playground and docs. Empty disables the dashboard. |
 | `SOCIALSCRAPE_API_KEYS` | Comma-separated accepted `x-api-key` values. Empty means auth is off; set it before exposing the server. ASCII only: a non-ASCII key stops startup. |
 | `SOCIALSCRAPE_PROXY` | Outbound proxy URL (`http`, `https`, `socks4(a)` or `socks5(h)`). Platforms throttle datacenter IPs quickly. |
 | `SOCIALSCRAPE_COOKIES_{YOUTUBE,TIKTOK,INSTAGRAM}` | Netscape `cookies.txt` per platform. Use throwaway accounts. An unusable file makes that platform answer `500 cookies_error`. |
