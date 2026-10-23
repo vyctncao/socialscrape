@@ -14,6 +14,9 @@ resources:
       SOCIALSCRAPE_CACHE_PATH: /data/cache.sqlite3
       SOCIALSCRAPE_PORTAL_PATH: /data/portal.sqlite3
       SOCIALSCRAPE_LOG_LEVEL: INFO
+    secrets:
+      socialscrape-portal-encryption:
+        SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY: fernet_key
     volumes:
       - name: data
         path: /data

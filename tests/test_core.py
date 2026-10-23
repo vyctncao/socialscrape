@@ -1682,7 +1682,8 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     setup = owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
                                        "setup_token": "one-time-setup-code"}, follow_redirects=False)
     assert setup.status_code == 303
-    assert "SocialScrape Team" in owner.get("/app").text
+    dashboard = owner.get("/app").text
+    assert "SocialScrape" in dashboard and "Team workspace" in dashboard
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 
@@ -1706,6 +1707,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     friend_me = friend.get("/portal/api/me").json()
     assert friend_me["role"] == "member"
     assert friend.get("/portal/api/team").json() == {"members": []}
+    assert friend.get("/portal/api/settings/proxy").status_code == 403
     friend_key = friend.post("/portal/api/keys", headers={"x-csrf-token": friend_me["csrf"]},
                              json={"name": "Friend"}).json()["key"]
     member = next(m for m in owner.get("/portal/api/team").json()["members"] if m["role"] == "member")
@@ -1719,3 +1721,36 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert anonymous.get("/app", follow_redirects=False).headers["location"] == "/login"
     assert anonymous.get("/openapi.json").status_code == 401
     assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401
+
+
+def test_owner_can_set_encrypted_runtime_proxy_from_dashboard(env, tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    from socialscrape import ytdlp
+    from socialscrape.main import create_app
+
+    portal = tmp_path / "portal.sqlite3"
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    monkeypatch.setenv("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="", SOCIALSCRAPE_PROXY="")
+    owner = TestClient(create_app(), base_url="https://testserver", raise_server_exceptions=False)
+    owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                                "setup_token": "setup"})
+    me = owner.get("/portal/api/me").json()
+    headers = {"x-csrf-token": me["csrf"]}
+    proxy = "http://private-user:private-password@proxy.example:4321"
+
+    assert owner.get("/portal/api/settings/proxy").json() == {"configured": False, "updated_at": None}
+    assert owner.put("/portal/api/settings/proxy", headers=headers, json={"url": proxy}).json() == {"configured": True}
+    status = owner.get("/portal/api/settings/proxy").json()
+    assert status["configured"] is True and status["updated_at"] > 0
+    raw = portal.read_bytes()
+    assert b"private-user" not in raw and b"private-password" not in raw and proxy.encode() not in raw
+    assert ytdlp.base_options("instagram")["proxy"] == proxy
+    assert proxy not in owner.get("/portal/api/settings/proxy").text
+
+    for bad in ("ftp://user:pass@host:21", "http://host:0", "http://bad host:80"):
+        response = owner.put("/portal/api/settings/proxy", headers=headers, json={"url": bad})
+        assert response.status_code == 400 and proxy not in response.text
+    assert owner.delete("/portal/api/settings/proxy", headers=headers).json() == {"cleared": True}
+    assert "proxy" not in ytdlp.base_options("instagram")

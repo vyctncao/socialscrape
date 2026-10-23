@@ -18,10 +18,14 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from cryptography.fernet import Fernet, InvalidToken
+
+from .config import ConfigError, validate_proxy
 
 SESSION_COOKIE = "socialscrape_session"
 SESSION_SECONDS = 60 * 60 * 24 * 30
 PBKDF2_ROUNDS = 600_000
+_active_store: Any = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,12 @@ class PortalStore:
                 last_used_at REAL,
                 revoked_at REAL
             );
+            CREATE TABLE IF NOT EXISTS portal_settings (
+                name TEXT PRIMARY KEY,
+                encrypted_value BLOB NOT NULL,
+                updated_at REAL NOT NULL,
+                updated_by INTEGER REFERENCES members(id) ON DELETE SET NULL
+            );
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY,
                 member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
@@ -110,6 +120,64 @@ class PortalStore:
             return hmac.compare_digest(actual, bytes.fromhex(expected))
         except (ValueError, TypeError):
             return False
+
+    def _fernet(self) -> Fernet:
+        key = os.environ.get("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY", "")
+        try:
+            return Fernet(key.encode())
+        except (ValueError, TypeError):
+            raise ConfigError(
+                "SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY must be a Fernet key when portal settings are used"
+            ) from None
+
+    def proxy_status(self, owner: Principal) -> dict[str, Any]:
+        if owner.role != "owner":
+            raise PermissionError
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT encrypted_value, updated_at FROM portal_settings WHERE name='proxy'"
+            ).fetchone()
+        if not row:
+            return {"configured": False, "updated_at": None}
+        try:
+            self._fernet().decrypt(row["encrypted_value"])
+        except InvalidToken:
+            raise ConfigError("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY cannot decrypt the saved proxy") from None
+        return {"configured": True, "updated_at": row["updated_at"]}
+
+    def proxy(self) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT encrypted_value FROM portal_settings WHERE name='proxy'"
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return self._fernet().decrypt(row["encrypted_value"]).decode()
+        except InvalidToken:
+            raise ConfigError("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY cannot decrypt the saved proxy") from None
+
+    def set_proxy(self, owner: Principal, value: str) -> None:
+        if owner.role != "owner":
+            raise PermissionError
+        proxy = validate_proxy(value, name="Proxy")
+        if not proxy:
+            raise ValueError("Enter a proxy URL")
+        encrypted = self._fernet().encrypt(proxy.encode())
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO portal_settings(name,encrypted_value,updated_at,updated_by) "
+                "VALUES('proxy',?,?,?)", (encrypted, time.time(), owner.id)
+            )
+            self._conn.commit()
+
+    def clear_proxy(self, owner: Principal) -> bool:
+        if owner.role != "owner":
+            raise PermissionError
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM portal_settings WHERE name='proxy'")
+            self._conn.commit()
+        return cur.rowcount == 1
 
     def has_members(self) -> bool:
         with self._lock:
@@ -306,7 +374,20 @@ def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
     shell = body if bare else f'<main class="auth-card">{body}</main>'
     return HTMLResponse(f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport"
 content="width=device-width,initial-scale=1"><title>{title} · SocialScrape</title>
-<link rel="stylesheet" href="/assets/portal.css"></head><body class="auth-page">{shell}</body></html>''')
+<link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/brand/tokens.css"><link rel="stylesheet" href="/assets/portal.css">
+<script src="/assets/appearance.js"></script></head><body class="auth-page">
+<div class="auth-shell"><div class="auth-main"><header class="auth-header">
+<a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>
+<span>SocialScrape<small>by Mimic</small></span></a>
+<button class="icon-button" data-theme-toggle aria-label="Switch theme"></button></header>{shell}
+<footer class="auth-footer"><span>Social data. Your workspace.</span><span>Private · Invite-only</span></footer>
+</div><aside class="auth-art" aria-label="Mimic editorial artwork">
+<img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
+<img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
+<span class="auth-art-label"><img src="/assets/brand/logomark-chalk.svg" alt="">MIMIC</span>
+</aside></div></body></html>''')
 
 
 def _session(request: Request) -> Principal | None:
@@ -325,7 +406,25 @@ def _csrf(request: Request, principal: Principal) -> None:
         raise HTTPException(403, "Invalid CSRF token")
 
 
+def _owner(request: Request) -> Principal:
+    principal = _require(request)
+    if principal.role != "owner":
+        raise HTTPException(403, "Workspace owner access required")
+    return principal
+
+
+def active_proxy() -> str | None:
+    return _active_store.proxy() if _active_store else None
+
+
+def clear_active_portal() -> None:
+    global _active_store
+    _active_store = None
+
+
 def install_portal(app, store: PortalStore) -> None:
+    global _active_store
+    _active_store = store
     app.state.portal = store
     assets = Path(__file__).with_name("static")
     app.mount("/assets", StaticFiles(directory=assets), name="assets")
@@ -348,14 +447,16 @@ def install_portal(app, store: PortalStore) -> None:
         action = "/setup" if setup else "/login"
         setup_field = ('''<label>Setup code<input name="setup_token" type="password" autocomplete="off" required>
 </label>''' if setup_enabled and setup else "")
-        return _page("Sign in", f'''<a class="brand" href="/"><b>{{SS}}</b><span>SocialScrape</span></a>
-<h1>{heading}</h1><p>{copy}</p>{f'<div class="form-error">{html.escape(error)}</div>' if error else ''}
+        return _page("Sign in", f'''<div class="eyebrow">Your workspace awaits</div>
+<h1>{heading}</h1><p>{copy}</p>{f'<div class="form-error" role="alert">{html.escape(error)}</div>' if error else ''}
 <form method="post" action="{action}">{setup_field}
 <label>Email<input name="email" type="email" autocomplete="email" required></label>
 <label>Password<input name="password" type="password"
-autocomplete="{'new-password' if setup else 'current-password'}" minlength="12" required></label>
-<button type="submit" {'disabled' if setup and not setup_enabled else ''}>
-{'Create owner account' if setup else 'Sign in'}</button></form>''')
+autocomplete="{'new-password' if setup else 'current-password'}" minlength="12" required
+aria-describedby="password-hint"></label><p class="help" id="password-hint">Use at least 12 characters.</p>
+<button class="primary" type="submit" {'disabled' if setup and not setup_enabled else ''}>
+{'Create owner account' if setup else 'Sign in'}</button></form>
+<div class="auth-hint">Access is by invitation. Contact your workspace owner to join.</div>''')
 
     @router.post("/setup")
     async def setup(request: Request, email: str = Form(...), password: str = Form(...),
@@ -394,11 +495,15 @@ autocomplete="{'new-password' if setup else 'current-password'}" minlength="12" 
     async def invite_page(token: str):
         email = store.invite_email(token)
         if not email:
-            return _page("Invitation", '<h1>Invitation unavailable</h1><p>This link is invalid or expired.</p>')
-        return _page("Join", f'''<a class="brand" href="/"><b>{{SS}}</b><span>SocialScrape</span></a>
+            return _page("Invitation", '<div class="eyebrow">Workspace invitation</div><h1>Invitation unavailable</h1>'
+                         '<p>This link is invalid or expired. Ask your workspace owner for a new invitation.</p>'
+                         '<a class="ghost" href="/login">Back to sign in</a>')
+        return _page("Join", f'''<div class="eyebrow">You’re invited</div>
 <h1>Join SocialScrape</h1><p>Your invitation is for <strong>{html.escape(email)}</strong>.</p>
-<form method="post"><label>Create password<input name="password" type="password" minlength="12" required></label>
-<button type="submit">Accept invitation</button></form>''')
+<form method="post"><label>Create password<input name="password" type="password" minlength="12"
+autocomplete="new-password" aria-describedby="password-hint" required></label>
+<p class="help" id="password-hint">Use at least 12 characters.</p>
+<button class="primary" type="submit">Accept invitation</button></form>''')
 
     @router.post("/invite/{token}")
     async def accept_invite(request: Request, token: str, password: str = Form(...)):
@@ -464,6 +569,27 @@ autocomplete="{'new-password' if setup else 'current-password'}" minlength="12" 
         data = await request.json()
         token = store.create_invite(p, str(data.get("email", "")))
         return {"url": str(request.base_url).rstrip("/") + "/invite/" + token}
+
+    @router.get("/portal/api/settings/proxy")
+    async def proxy_status(request: Request):
+        return store.proxy_status(_owner(request))
+
+    @router.put("/portal/api/settings/proxy")
+    async def set_proxy(request: Request):
+        p = _owner(request)
+        _csrf(request, p)
+        data = await request.json()
+        try:
+            store.set_proxy(p, str(data.get("url", "")))
+        except (ConfigError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"configured": True}
+
+    @router.delete("/portal/api/settings/proxy")
+    async def clear_proxy(request: Request):
+        p = _owner(request)
+        _csrf(request, p)
+        return {"cleared": store.clear_proxy(p)}
 
     @router.get("/portal/api/history")
     async def history(request: Request, limit: int = 100):

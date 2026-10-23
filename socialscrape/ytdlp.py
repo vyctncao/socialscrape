@@ -131,8 +131,10 @@ def base_options(platform: str) -> dict[str, Any]:
         "extractor_retries": 2,
         "allowed_extractors": ALLOWED_EXTRACTORS.get(platform, ["default"]),
     }
-    if s.proxy:
-        opts["proxy"] = s.proxy
+    from .portal import active_proxy
+    proxy = active_proxy() or s.proxy
+    if proxy:
+        opts["proxy"] = proxy
     if cookie_file := s.cookie_file(platform):
         if problem := cookie_file_problem(cookie_file):
             raise Misconfigured(f"The server's {platform} cookie file (SOCIALSCRAPE_COOKIES_{platform.upper()}) "

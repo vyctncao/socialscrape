@@ -68,14 +68,13 @@ def _socket_timeout() -> float:
     return value
 
 
-def _proxy() -> str | None:
-    proxy = _env("SOCIALSCRAPE_PROXY")
+def validate_proxy(proxy: str | None, *, name: str = "SOCIALSCRAPE_PROXY") -> str | None:
+    proxy = proxy.strip() if proxy and proxy.strip() else None
     if not proxy:
         return None
     # Only the scheme in the messages, never the URL: it may carry credentials.
     if (m := re.match(r"([A-Za-z][A-Za-z0-9+.-]*)://", proxy)) and m.group(1).lower() not in PROXY_SCHEMES:
-        raise ConfigError(f"SOCIALSCRAPE_PROXY has unsupported scheme {m.group(1)!r}; use one of "
-                          f"{', '.join(PROXY_SCHEMES)}")
+        raise ConfigError(f"{name} has unsupported scheme {m.group(1)!r}; use one of {', '.join(PROXY_SCHEMES)}")
     # yt-dlp reads a scheme-less proxy as http. Its handlers only parse the URL per request, so an unusable host or
     # port would otherwise fail every request, with the URL (and its password) in the error text.
     try:
@@ -84,9 +83,13 @@ def _proxy() -> str | None:
     except ValueError:  # 'Invalid IPv6 URL', a port that isn't a number or is out of range
         host, port = None, 0
     if not host or any(c.isspace() or not c.isprintable() for c in host) or port == 0:
-        raise ConfigError("SOCIALSCRAPE_PROXY must be a proxy URL such as http://user:pass@host:port with a valid "
-                          "host and, if given, a port from 1 to 65535")
+        raise ConfigError(f"{name} must be a proxy URL such as http://user:pass@host:port with a valid host and, "
+                          "if given, a port from 1 to 65535")
     return proxy
+
+
+def _proxy() -> str | None:
+    return validate_proxy(_env("SOCIALSCRAPE_PROXY"))
 
 
 @dataclass(frozen=True)

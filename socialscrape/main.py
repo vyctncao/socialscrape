@@ -29,7 +29,7 @@ from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
                      validation_error_handler)
-from .portal import PortalStore, install_portal
+from .portal import PortalStore, clear_active_portal, install_portal
 from .registry import IMPLEMENTED, add_unsupported_routes, coverage, mark_unsupported
 
 log = logging.getLogger("socialscrape")
@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
 
     load_platform_modules(app)
     add_unsupported_routes(app)
+    clear_active_portal()
     if settings.portal_path:
         portal = PortalStore(settings.portal_path)
         portal.bootstrap_owner(os.environ.get("SOCIALSCRAPE_OWNER_EMAIL"),
