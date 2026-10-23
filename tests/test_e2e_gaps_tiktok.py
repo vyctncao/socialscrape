@@ -57,6 +57,8 @@ ROUTE_PARAMS = {
     "/v1/tiktok/collection/videos": {"url", "cursor"},
     "/v1/tiktok/creators/popular": {"page", "sortBy", "followerCount", "creatorCountry", "audienceCountry"},
     "/v1/tiktok/search/users": {"query", "cursor", "trim"},
+    "/v1/tiktok/ad-library/search": {"query", "advertiser_name", "adv_biz_ids", "cursor"},
+    "/v1/tiktok/ad-library/ad": {"ad_id"},
 }
 
 _SPACING = 1.0  # seconds between calls that reached TikTok

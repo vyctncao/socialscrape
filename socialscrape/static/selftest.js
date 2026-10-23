@@ -9,7 +9,7 @@ window.EndpointTests = (() => {
   };
   const COUNTED = ['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped', 'idle'];
   const RETRYABLE = new Set(['failed', 'stopped', 'skipped']);
-  const PLATFORMS = ['instagram', 'tiktok', 'youtube'];
+  const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'google'];
   const model = {tests:[], fallback:null, filter:'all', allowFallback:false, results:{}, bodies:new Map(), lastRun:null, run:null};
   let announcementTimer = null, announcements = [];
 

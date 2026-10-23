@@ -84,11 +84,17 @@ settings, and log-out actions. The mobile drawer owns its own popup instance so 
 controls stay inside the active modal's interaction scope.
 
 Instagram, TikTok, and YouTube use the kit's original colored brand artwork in
-`brand/platforms/`. One platform-label helper keeps the picker, overview, reference,
-settings and route activity consistent. The picker uses a native popover
+`brand/platforms/`; Facebook and Google use simple marks of their own in the two
+brands' colors. One platform-label helper keeps the picker, overview, reference, settings
+and route activity consistent. The picker uses a native popover
 with labeled listbox options and keyboard navigation because ordinary native
-select options cannot display the brand images consistently. Only the three data
-platforms appear in the picker; metadata such as coverage remains outside it.
+select options cannot display the brand images consistently. The reference and the
+picker group operations by ScrapeCreators' tag, in its order (TikTok, TikTok Shop,
+Instagram, YouTube, then the Facebook, TikTok and Google ad libraries), each under
+its platform's artwork; metadata such as coverage remains outside them. Each
+operation has its own row with a method pill: GET in the success role, POST in the
+neutral info role with an outline, since the workspace profile has no blue. A star
+in the warning role marks the operations ScrapeCreators features.
 
 The server versions shell scripts, styles, and SVG references with a digest of
 the UI assets. Authentication pages use the same version. This keeps a returning

@@ -1,0 +1,191 @@
+{
+  "endpoint": "/v1/google/ad",
+  "fields": {
+    "advertiserId": [
+      "string"
+    ],
+    "creativeId": [
+      "string"
+    ],
+    "creativeRegions": [
+      "array"
+    ],
+    "creativeRegions[]": [
+      "object"
+    ],
+    "creativeRegions[].regionCode": [
+      "string"
+    ],
+    "creativeRegions[].regionName": [
+      "string"
+    ],
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "firstShown": [
+      "string"
+    ],
+    "format": [
+      "string"
+    ],
+    "lastShown": [
+      "string"
+    ],
+    "overallImpressions": [
+      "object"
+    ],
+    "overallImpressions.max": [
+      "string"
+    ],
+    "overallImpressions.min": [
+      "string"
+    ],
+    "regionStats": [
+      "array"
+    ],
+    "regionStats[]": [
+      "object"
+    ],
+    "regionStats[].firstShown": [
+      "string"
+    ],
+    "regionStats[].impressions": [
+      "object"
+    ],
+    "regionStats[].impressions.lower": [
+      "string"
+    ],
+    "regionStats[].impressions.upper": [
+      "string"
+    ],
+    "regionStats[].lastShown": [
+      "string"
+    ],
+    "regionStats[].platformImpressions": [
+      "array"
+    ],
+    "regionStats[].regionCode": [
+      "string"
+    ],
+    "regionStats[].regionName": [
+      "string"
+    ],
+    "spend": [
+      "object"
+    ],
+    "spend.currency": [
+      "string"
+    ],
+    "spend.lower": [
+      "string"
+    ],
+    "spend.upper": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ],
+    "targeting": [
+      "object"
+    ],
+    "targeting.age": [
+      "object"
+    ],
+    "targeting.age.excluded": [
+      "array"
+    ],
+    "targeting.age.excluded[]": [
+      "string"
+    ],
+    "targeting.age.included": [
+      "array"
+    ],
+    "targeting.age.included[]": [
+      "string"
+    ],
+    "targeting.gender": [
+      "object"
+    ],
+    "targeting.gender.excluded": [
+      "array"
+    ],
+    "targeting.gender.included": [
+      "array"
+    ],
+    "targeting.gender.included[]": [
+      "string"
+    ],
+    "targeting.location": [
+      "object"
+    ],
+    "targeting.location.excluded": [
+      "array"
+    ],
+    "targeting.location.excluded[]": [
+      "object"
+    ],
+    "targeting.location.excluded[].countryCodes": [
+      "array"
+    ],
+    "targeting.location.excluded[].countryCodes[]": [
+      "string"
+    ],
+    "targeting.location.excluded[].criterionId": [
+      "string"
+    ],
+    "targeting.location.excluded[].fullName": [
+      "string"
+    ],
+    "targeting.location.excluded[].name": [
+      "string"
+    ],
+    "targeting.location.included": [
+      "array"
+    ],
+    "targeting.location.included[]": [
+      "object"
+    ],
+    "targeting.location.included[].countryCodes": [
+      "array"
+    ],
+    "targeting.location.included[].countryCodes[]": [
+      "string"
+    ],
+    "targeting.location.included[].criterionId": [
+      "string"
+    ],
+    "targeting.location.included[].fullName": [
+      "string"
+    ],
+    "targeting.location.included[].name": [
+      "string"
+    ],
+    "url": [
+      "string"
+    ],
+    "variations": [
+      "array"
+    ],
+    "variations[]": [
+      "object"
+    ],
+    "variations[].allText": [
+      "string"
+    ],
+    "variations[].description": [
+      "string"
+    ],
+    "variations[].destinationUrl": [
+      "string"
+    ],
+    "variations[].headline": [
+      "string"
+    ],
+    "variations[].imageUrl": [
+      "string"
+    ]
+  }
+}

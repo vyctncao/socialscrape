@@ -60,6 +60,9 @@ ALLOWED_EXTRACTORS = {
     "youtube": [r"youtube(:.*)?"],
     "tiktok": [r"tiktok(:.*)?"],
     "instagram": [r"instagram(:.*)?"],
+    "facebook": [r"facebook(:.*)?"],
+    # Google ad-library routes use InfoExtractor networking only. No generic URL extraction is permitted.
+    "google": [r"$^"],
 }
 
 

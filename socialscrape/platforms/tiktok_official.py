@@ -1,4 +1,7 @@
-"""Official TikTok Research, Commercial Content and Shop API routes."""
+"""Official TikTok Research, Commercial Content and Shop API routes.
+
+The Commercial Content (Ad Library) calls are plain functions: tiktok_ads.py serves /v1/tiktok/ad-library/* and
+uses them in place of the public library whenever a research token is configured."""
 from __future__ import annotations
 
 import json
@@ -21,9 +24,13 @@ _FIELDS = ("ad.id,ad.first_shown_date,ad.last_shown_date,ad.status,ad.status_sta
            "ad_group.targeting_info,ad.rejection_info")
 
 
-def _official_token() -> str:
+def research_token() -> str | None:
     from ..portal import active_platform_credential
-    token = active_platform_credential("tiktok.research_token") or get_settings().tiktok_research_token
+    return active_platform_credential("tiktok.research_token") or get_settings().tiktok_research_token
+
+
+def _official_token() -> str:
+    token = research_token()
     if not token:
         raise NotSupported("Configure SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN with TikTok Research API scopes",
                            code="platform_oauth_required", platform="tiktok",
@@ -51,9 +58,8 @@ def _post(url: str, body: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-@sc_get(router, "/v1/tiktok/ad-library/ad", source="official TikTok Commercial Content API ad detail",
-        status="needs_setup", notes="Requires SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN with research.adlib.basic.")
-async def ad_detail(ad_id: str = Query(...)):
+def ad_detail(ad_id: str) -> dict[str, Any]:
+    """Blocking: run it in a worker thread."""
     url = "https://open.tiktokapis.com/v2/research/adlib/ad/detail/?" + urllib.parse.urlencode({"fields": _FIELDS})
     data = _post(url, {"ad_id": int(ad_id)})
     payload = data.get("data") if isinstance(data.get("data"), dict) else {}
@@ -61,10 +67,9 @@ async def ad_detail(ad_id: str = Query(...)):
     return {**ad, "id": str(ad.get("id") or ad_id)}
 
 
-@sc_get(router, "/v1/tiktok/ad-library/search", source="official TikTok Commercial Content API ad query",
-        status="needs_setup", notes="Requires SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN with research.adlib.basic.")
-async def ad_search(query: str = Query(...), cursor: str | None = None, adv_biz_ids: str | None = None,
-                    advertiser_name: str | None = None):
+def ad_search(query: str | None, cursor: str | None = None, adv_biz_ids: str | None = None,
+              advertiser_name: str | None = None) -> dict[str, Any]:
+    """Blocking: run it in a worker thread."""
     url = "https://open.tiktokapis.com/v2/research/adlib/ad/query/?" + urllib.parse.urlencode({"fields": _FIELDS})
     term = advertiser_name or query
     body: dict[str, Any] = {"filters": {"country_code_list": ["US"]}, "search_term": term,

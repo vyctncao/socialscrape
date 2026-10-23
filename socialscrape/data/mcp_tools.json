@@ -92,6 +92,443 @@
     }
   },
   {
+    "name": "v1_facebook_adLibrary_ad",
+    "title": "SocialScrape - Ad Details",
+    "description": "Retrieves detailed information about a specific Facebook ad by its ID or URL. Returns adArchiveID, pageName, isActive, startDate, endDate, and a snapshot containing body, images, videos, display_format, link_url, and cta_text. Regulated ads may also include source-dependent aaa_info using the structure shown below. Political and social issue delivery data is normalized to location_audience and age_country_gender_reach_breakdown. Political location_audience rows include reach, and political delivery values are fractional shares, so 0.08 means 8%. Regional transparency data may use absolute reach counts. For ads with multiple versions, the ad creative is found in the snapshot.cards array rather than snapshot.body. Transcription is opt-in via get_transcript=true. Default short AI (up to 120 seconds, inclusive) is included in the existing base endpoint price, with no extra AI fee. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. On detail routes, successful paid-mode AI costs are in addition to the existing base endpoint cost; media-download pricing is unchanged. Returned native captions leave the base endpoint price unchanged. Empty AI results and errors incur no AI fee; the base scrape fee still applies when the detail scrape succeeds. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Facebook Ad Id (e.g. 702369045530963)"
+        },
+        "url": {
+          "type": "string",
+          "description": "Facebook Ad URL (e.g. https://www.facebook.com/ads/library?id=1185617869915074)"
+        },
+        "allow_long_transcription": {
+          "type": "boolean",
+          "default": false,
+          "description": "Paid opt-in, enabled only by the literal query value 'true' (allow_long_transcription=true). Defaults to false when omitted; other values do not enable paid mode. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. This flag does not force AI and does not enable transcription or AI fallback by itself. Keep get_transcript=true or use_ai_as_fallback=true where required by the endpoint. Returned native captions still cost 1 credit on dedicated transcript routes, even for long videos with this flag; on detail routes they leave the base price unchanged. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed."
+        },
+        "get_transcript": {
+          "type": "boolean",
+          "description": "Transcription is opt-in via get_transcript=true. Default short AI (up to 120 seconds, inclusive) is included in the existing base endpoint price, with no extra AI fee. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. On detail routes, successful paid-mode AI costs are in addition to the existing base endpoint cost; media-download pricing is unchanged. Returned native captions leave the base endpoint price unchanged. Empty AI results and errors incur no AI fee; the base scrape fee still applies when the detail scrape succeeds. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed."
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Set to true for a trimmed down version of the response (e.g. false)"
+        },
+        "cache_max_age": {
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ],
+          "description": "If we have a response in the cache that is this many days old or newer, return the cached response (0 credits, with \"cached\": true and a \"cached_at\" timestamp). Otherwise, scrape a live result (1 credit; default short AI is included; allow_long_transcription=true adds 10 credits per started minute to the existing base cost). [See the Caching page for details.](https://docs.scrapecreators.com/caching) (e.g. 7d)"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_facebook_adLibrary_ad_transcript",
+    "title": "SocialScrape - Ad Transcript",
+    "description": "Retrieves a transcript for a Facebook Ad Library video ad by ID or URL. Returned native captions cost 1 credit. Otherwise the public video URL is transcribed with AI. If the ad has no video or no transcript is available, transcript is null and the charge is 0 credits. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Facebook Ad Id (e.g. 1020359190509080)"
+        },
+        "url": {
+          "type": "string",
+          "description": "Facebook Ad URL (e.g. https://www.facebook.com/ads/library?id=1020359190509080)"
+        },
+        "allow_long_transcription": {
+          "type": "boolean",
+          "default": false,
+          "description": "Paid opt-in, enabled only by the literal query value 'true' (allow_long_transcription=true). Defaults to false when omitted; other values do not enable paid mode. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. This flag does not force AI and does not enable transcription or AI fallback by itself. Keep get_transcript=true or use_ai_as_fallback=true where required by the endpoint. Returned native captions still cost 1 credit on dedicated transcript routes, even for long videos with this flag; on detail routes they leave the base price unchanged. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed."
+        },
+        "cache_max_age": {
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ],
+          "description": "If we have a response in the cache that is this many days old or newer, return the cached response (0 credits, with \"cached\": true and a \"cached_at\" timestamp). Otherwise, scrape a live result (Returned native captions cost 1 credit, even for long videos with the paid flag. By default, successful AI up to 120 seconds costs a flat 1 credit per request; over 120 seconds requires allow_long_transcription=true, which bills ALL successful AI at 10 credits per started minute, including short videos; empty AI results and errors cost 0 credits; no transcript: 0 credits). [See the Caching page for details.](https://docs.scrapecreators.com/caching) (e.g. 7d)"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_facebook_adLibrary_company_ads",
+    "title": "SocialScrape - Company Ads",
+    "description": "Fetches all ads currently running for a specific company from the Meta Ad Library. Each ad includes ad_archive_id, page_name, is_active, publisher_platform, and a snapshot with body, images, videos, and display_format. Supports filtering by country, media_type, date range, and language with cursor-based pagination. Both GET and POST are supported. If the cursor becomes too large after extensive pagination, use POST and send the same parameters in the JSON body.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "pageId": {
+          "type": "string",
+          "description": "The companies ad library page id. You can get this with my Search For Companies Endpoint. Can either use this or companyName (e.g. 367152833370567)"
+        },
+        "companyName": {
+          "type": "string",
+          "description": "The name of the company. Can either use this or pageId (e.g. Lululemon)"
+        },
+        "country": {
+          "type": "string",
+          "description": "This can only be one country. It has to be the 2 letter code for the country. It defaults to ALL. (e.g. ALL)"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "ACTIVE",
+            "INACTIVE"
+          ],
+          "description": "Status of the ad. Defaults to ACTIVE. (e.g. ACTIVE)"
+        },
+        "media_type": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "IMAGE",
+            "VIDEO",
+            "MEME",
+            "IMAGE_AND_MEME",
+            "NONE"
+          ],
+          "description": "Media type of the ad. Defaults to ALL. Meme refers to ads with image and text. Not sure why they call it meme. (e.g. ALL)"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language to filter ads on. Needs to be 2 letter language code, ie EN, ES, FR, etc (e.g. EN)"
+        },
+        "sort_by": {
+          "type": "string",
+          "enum": [
+            "total_impressions",
+            "relevancy_monthly_grouped"
+          ],
+          "description": "Sort by impressions (high to low), or Most Recent (relevancy_monthly_grouped). Defaults to impressions. (e.g. total_impressions)"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Start date to search for. Format: YYYY-MM-DD (e.g. 2025-01-01)"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date to search for. Format: YYYY-MM-DD (e.g. 2025-12-31)"
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Set to true for a trimmed down version of the response (e.g. false)"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Cursor to paginate through results (e.g. AQHRBUAxNmFlxBVMFL6uTb1ICFsV65O4SqmPbcVZJhiveBpPS1hFHAmL6yCJcF760cXP)"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_facebook_adLibrary_search_ads",
+    "title": "SocialScrape - Search",
+    "description": "Searches the Meta Ad Library by keyword and returns matching ads. Supports filtering by language with a 2-letter code such as EN or ES. Each result includes ad_archive_id, page_name, is_active, publisher_platform, and a snapshot with body text, images, videos, and cta_text. Both GET and POST are supported. Use GET for normal requests. If the cursor becomes too large after extensive pagination, use POST and send the same parameters in the JSON body.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Keyword to search for (e.g. running)"
+        },
+        "sort_by": {
+          "type": "string",
+          "enum": [
+            "total_impressions",
+            "relevancy_monthly_grouped"
+          ],
+          "description": "Sort by impressions (high to low), or Most Recent (relevancy_monthly_grouped). Defaults to impressions. (e.g. total_impressions)"
+        },
+        "search_type": {
+          "type": "string",
+          "enum": [
+            "keyword_unordered",
+            "keyword_exact_phrase"
+          ],
+          "description": "If you want to search by exact phrase or not (e.g. keyword_unordered)"
+        },
+        "ad_type": {
+          "type": "string",
+          "enum": [
+            "all",
+            "political_and_issue_ads"
+          ],
+          "description": "Search for all ads or only political and issue ads (e.g. all)"
+        },
+        "country": {
+          "type": "string",
+          "description": "This can only be one country. It has to be the 2 letter code for the country. It defaults to ALL. (e.g. ALL)"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language to filter ads on. Needs to be a 2 letter language code, such as EN, ES, or FR. (e.g. EN)"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "ACTIVE",
+            "INACTIVE"
+          ],
+          "description": "Status of the ad. Defaults to ACTIVE. (e.g. ACTIVE)"
+        },
+        "media_type": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "IMAGE",
+            "VIDEO",
+            "MEME",
+            "IMAGE_AND_MEME",
+            "NONE"
+          ],
+          "description": "Media type of the ad. Defaults to ALL. Meme just means the ad has text and an image. No clue why they call it meme. (e.g. ALL)"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Impressions start date. Needs to be in YYYY-MM-DD format. (e.g. 2025-01-05)"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "Impressions end date. Needs to be in YYYY-MM-DD format. (e.g. 2025-02-16)"
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Set to true for a trimmed down version of the response (e.g. false)"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Cursor to paginate through results (e.g. AQHRYLVDkoMkvGv7yK1rcce-vJmKiKv330R4v3j9KHSOaYvmF1bq1QkotG0rgW8Fkrj-)"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_facebook_adLibrary_search_companies",
+    "title": "SocialScrape - Search for Companies",
+    "description": "Searches for companies by name in the Meta Ad Library and returns their page IDs for use with other ad library endpoints. Each result includes page_id, name, category, likes, verification status, and Instagram details like ig_username and ig_followers.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Keyword to search for (e.g. nike)"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_google_ad",
+    "title": "SocialScrape - Ad Details",
+    "description": "Retrieves detailed information about a specific Google ad including advertiserId, creativeId, format, firstShown, lastShown, and overallImpressions. When Google publishes political-ad transparency data, spend contains the currency and amount bounds, while targeting contains included and excluded age, gender, and location criteria. Targeted locations include their Google criterion ID, display name, full name, and country codes. Optional fields are null when Google does not publish them. regionStats and platformImpressions use lower and upper impression bounds. Variations are best-effort, omit unparseable entries, and have creative-type-dependent fields; image creatives can expose an images array. Text extraction uses OCR, so accuracy may vary.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The url of the ad (e.g. https://adstransparency.google.com/advertiser/AR07541154843046445057/creative/CR17778900238552006657)"
+        },
+        "cache_max_age": {
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ],
+          "description": "If we have a response in the cache that is this many days old or newer, return the cached response (0 credits, with \"cached\": true and a \"cached_at\" timestamp). Otherwise, scrape a live result (1 credit). [See the Caching page for details.](https://docs.scrapecreators.com/caching) (e.g. 7d)"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_google_adLibrary_advertisers_search",
+    "title": "SocialScrape - Advertiser Search",
+    "description": "Searches the Google Ad Transparency Library for advertisers by name. Returns a list of matching advertisers with their name, advertiser_id, and region, plus a list of associated website domains. Use the returned advertiser_id to look up a company's ads. Defaults to US when region is not passed, so pass a 2-letter country code like AU or CA when searching for advertisers in another region.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The query to search for (e.g. lululemon)"
+        },
+        "region": {
+          "type": "string",
+          "description": "2-letter country code to search in. Defaults to US when omitted. (e.g. AU)"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_google_company_ads",
+    "title": "SocialScrape - Company Ads",
+    "description": "Fetches public ads for a company from the Google Ad Transparency Library by domain or advertiser_id. Each ad includes advertiserId, creativeId, format, adUrl, advertiserName, domain, firstShown, and lastShown. Costs 25 credits per request when get_ad_details=true; without it, only advertiserId and creativeId are returned at 1 credit.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "domain": {
+          "type": "string",
+          "description": "The domain of the company (e.g. lululemon.com)"
+        },
+        "advertiser_id": {
+          "type": "string",
+          "description": "The advertiser id of the company (e.g. AR01614014350098432001)"
+        },
+        "topic": {
+          "type": "string",
+          "enum": [
+            "all",
+            "political"
+          ],
+          "description": "The topic to search for. If you search for 'political', you will also need to pass a 'region', like 'US' or 'AU' (e.g. all)"
+        },
+        "region": {
+          "type": "string",
+          "description": "The region to search for. Defaults to anywhere (e.g. US)"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Start date to search for. Format: YYYY-MM-DD (e.g. 2025-08-01)"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date to search for. Format: YYYY-MM-DD (e.g. 2025-08-11)"
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "google_maps",
+            "google_play",
+            "google_search",
+            "google_shopping",
+            "youtube"
+          ],
+          "description": "Platform to search for. (e.g. youtube)"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "text",
+            "image",
+            "video"
+          ],
+          "description": "Ad format to search for. (e.g. video)"
+        },
+        "get_ad_details": {
+          "type": "string",
+          "description": "Set to true to get the ad details. Will cost 25 credits. (e.g. false)"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Cursor to paginate through results (e.g. CgoAP7znOo9RPjf%2FEhD5utgx8m75NrTTbU0AAAAAGgn8%2BJyW%2BJQK40A%3D)"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
     "name": "v1_instagram_audio_reels",
     "title": "Instagram - Get Reels By Audio Id",
     "description": "Fetches the reels Instagram exposes for an audio page like instagram.com/reels/audio/{audio_id}/. Pass the audio_id from that URL. Use cursor from the previous response to request the next page when Instagram returns one.",

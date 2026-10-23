@@ -1,0 +1,248 @@
+{
+  "endpoint": "/v1/facebook/adLibrary/ad",
+  "fields": {
+    "aaa_info": [
+      "null"
+    ],
+    "adArchiveID": [
+      "integer"
+    ],
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "endDate": [
+      "integer"
+    ],
+    "endDateString": [
+      "string"
+    ],
+    "isAAAEligible": [
+      "boolean"
+    ],
+    "isActive": [
+      "boolean"
+    ],
+    "pageID": [
+      "integer"
+    ],
+    "pageName": [
+      "string"
+    ],
+    "politicalCountries": [
+      "array"
+    ],
+    "publisherPlatform": [
+      "array"
+    ],
+    "publisherPlatform[]": [
+      "string"
+    ],
+    "reachEstimate": [
+      "null"
+    ],
+    "snapshot": [
+      "object"
+    ],
+    "snapshot.ad_creative_id": [
+      "integer"
+    ],
+    "snapshot.additional_info": [
+      "null"
+    ],
+    "snapshot.body": [
+      "string"
+    ],
+    "snapshot.body_translations": [
+      "object"
+    ],
+    "snapshot.branded_content": [
+      "null"
+    ],
+    "snapshot.brazil_tax_id": [
+      "null"
+    ],
+    "snapshot.byline": [
+      "null"
+    ],
+    "snapshot.caption": [
+      "string"
+    ],
+    "snapshot.cards": [
+      "array"
+    ],
+    "snapshot.country_iso_code": [
+      "null"
+    ],
+    "snapshot.creation_time": [
+      "integer"
+    ],
+    "snapshot.cta_text": [
+      "string"
+    ],
+    "snapshot.cta_type": [
+      "string"
+    ],
+    "snapshot.current_page_name": [
+      "string"
+    ],
+    "snapshot.disclaimer_label": [
+      "null"
+    ],
+    "snapshot.display_format": [
+      "string"
+    ],
+    "snapshot.dynamic_item_flags": [
+      "object"
+    ],
+    "snapshot.dynamic_versions": [
+      "null"
+    ],
+    "snapshot.ec_certificates": [
+      "null"
+    ],
+    "snapshot.edited_snapshots": [
+      "array"
+    ],
+    "snapshot.effective_authorization_category": [
+      "string"
+    ],
+    "snapshot.event": [
+      "array"
+    ],
+    "snapshot.extra_images": [
+      "array"
+    ],
+    "snapshot.extra_images[]": [
+      "object"
+    ],
+    "snapshot.extra_images[].original_image_handle": [
+      "string"
+    ],
+    "snapshot.extra_images[].resized_image_handle": [
+      "string"
+    ],
+    "snapshot.extra_links": [
+      "array"
+    ],
+    "snapshot.extra_links[]": [
+      "string"
+    ],
+    "snapshot.extra_texts": [
+      "array"
+    ],
+    "snapshot.extra_videos": [
+      "array"
+    ],
+    "snapshot.images": [
+      "array"
+    ],
+    "snapshot.images[]": [
+      "object"
+    ],
+    "snapshot.images[].image_crops": [
+      "object"
+    ],
+    "snapshot.images[].original_image_url": [
+      "string"
+    ],
+    "snapshot.images[].resized_image_url": [
+      "string"
+    ],
+    "snapshot.images[].watermarked_resized_image_url": [
+      "string"
+    ],
+    "snapshot.instagram_actor_name": [
+      "string"
+    ],
+    "snapshot.instagram_branded_content": [
+      "null"
+    ],
+    "snapshot.instagram_handle": [
+      "string"
+    ],
+    "snapshot.instagram_profile_pic_url": [
+      "string"
+    ],
+    "snapshot.instagram_shopping_products": [
+      "array"
+    ],
+    "snapshot.instagram_url": [
+      "string"
+    ],
+    "snapshot.is_reshared": [
+      "boolean"
+    ],
+    "snapshot.link_description": [
+      "null"
+    ],
+    "snapshot.link_url": [
+      "string"
+    ],
+    "snapshot.page_categories": [
+      "object"
+    ],
+    "snapshot.page_categories.1713352298924731": [
+      "string"
+    ],
+    "snapshot.page_entity_type": [
+      "string"
+    ],
+    "snapshot.page_id": [
+      "integer"
+    ],
+    "snapshot.page_is_deleted": [
+      "boolean"
+    ],
+    "snapshot.page_is_profile_page": [
+      "boolean"
+    ],
+    "snapshot.page_like_count": [
+      "integer"
+    ],
+    "snapshot.page_name": [
+      "string"
+    ],
+    "snapshot.page_profile_picture_url": [
+      "string"
+    ],
+    "snapshot.page_profile_uri": [
+      "string"
+    ],
+    "snapshot.page_welcome_message": [
+      "null"
+    ],
+    "snapshot.root_reshared_post": [
+      "null"
+    ],
+    "snapshot.title": [
+      "string"
+    ],
+    "snapshot.version": [
+      "integer"
+    ],
+    "snapshot.videos": [
+      "array"
+    ],
+    "spend": [
+      "null"
+    ],
+    "startDate": [
+      "integer"
+    ],
+    "startDateString": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ],
+    "totalActiveTime": [
+      "integer"
+    ],
+    "url": [
+      "string"
+    ]
+  }
+}

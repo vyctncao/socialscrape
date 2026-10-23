@@ -56,9 +56,11 @@ def test_tools_list_and_sse(monkeypatch):
         assert response.text.startswith("event: message\ndata: ")
         payload = json.loads(response.text.split("data: ", 1)[1])
         tools = payload["result"]["tools"]
-        assert len(tools) == 70
+        assert len(tools) == 78
         assert [t["name"] for t in tools] == sorted(t["name"] for t in tools)
-        assert {"v1_youtube_channel_videos", "v1_account_credit_balance"} <= {t["name"] for t in tools}
+        assert {"v1_youtube_channel_videos", "v1_account_credit_balance",
+                "v1_facebook_adLibrary_search_ads", "v1_tiktok_ad_library_ad",
+                "v1_google_adLibrary_advertisers_search"} <= {t["name"] for t in tools}
         representative = next(t for t in tools if t["name"] == "v1_youtube_channel_videos")
         assert representative["inputSchema"]["$schema"].endswith("draft-07/schema#")
         assert representative["inputSchema"]["properties"]["sort"]["enum"] == ["latest", "popular"]

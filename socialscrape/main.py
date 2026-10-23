@@ -18,6 +18,7 @@ import threading
 import time
 from pathlib import Path
 from time import perf_counter
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -113,6 +114,17 @@ class UsageMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         started = perf_counter()
+        query = request.url.query
+        if (request.method == "POST" and request.url.path.startswith("/v")
+                and getattr(request.app.state, "portal", None)):
+            # History shows a POST's JSON fields as the query its GET twin would have had (booleans as true/false).
+            try:
+                body = await request.json()
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                body = None
+            if isinstance(body, dict):
+                query = urlencode([(key, str(value).lower() if isinstance(value, bool) else value)
+                                   for key, value in body.items() if value is not None], doseq=True)
         response = await call_next(request)
         portal = getattr(request.app.state, "portal", None)
         if portal and request.url.path.startswith("/v"):
@@ -121,7 +133,7 @@ class UsageMiddleware(BaseHTTPMiddleware):
             try:
                 portal.record_request(getattr(request.state, "principal", None),
                                       getattr(request.state, "api_key_id", None), request.method,
-                                      request.url.path, request.url.query, response.status_code,
+                                      request.url.path, query, response.status_code,
                                       round((perf_counter() - started) * 1000),
                                       response.headers.get("x-cache") == "hit", payload,
                                       response.headers.get(fallback.HEADER) == fallback.PROVIDER)
@@ -140,7 +152,7 @@ def load_platform_modules(app: FastAPI) -> None:
             continue
         module = importlib.import_module(f"{platforms.__name__}.{mod_info.name}")
         if router := getattr(module, "router", None):
-            app.include_router(router, tags=[mod_info.name.split("_")[0]])
+            app.include_router(router)
         mark_unsupported(getattr(module, "UNSUPPORTED", {}))
 
 
@@ -160,7 +172,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Social Scrape",
         version="0.1.0",
-        description="Private, self-hosted social data API for YouTube, TikTok and Instagram, powered by yt-dlp.",
+        description="Private, self-hosted social data API for YouTube, TikTok, Instagram, and the Facebook, TikTok, and Google ad libraries.",
         docs_url=None,
         redoc_url=None,
     )

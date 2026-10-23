@@ -1,101 +1,107 @@
 {
- "path": "/v1/tiktok/ad-library/search",
- "fields": {
-  "ads": [
-   "array"
-  ],
-  "ads[]": [
-   "object"
-  ],
-  "ads[].adv_biz_ids": [
-   "string"
-  ],
-  "ads[].audit_status": [
-   "string"
-  ],
-  "ads[].estimated_audience": [
-   "string"
-  ],
-  "ads[].first_shown_date": [
-   "integer"
-  ],
-  "ads[].id": [
-   "string"
-  ],
-  "ads[].image_urls": [
-   "array"
-  ],
-  "ads[].impression": [
-   "integer"
-  ],
-  "ads[].last_shown_date": [
-   "integer"
-  ],
-  "ads[].name": [
-   "string"
-  ],
-  "ads[].rejection_info": [
-   "null"
-  ],
-  "ads[].show_mode": [
-   "integer"
-  ],
-  "ads[].sor_audit_status": [
-   "string"
-  ],
-  "ads[].spent": [
-   "string"
-  ],
-  "ads[].type": [
-   "string"
-  ],
-  "ads[].url": [
-   "string"
-  ],
-  "ads[].videos": [
-   "array"
-  ],
-  "ads[].videos[]": [
-   "object"
-  ],
-  "ads[].videos[].cover_img": [
-   "string"
-  ],
-  "ads[].videos[].video_url": [
-   "string"
-  ],
-  "advertiser_matches": [
-   "array"
-  ],
-  "advertiser_matches[]": [
-   "object"
-  ],
-  "advertiser_matches[].ids": [
-   "string"
-  ],
-  "advertiser_matches[].name": [
-   "string"
-  ],
-  "advertiser_name": [
-   "string"
-  ],
-  "cursor": [
-   "string"
-  ],
-  "has_more": [
-   "boolean"
-  ],
-  "resolved_advertiser_name": [
-   "string"
-  ],
-  "source": [
-   "string"
-  ],
-  "success": [
-   "boolean"
-  ],
-  "total": [
-   "integer"
-  ]
- }
+  "endpoint": "/v1/tiktok/ad-library/search",
+  "fields": {
+    "ads": [
+      "array"
+    ],
+    "ads[]": [
+      "object"
+    ],
+    "ads[].adv_biz_ids": [
+      "string"
+    ],
+    "ads[].audit_status": [
+      "string"
+    ],
+    "ads[].estimated_audience": [
+      "string"
+    ],
+    "ads[].first_shown_date": [
+      "integer"
+    ],
+    "ads[].id": [
+      "string"
+    ],
+    "ads[].image_urls": [
+      "array"
+    ],
+    "ads[].impression": [
+      "integer"
+    ],
+    "ads[].last_shown_date": [
+      "integer"
+    ],
+    "ads[].name": [
+      "string"
+    ],
+    "ads[].rejection_info": [
+      "null"
+    ],
+    "ads[].show_mode": [
+      "integer"
+    ],
+    "ads[].sor_audit_status": [
+      "string"
+    ],
+    "ads[].spent": [
+      "string"
+    ],
+    "ads[].type": [
+      "string"
+    ],
+    "ads[].url": [
+      "string"
+    ],
+    "ads[].videos": [
+      "array"
+    ],
+    "ads[].videos[]": [
+      "object"
+    ],
+    "ads[].videos[].cover_img": [
+      "string"
+    ],
+    "ads[].videos[].video_url": [
+      "string"
+    ],
+    "advertiser_matches": [
+      "array"
+    ],
+    "advertiser_matches[]": [
+      "object"
+    ],
+    "advertiser_matches[].ids": [
+      "string"
+    ],
+    "advertiser_matches[].name": [
+      "string"
+    ],
+    "advertiser_name": [
+      "string"
+    ],
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "cursor": [
+      "string"
+    ],
+    "has_more": [
+      "boolean"
+    ],
+    "resolved_advertiser_name": [
+      "string"
+    ],
+    "source": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ],
+    "total": [
+      "integer"
+    ]
+  }
 }

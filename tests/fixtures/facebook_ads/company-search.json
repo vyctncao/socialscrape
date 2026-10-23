@@ -1,0 +1,251 @@
+{
+  "query": "nike",
+  "doc_id": "9755915494515334",
+  "response": {
+    "data": {
+      "ad_library_main": {
+        "typeahead_suggestions": {
+          "keyword_results": [
+            "nike shoes"
+          ],
+          "page_results": [
+            {
+              "page_id": "15087023444",
+              "category": "Sportswear Store",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/284964043_10159903868513445_7696353984967674128_n.jpg?stp=dst-jpg_tt6&cstp=mx400x400&ctp=s200x200&_nc_cat=1&ccb=1-7&_nc_sid=418b77&_nc_ohc=pTJmaYICYXgQ7kNvwEVWeE6&_nc_oc=Ado2jfR7EZANBPYnQN9GiCchFu4H2AKNO46q0GXWhLe8CjbkePN7lnNeqZdx5qxJJfQ&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQOe_mdaIGBNlUBOCkzofk9sHQ0LbIcFfAJYzEfwRrDNDw&oe=6AE1C230",
+              "likes": 39497703,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nike",
+              "ig_followers": 290913825,
+              "ig_verification": true,
+              "page_alias": "nike",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "51212153078",
+              "category": "Product/service",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/387181570_863325755161415_3589774989337788111_n.jpg?stp=dst-jpg_tt6&cstp=mx400x400&ctp=s200x200&_nc_cat=1&ccb=1-7&_nc_sid=418b77&_nc_ohc=NAn_ubMf5NIQ7kNvwERA0oO&_nc_oc=AdqUkMYgdKkDXihWHCPzczdTEXhka8ydvheImc-7ONvAmDK7akYKoi5RcjWS5nmzpFc&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQNlWMQ8Eji3lI68KPTFc0coLF6hmxSyuC3KMk3m7JKFZg&oe=6AE1CA05",
+              "likes": 39985860,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike Football",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikefootball",
+              "ig_followers": 44752347,
+              "ig_verification": true,
+              "page_alias": "nikefootball",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "65604112975",
+              "category": "Sports & Recreation Venue",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/381660358_828089658776016_1921906525565601948_n.png?stp=dst-png&cstp=mx289x289&ctp=s200x200&_nc_cat=1&ccb=1-7&_nc_sid=418b77&_nc_ohc=Dgf2EKUDuGoQ7kNvwEsThlF&_nc_oc=AdpcZBS1xqhwVLXSHEm0eweX5h5ARV7ryn8MZPFYGg_HTop-4LJb9Sbcp7m0_pUXKO8&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQNKvmC3qr_PP3L2EV7c-PvU4R1hW_Ocq9gbhiR__DpNyw&oe=6AE1B06A",
+              "likes": 15260167,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike Run Club",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikerunning",
+              "ig_followers": 6233100,
+              "ig_verification": true,
+              "page_alias": "nikerunning",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "20825389113",
+              "category": "Product/service",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/352238800_1378999996006774_4240209247781423917_n.jpg?stp=dst-jpg_tt6&cstp=mx800x800&ctp=s200x200&_nc_cat=1&ccb=1-7&_nc_sid=418b77&_nc_ohc=A7M79nVitS0Q7kNvwHFdQyv&_nc_oc=AdrjN-covzg3LCHJNwvHZdT2X-fE_RkTw551cK2A_wjc5XHrF-QacV2y52TRHBFIDBY&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQNWzc9VXpWYMxsS1hK_SjtD7f_vQ6svIEBEk3YWzc7cxA&oe=6AE1C21F",
+              "likes": 15450365,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike Sportswear",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nsw",
+              "ig_followers": 7603904,
+              "ig_verification": true,
+              "page_alias": "nikesportswear",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "6261664682",
+              "category": "Product/service",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/360155777_843020267183742_6325909005771886494_n.jpg?stp=dst-jpg_tt6&cstp=mx400x400&ctp=s200x200&_nc_cat=106&ccb=1-7&_nc_sid=418b77&_nc_ohc=5rFxXtF1lv4Q7kNvwH2es4F&_nc_oc=AdqTEBI5bPrhDWdjLDRp7RYOqvWX3lK-ZDtJZxgQiNv7eS3ElHW5MqAorynxaboUwGQ&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQOxzeTCpjF8ZPg05tMnL8PY1A-hZ_JVcakm-5zhujLb_w&oe=6AE1C84E",
+              "likes": 5426026,
+              "verification": "BLUE_VERIFIED",
+              "name": "NikeWomen",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikewomen",
+              "ig_followers": 6791950,
+              "ig_verification": true,
+              "page_alias": "nikewomen",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "128198963716100",
+              "category": "Brand",
+              "image_uri": "https://scontent-lax3-1.xx.fbcdn.net/v/t39.30808-1/387074276_122113082780063867_240960197833276102_n.jpg?stp=dst-jpg_tt6&cstp=mx320x320&ctp=s200x200&_nc_cat=104&ccb=1-7&_nc_sid=418b77&_nc_ohc=pUTer43gAIUQ7kNvwF5wg9g&_nc_oc=AdpEQPYTRPlZOH2eo-VgterJzPR3fv6tCkbpDsZfkIbGhZ_zpWUIID90SllpPXyKgJY&_nc_zt=24&_nc_ht=scontent-lax3-1.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQMPys7xx1SpxIzGe37EKOUtQRjf56S1RLmC2pY8wsV1vg&oe=6AE1A413",
+              "likes": 13245,
+              "verification": "NOT_VERIFIED",
+              "name": "Nike Strength",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikestrength",
+              "ig_followers": 257934,
+              "ig_verification": true,
+              "page_alias": "nikestrength",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "5941596308",
+              "category": "Product/service",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/352779693_291587943296654_5195981052627043005_n.jpg?stp=dst-jpg_tt6&cstp=mx240x240&ctp=s200x200&_nc_cat=106&ccb=1-7&_nc_sid=418b77&_nc_ohc=XnzHnJEYa2MQ7kNvwFoLLf6&_nc_oc=Adq4shp_mzZ23GljWv1zspIOw6Fhk8sTt8KHm955CAhmaBpIpwjGuLq5SFZQbb_PwJg&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQMRxk1sfllJkVYimLq1RhlWQK-o0XPSqMmS3yY22tW4Xw&oe=6AE1B6D2",
+              "likes": 7510990,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike Basketball",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikebasketball",
+              "ig_followers": 15534665,
+              "ig_verification": true,
+              "page_alias": "nikebasketball",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "57460905720",
+              "category": "Retail Company",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/352241125_115307234918826_7034162321122119580_n.jpg?stp=dst-jpg_tt6&cstp=mx2000x2000&ctp=s200x200&_nc_cat=100&ccb=1-7&_nc_sid=418b77&_nc_ohc=ECh_HmtsK_IQ7kNvwER8kq0&_nc_oc=AdpFzOfxWGkS7S0joF7iqKFb-1Dsgtgeag5W4pyT49SAlzScEJ78_BjFBsE3ObdY7pk&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQMlDaVMmbetREO51Nx75wzWpIm-LEKUUMjZ6ftGqTYKeg&oe=6AE1C114",
+              "likes": 5831268,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike Football",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "usnikefootball",
+              "ig_followers": 2234536,
+              "ig_verification": true,
+              "page_alias": "usnikefootball",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "108379289247689",
+              "category": "Product/service",
+              "image_uri": "https://scontent-lax3-1.xx.fbcdn.net/v/t39.30808-1/352706208_1588401181639202_901415604300420876_n.jpg?stp=dst-jpg_tt6&cstp=mx1500x1500&ctp=s200x200&_nc_cat=110&ccb=1-7&_nc_sid=418b77&_nc_ohc=SfLbq_wdwDMQ7kNvwE2AzHV&_nc_oc=Adrfr7y6Nn2tEbdjlxPcE1no30T90lw56tpkRFyLSHBJhnW0SI4t0wiQP5ZpqsAy-bQ&_nc_zt=24&_nc_ht=scontent-lax3-1.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQNIGTwCDAOSkAzCwud9q4y5n1y3ICLDyxWn3DW2aEfKtw&oe=6AE1C700",
+              "likes": 8475899,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nike Skateboarding",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikesb",
+              "ig_followers": 6445278,
+              "ig_verification": true,
+              "page_alias": "NikeSkateboarding",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "1957446251204909",
+              "category": "Politician",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/263004090_404760094355264_2047193406290386818_n.jpg?stp=dst-jpg_tt6&cstp=mx910x910&ctp=s200x200&_nc_cat=107&ccb=1-7&_nc_sid=418b77&_nc_ohc=LG4QwAal1bYQ7kNvwGZao-n&_nc_oc=AdqLV21_Mg-hfn7KFJQU4yFjNmkizOj5HQY_429CO4HJPvu8PDmFfRVcj3Q_wLQs-N8&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQNYnjp-qFkSwoRuVzQuUFD2aidznl-cYq8MaBJG_D-e_g&oe=6AE1C830",
+              "likes": 13665,
+              "verification": "BLUE_VERIFIED",
+              "name": "Nikema Williams",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": null,
+              "ig_followers": null,
+              "ig_verification": null,
+              "page_alias": "NikemaforCongress",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "1461718484118285",
+              "category": "Interest",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/341111328_738870064578442_1225960234040314537_n.jpg?stp=dst-jpg_tt6&cstp=mx1080x1080&ctp=s200x200&_nc_cat=1&ccb=1-7&_nc_sid=418b77&_nc_ohc=fS7Nn7crd88Q7kNvwHnxQ_-&_nc_oc=AdoLjkNdWWi8FaCubeDCfNW4wD4MlknN6sFd1k9b9nz8K2cPbEvSSwcQZdCLkRbvIAQ&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQMGfFn2Einu6AX7zJWRfCKyrhVcFZfKSJETMWs0D-ZvGQ&oe=6AE1C270",
+              "likes": 102711,
+              "verification": "NOT_VERIFIED",
+              "name": "Niké je tipovanie",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": null,
+              "ig_followers": null,
+              "ig_verification": null,
+              "page_alias": "NIKEjetipovanie",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "80515456462",
+              "category": "Product/service",
+              "image_uri": "https://scontent-lax3-1.xx.fbcdn.net/v/t39.30808-1/352688837_928185465216784_4589351671971006056_n.jpg?stp=dst-jpg_tt6&cstp=mx819x819&ctp=s200x200&_nc_cat=104&ccb=1-7&_nc_sid=418b77&_nc_ohc=U0pMQWoIiOAQ7kNvwG0PhrN&_nc_oc=AdrdK6NNy0G4YAMow89gQN9nIe5OnHD-a1E9m82rWXdtunMPtNEU6ko5HV9zT4oS2wU&_nc_zt=24&_nc_ht=scontent-lax3-1.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQPE_uNQojO5qXQIsQgXsVrKJRPcFOGfQgfuts_kuzweWA&oe=6AE1C266",
+              "likes": 2120911,
+              "verification": "BLUE_VERIFIED",
+              "name": "NIKEiD",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": null,
+              "ig_followers": null,
+              "ig_verification": null,
+              "page_alias": "",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "103164259268905",
+              "category": "Brand",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/314244906_113514994900498_3365985322773968410_n.jpg?stp=dst-jpg_tt6&cstp=mx320x320&ctp=s200x200&_nc_cat=100&ccb=1-7&_nc_sid=418b77&_nc_ohc=9E5_5iLn0vMQ7kNvwGcLD7S&_nc_oc=AdpFPJCTIqegPK_qblp413-UHOSoja9kwT91QjVRFQ2fY0O-1bO4IL8W444iPtKsHdo&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQOAKzjyeLjhcOHyzTdRNaVim3zbfhs4cUmnrws_Pq-a0A&oe=6AE1BE3A",
+              "likes": 27012,
+              "verification": "NOT_VERIFIED",
+              "name": "Nike Seoul",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "nikeseoul",
+              "ig_followers": 330547,
+              "ig_verification": true,
+              "page_alias": "nikeseoul",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "319786157889879",
+              "category": "Sports & Recreation Venue",
+              "image_uri": "https://scontent-lax3-1.xx.fbcdn.net/v/t39.30808-1/558050782_122206770398343145_1567215682791490112_n.jpg?stp=dst-jpg_tt6&cstp=mx2048x2048&ctp=s200x200&_nc_cat=109&ccb=1-7&_nc_sid=418b77&_nc_ohc=o6VxG3CtLmkQ7kNvwHDfwdp&_nc_oc=Ado6N2kxeLI4-pxhXcDyFZNFm0n8h70ZEhM9BrM475TC557NQUjUi0mEyab-f3C9-uw&_nc_zt=24&_nc_ht=scontent-lax3-1.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQPRF5cwQ9CMSi18BkK2WQpDYGZwL3KGYJU1OVo2-Y87Og&oe=6AE1A57F",
+              "likes": 10717,
+              "verification": "NOT_VERIFIED",
+              "name": "US Sports Camps - NIKE Sports Camps",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": "ussportscamps",
+              "ig_followers": 23848,
+              "ig_verification": false,
+              "page_alias": "ussportscamps",
+              "page_is_deleted": false
+            },
+            {
+              "page_id": "1488240411464383",
+              "category": "News & media website",
+              "image_uri": "https://scontent-lax3-2.xx.fbcdn.net/v/t39.30808-1/305309611_406031734992032_5506219180334078973_n.jpg?stp=dst-jpg_tt6&cstp=mx350x350&ctp=s200x200&_nc_cat=103&ccb=1-7&_nc_sid=418b77&_nc_ohc=_ntRvwd_hyYQ7kNvwH-oInZ&_nc_oc=Adr0kPfYfXHf7Ln7DCWVjWs-2RuFUWWNRPOP31a2yTP6YUaex0XrtBvXsj81gEFce48&_nc_zt=24&_nc_ht=scontent-lax3-2.xx&_nc_gid=O7FftvF_axBRvVLSEWAPKg&_nc_ss=7b180&oh=00_AQPnNUnnuhfoCc2OXWtj9S39H6Eq4CxM3VCybvL9brj61A&oe=6AE1C88C",
+              "likes": 19988,
+              "verification": "NOT_VERIFIED",
+              "name": "Nike online Story today",
+              "country": null,
+              "entity_type": "PERSON_PROFILE",
+              "ig_username": null,
+              "ig_followers": null,
+              "ig_verification": null,
+              "page_alias": "NikeonlineStorytoday",
+              "page_is_deleted": false
+            }
+          ],
+          "location_results": [],
+          "exact_phrase_results": "\"nike\""
+        }
+      }
+    },
+    "extensions": {
+      "server_metadata": {
+        "request_start_time_ms": 1792794172854,
+        "time_at_flush_ms": 1792794173182
+      },
+      "is_final": true
+    }
+  }
+}

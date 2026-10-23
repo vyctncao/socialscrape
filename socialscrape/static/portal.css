@@ -110,6 +110,8 @@ select option{background:var(--overlay);color:var(--text-1)}
 [aria-invalid=true]{border-color:var(--danger)!important}
 .badge,.method{display:inline-flex;align-items:center;gap:var(--space-1);padding:3px 8px;border-radius:var(--r-sm);background:var(--selected);color:var(--text-2);font-size:11px;font-weight:500;line-height:1.5}
 .badge.good,.method{background:var(--success-soft);color:var(--success)}
+.method[data-method=POST]{background:var(--info-soft);color:var(--text-1);box-shadow:inset 0 0 0 1px var(--border-strong)}
+.featured{color:var(--warning);font-size:11px}
 .badge.bad{background:var(--danger-soft);color:var(--danger)}
 .badge.warn{background:var(--warning-soft);color:var(--warning)}
 .badge.required{font-size:10px;padding:1px 5px;color:var(--text-2);background:var(--surface-3)}
@@ -378,14 +380,16 @@ button.text-link{background:none;border:0;color:var(--text-1);font:inherit;min-h
 .history-detail-loading.loading-overlay{inset:var(--space-6);height:auto}
 .chart-legend .platform-icon{width:16px;height:16px}
 @media(max-width:760px){.history-facts{grid-template-columns:1fr}.history-dialog{width:calc(100% - 20px)}.history-dialog .history-response{max-height:none;overflow-x:auto;overflow-y:visible}.advanced summary{min-height:44px}}
-:root{--chart-instagram:#d95926;--chart-tiktok:#3987e5;--chart-youtube:#199e70}
-:root[data-theme=light]{--chart-instagram:#eb6834;--chart-tiktok:#2a78d6;--chart-youtube:#1baf7a}
+:root{--chart-instagram:#d95926;--chart-tiktok:#3987e5;--chart-youtube:#199e70;--chart-facebook:#a78bfa;--chart-google:#f59e0b}
+:root[data-theme=light]{--chart-instagram:#eb6834;--chart-tiktok:#2a78d6;--chart-youtube:#1baf7a;--chart-facebook:#6941c6;--chart-google:#b45309}
 .chart-legend{display:flex;flex-wrap:wrap;gap:var(--space-4);list-style:none;padding:0;margin:var(--space-5) 0 0;color:var(--text-2);font-size:var(--fs-xs)}
 .chart-legend li{display:flex;align-items:center;gap:var(--space-2)}
 .legend-swatch{width:12px;height:12px;border-radius:3px;border:2px solid var(--surface-1)}
 .legend-swatch.instagram,.bar-segment.instagram{background:var(--chart-instagram)}
 .legend-swatch.tiktok,.bar-segment.tiktok{background:var(--chart-tiktok)}
 .legend-swatch.youtube,.bar-segment.youtube{background:var(--chart-youtube)}
+.legend-swatch.facebook,.bar-segment.facebook{background:var(--chart-facebook)}
+.legend-swatch.google,.bar-segment.google{background:var(--chart-google)}
 .bar-stack{flex:1;min-width:0;display:flex;flex-direction:column-reverse;justify-content:start;gap:2px;border-radius:4px 4px 0 0;overflow:hidden;outline:none}
 .bar-stack:focus-visible{box-shadow:0 0 0 2px var(--surface-0),0 0 0 4px var(--border-focus)}
 .bar-segment{display:block;min-height:2px}

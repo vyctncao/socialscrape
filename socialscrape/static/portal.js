@@ -2,10 +2,13 @@ const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const asset = path => `/assets/${path}?v=${encodeURIComponent(document.documentElement.dataset.assetVersion || '')}`;
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="${asset('brand/icons.svg')}#${name}"></use></svg>`;
-const platforms = ['instagram', 'tiktok', 'youtube'];
+const platforms = ['instagram', 'tiktok', 'youtube', 'facebook', 'google'];
+const docTagOrder = ['TikTok', 'TikTok Shop', 'Instagram', 'YouTube', 'Facebook Ad Library', 'TikTok Ad Library', 'Google Ad Library'];
 const platformIcon = platform => platforms.includes(platform) ? `<img class="platform-icon" data-platform="${platform}" src="${asset(`brand/platforms/${platform}.svg`)}" alt="" width="20" height="20">` : '';
 const platformLabel = platform => `<span class="platform-label">${platformIcon(platform)}<span>${esc(platformName(platform))}</span></span>`;
 const platformFromPath = path => String(path).split('/')[2];
+const tagPlatform = tag => String(tag).startsWith('Facebook') ? 'facebook' : String(tag).startsWith('Google') ? 'google' : String(tag).startsWith('YouTube') ? 'youtube' : String(tag).startsWith('Instagram') ? 'instagram' : 'tiktok';
+const tagLabel = tag => `<span class="platform-label">${platformIcon(tagPlatform(tag))}<span>${esc(tag)}</span></span>`;
 const platformList = () => platforms.map(platform => `<span class="badge platform-badge">${platformLabel(platform)}</span>`).join('');
 const dateFormatter = new Intl.DateTimeFormat(undefined, {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short'});
 const fmt = (time, empty = 'Unavailable') => time ? dateFormatter.format(new Date(time * 1000)) : empty;
@@ -18,8 +21,12 @@ const reads = {};
 const leaveGuards = new Set();
 const addLeaveGuard = fn => (leaveGuards.add(fn), () => leaveGuards.delete(fn));
 const canLeave = () => [...leaveGuards].every(guard => guard());
+function resolveSchema(schema) {
+  if (!schema?.$ref) return schema || {};
+  return schema.$ref.replace(/^#\//, '').split('/').reduce((value, key) => value?.[key], state.spec) || {};
+}
 function normalizeSchema(param) {
-  const outer = param?.schema || param || {}, branches = outer.anyOf || outer.oneOf;
+  const outer = resolveSchema(param?.schema || param || {}), branches = outer.anyOf || outer.oneOf;
   const effective = branches?.filter(branch => branch.type !== 'null');
   const branch = effective?.length === 1 ? effective[0] : {};
   const keys = ['type','enum','default','example','minimum','maximum','minLength','maxLength','pattern','format','items'];
@@ -170,11 +177,11 @@ async function overview({retryFailedOnly = false} = {}) {
     <div class="metrics-grid">
       <section class="card"><div class="card-title">${icon('chart-bar')}Total requests</div>${usage ? `<div class="stat">${number(usage.total)}</div><div class="stat-label">All time · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</div>` : ''}${failure('usage')}</section>
       <section class="card"><div class="card-title">${icon('shield-check')}Active API keys</div>${active ? `<div class="stat">${number(active?.length)}</div><div class="stat-label">${PORTAL.role === 'owner' ? 'Across your workspace' : 'Created by you'}</div>` : ''}${failure('keys')}</section>
-      <section class="card"><div class="card-title">${icon('globe')}Supported endpoints</div>${coverage ? `<div class="stat">${number(coverage.implemented)}<span class="muted small"> / ${number(coverage.total)}</span></div>` : ''}${failure('coverage')}${coverage ? '<div class="stat-label">Across Instagram, TikTok and YouTube</div>' : ''}</section>
+      <section class="card"><div class="card-title">${icon('globe')}Supported endpoints</div>${coverage ? `<div class="stat">${number(coverage.implemented)}<span class="muted small"> / ${number(coverage.total)}</span></div>` : ''}${failure('coverage')}${coverage ? '<div class="stat-label">Across five social and ad platforms</div>' : ''}</section>
     </div>
     <div class="grid">
       <section class="card quick-start"><div class="eyebrow">Start building</div><h2>From endpoint to integration.</h2><p class="muted">Explore social data with a request, then take the code into your app.</p><div class="steps"><div class="step"><span class="step-number">1</span><div><h3>Create an API key</h3><p>Give each integration its own revocable credential.</p></div></div><div class="step"><span class="step-number">2</span><div><h3>Try an endpoint</h3><p>Choose a platform and send a request in the playground.</p></div></div><div class="step"><span class="step-number">3</span><div><h3>Make it yours</h3><p>Copy a cURL, Node.js, or Python snippet into your project.</p></div></div></div><a class="primary" href="/app/playground">Open playground ${icon('arrow-right')}</a></section>
-      <div class="stack"><section class="card"><div class="card-head"><h2>Your API access</h2>${icon('shield-check')}</div><div class="keybox"><code>${esc(keys ? mask(active?.[0]) : 'Key status unavailable')}</code></div><p class="help">${!keys ? 'Could not load your key status. Open API keys to try again.' : active?.length ? 'Pass your key in the x-api-key header. Full secrets are only shown when you create them.' : 'Create your first API key to connect an integration. You can explore the playground with your workspace session.'}</p><a class="ghost" style="margin-top:20px" href="/app/keys">${!keys ? 'Open API keys' : active?.length ? 'Manage API keys' : 'Create API key'} ${icon('arrow-right')}</a></section><section class="card"><div class="card-head"><h2>One API. Three platforms.</h2>${icon('globe')}</div><p class="help">Read public social data through a consistent API. Endpoint availability depends on each platform.</p><div class="platforms">${platformList()}</div><a class="text-link small standalone-action" href="/app/docs">Explore the documentation</a></section></div>
+      <div class="stack"><section class="card"><div class="card-head"><h2>Your API access</h2>${icon('shield-check')}</div><div class="keybox"><code>${esc(keys ? mask(active?.[0]) : 'Key status unavailable')}</code></div><p class="help">${!keys ? 'Could not load your key status. Open API keys to try again.' : active?.length ? 'Pass your key in the x-api-key header. Full secrets are only shown when you create them.' : 'Create your first API key to connect an integration. You can explore the playground with your workspace session.'}</p><a class="ghost" style="margin-top:20px" href="/app/keys">${!keys ? 'Open API keys' : active?.length ? 'Manage API keys' : 'Create API key'} ${icon('arrow-right')}</a></section><section class="card"><div class="card-head"><h2>One API. Five platforms.</h2>${icon('globe')}</div><p class="help">Read public social data through a consistent API. Endpoint availability depends on each platform.</p><div class="platforms">${platformList()}</div><a class="text-link small standalone-action" href="/app/docs">Explore the documentation</a></section></div>
     </div>`);
 }
 
@@ -229,7 +236,7 @@ function openCredentialDialog(button) {
 async function settingsPage() {
   if (PORTAL.role !== 'owner') return ownerOnly('Settings');
   const [data, credentials] = await Promise.all([api('/portal/api/settings/platforms'), api('/portal/api/settings/platform-credentials')]);
-  const cards = ['instagram','tiktok','youtube'].map(platform => { const item=data[platform]; return `<section class="card provider-summary"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2><span class="badge ${item.proxy.length || item.cookies.length ? 'good' : ''}">${item.proxy.length || item.cookies.length ? 'Configured' : 'Not configured'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Signed-in accounts</strong><small>${poolLabel('cookies',item.cookies.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage signed-in accounts</button></div></section>`; }).join('');
+  const cards = platforms.map(platform => { const item=data[platform]; return `<section class="card provider-summary"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2><span class="badge ${item.proxy.length || item.cookies.length ? 'good' : ''}">${item.proxy.length || item.cookies.length ? 'Configured' : 'Not configured'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Signed-in accounts</strong><small>${poolLabel('cookies',item.cookies.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage signed-in accounts</button></div></section>`; }).join('');
   const research=credentials['tiktok.research_token'], shop=credentials['tiktok.shop_credentials'];
   const credentialRow=(key,label,copy,status) => `<div class="provider-setting-row"><div>${icon('key')}<span><strong>${label}</strong><small>${status.configured ? `Configured · updated ${esc(fmt(status.updated_at))}` : copy}</small></span></div><button class="ghost" data-manage-credential="${key}" data-credential-label="${esc(label)}" data-configured="${status.configured}">${status.configured ? 'Replace' : 'Configure'}</button></div>`;
   const tiktokCredentials=`<section class="card provider-summary credential-summary"><div class="provider-summary-head"><h2>${platformLabel('tiktok')} API credentials</h2><span class="badge ${research.configured || shop.configured ? 'good' : ''}">${research.configured || shop.configured ? 'Partially configured' : 'Not configured'}</span></div>${credentialRow('tiktok-research_token','Research & Ad Library OAuth','Needs research.data.basic / research.adlib.basic',research)}${credentialRow('tiktok-shop_credentials','TikTok Shop app','JSON bundle: app_key, app_secret, access_token, shop_cipher',shop)}</section>`;
@@ -278,12 +285,12 @@ async function usage() {
   const data = await loadUsage();
   const total = data.daily.reduce((sum, day) => sum + day.total, 0), max = Math.max(...data.daily.map(day => day.total), 1);
   const labels = data.daily.map((_, index) => { const date = new Date(); date.setDate(date.getDate() - 29 + index); return date.toLocaleDateString(undefined, {month:'short', day:'numeric'}); });
-  const series = [['instagram','Instagram'],['tiktok','TikTok'],['youtube','YouTube'],['other','Other']];
+  const series = [['instagram','Instagram'],['tiktok','TikTok'],['youtube','YouTube'],['facebook','Facebook'],['google','Google'],['other','Other']];
   const legend = `<ul class="chart-legend" aria-label="Platforms">${series.map(([key,label]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${label}</li>`).join('')}</ul>`;
   const chart = data.daily.map(day => `<div class="bar-stack" style="height:${Math.max(1,day.total/max*100)}%">${series.map(([key]) => day[key] ? `<span class="bar-segment ${key}" style="height:${day[key]/day.total*100}%"></span>` : '').join('')}</div>`).join('');
   return layout('Usage', usageLede, `${pageTabs('usage')}
     <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${plural(total, 'request')} · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}</span></div></div>
-    ${total ? `${legend}<p class="sr-only">Stacked daily requests by platform. Use View daily data for exact Instagram, TikTok, YouTube, Other, and total counts.</p><div class="chart" aria-hidden="true">${chart}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
+    ${total ? `${legend}<p class="sr-only">Stacked daily requests by platform. Use View daily data for exact Instagram, TikTok, YouTube, Facebook, Google, Other, and total counts.</p><div class="chart" aria-hidden="true">${chart}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
     <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts by platform', `<table><thead><tr><th scope="col">Period ending</th>${series.map(([,label])=>`<th scope="col">${label}</th>`).join('')}<th scope="col">Total</th></tr></thead><tbody>${data.daily.map((day,index) => `<tr><td>${labels[index]}</td>${series.map(([key])=>`<td>${number(day[key])}</td>`).join('')}<td><strong>${number(day.total)}</strong></td></tr>`).join('')}</tbody></table>`)}</details></section>
     <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param route-row"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code>${esc(route.path)}</code></strong><span>${plural(route.count, 'request')}</span></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
 }
@@ -293,16 +300,20 @@ async function spec() {
   if (!reads.spec) reads.spec = api('/openapi.json').then(schema => (state.spec = schema)).finally(() => { reads.spec = null; });
   return reads.spec;
 }
+// A POST is listed only with documented body fields: a bare JSON-object compatibility route has nothing to fill in.
+const documentedBody = op => Object.keys(resolveSchema(op.requestBody?.content?.['application/json']?.schema).properties || {}).length > 0;
 function endpoints(schema) {
-  return Object.entries(schema.paths).filter(([path, item]) => item.get && platforms.includes(platformFromPath(path))).map(([path, item]) => ({path, op:item.get, platform:platformFromPath(path)}));
+  return Object.entries(schema.paths).flatMap(([path, item]) => ['get','post'].flatMap(method => item[method] && platforms.includes(platformFromPath(path)) && (method === 'get' || documentedBody(item[method])) ? [{path, method:method.toUpperCase(), op:item[method], platform:platformFromPath(path), tag:item[method].tags?.[0] || platformName(platformFromPath(path))}] : []));
 }
-function platformName(platform) { return {youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok'}[platform] || platform; }
+const endpointId = endpoint => `${endpoint.method} ${endpoint.path}`;
+const endpointHash = endpoint => endpoint.method === 'GET' ? endpoint.path : endpointId(endpoint);
+function platformName(platform) { return {youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok', facebook:'Facebook', google:'Google'}[platform] || platform; }
 const playgroundLede = 'Try one endpoint at a time, or test them all at once.';
 async function playground() {
   const [schema] = await Promise.all([spec(), loadKeys()]);
   const all = endpoints(schema), groups = [...new Set(all.map(endpoint => endpoint.platform))];
-  const linked = new URLSearchParams(location.search).get('endpoint'), linkedEndpoint = all.find(endpoint => endpoint.path === linked);
-  if (linkedEndpoint) { state.endpoint = linkedEndpoint.path; state.platform = linkedEndpoint.platform; }
+  const query = new URLSearchParams(location.search), linked = query.get('endpoint'), linkedMethod = (query.get('method') || 'GET').toUpperCase(), linkedEndpoint = all.find(endpoint => endpoint.path === linked && endpoint.method === linkedMethod);
+  if (linkedEndpoint) { state.endpoint = endpointId(linkedEndpoint); state.platform = linkedEndpoint.platform; }
   const selected = groups.includes(state.platform) ? state.platform : groups[0];
   return layout('Playground', playgroundLede, `${pageTabs('playground')}
     <div class="playground"><section class="card playground-config"><h2 class="section-label">Configure request</h2><form class="form-stack" id="request-form" novalidate><div class="field"><span id="platform-label">Platform</span><input type="hidden" id="pg-platform" value="${selected}"><button type="button" class="platform-trigger" id="platform-trigger" popovertarget="platform-menu" aria-haspopup="listbox" aria-expanded="false" aria-controls="platform-menu" aria-labelledby="platform-label platform-selected"><span id="platform-selected">${platformLabel(selected)}</span>${icon('caret-down')}</button><div id="platform-menu" class="platform-menu" popover="auto" role="listbox" aria-labelledby="platform-label">${groups.map(group => `<button type="button" class="platform-option" role="option" data-platform-choice="${group}" aria-selected="${selected === group}" tabindex="-1">${platformLabel(group)}${icon('check')}</button>`).join('')}</div></div><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Authentication<select id="pg-key"><option value="">Signed-in dashboard session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">This selection affects only the in-dashboard run. Copied snippets require an API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><div class="request-wait" id="request-wait" role="status" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
@@ -311,7 +322,7 @@ async function playground() {
 }
 function saveDraft() {
   const responseView = $('#response [data-response-view][aria-selected=true]')?.dataset.responseView;
-  if (responseView && state.request?.path === state.endpoint) {
+  if (responseView && state.request?.key === state.endpoint) {
     const response = state.request.pending || state.request.error ? state.request.previous : state.request;
     if (response) response.view = responseView;
   }
@@ -323,16 +334,21 @@ function fillEndpoints() {
   const platform = $('#pg-platform').value;
   state.platform = platform;
   const available = endpoints(state.spec).filter(endpoint => endpoint.platform === platform);
-  $('#pg-endpoint').innerHTML = available.map(endpoint => `<option value="${esc(endpoint.path)}" ${state.endpoint === endpoint.path ? 'selected' : ''}>${esc(endpoint.op.tags?.includes('not supported') ? (endpoint.op.summary || endpoint.path).replace(/ \(not supported\)$/i, '') : (endpoint.op.summary || endpoint.path))}${endpoint.op.tags?.includes('not supported') ? ' · Not supported' : ''}</option>`).join('');
+  $('#pg-endpoint').innerHTML = available.map(endpoint => `<option value="${esc(endpointId(endpoint))}" ${state.endpoint === endpointId(endpoint) ? 'selected' : ''}>${endpoint.method} · ${esc(endpoint.op['x-socialscrape-status'] === 'not_supported' ? (endpoint.op.summary || endpoint.path).replace(/ \(not supported\)$/i, '') : (endpoint.op.summary || endpoint.path))}${endpoint.op['x-socialscrape-status'] === 'not_supported' ? ' · Not supported' : ''}</option>`).join('');
   fillParams();
 }
 function fillParams() {
   saveDraft();
   state.endpoint = $('#pg-endpoint').value;
-  const operation = state.spec.paths[state.endpoint].get;
-  $('#request-path').textContent = state.endpoint;
-  $('#request-platform').innerHTML = platformIcon(platformFromPath(state.endpoint));
-  const parameters = (operation.parameters || []).filter(param => param.in !== 'header');
+  const selected = endpoints(state.spec).find(endpoint => endpointId(endpoint) === state.endpoint);
+  const {path, method, op:operation} = selected;
+  $('#request-path').textContent = path;
+  $('.request-info .method').textContent = method;
+  $('.request-info .method').dataset.method = method;
+  $('#request-platform').innerHTML = platformIcon(platformFromPath(path));
+  const bodySchema = resolveSchema(operation.requestBody?.content?.['application/json']?.schema);
+  const bodyRequired = new Set(bodySchema.required || []);
+  const parameters = method === 'POST' ? Object.entries(bodySchema.properties || {}).map(([name,schema]) => ({name, required:bodyRequired.has(name), description:schema.description, schema})) : (operation.parameters || []).filter(param => param.in !== 'header');
   const renderParam = (param, index) => {
     const schema = normalizeSchema(param), type = schema.type;
     const label = `<span class="field-label"><code>${esc(param.name)}</code>${param.required ? '<span class="badge required">Required</span>' : '<span class="help">Optional</span>'}</span>`;
@@ -346,12 +362,12 @@ function fillParams() {
   const required = parameters.filter(param => param.required);
   const optional = parameters.filter(param => !param.required);
   $('#pg-params').innerHTML = required.map(renderParam).join('') + (optional.length ? `<details class="advanced"><summary>${icon('caret-down')}Optional parameters <span class="badge">${optional.length}</span></summary><div class="parameter-fields">${optional.map((param, index) => renderParam(param, required.length + index)).join('')}</div></details>` : '');
-  const unsupported = operation.tags?.includes('not supported');
+  const unsupported = operation['x-socialscrape-status'] === 'not_supported';
   $('#endpoint-note').hidden = !unsupported;
-  $('#endpoint-note').innerHTML = `${icon('warning-circle')}<span>This endpoint is part of the compatibility API but is not implemented. Running it returns 501. <a href="/app/docs#${encodeURIComponent(state.endpoint)}">View details</a></span>`;
+  $('#endpoint-note').innerHTML = `${icon('warning-circle')}<span>This endpoint is part of the compatibility API but is not implemented. Running it returns 501. <a href="/app/docs#${encodeURIComponent(endpointHash(selected))}">View details</a></span>`;
   $('#request-error').hidden = true;
   const run=$('#run-request'); run.innerHTML = unsupported ? `${icon('play')}Send test request (returns 501)` : `${icon('play')}Run request`;
-  if (state.request?.path === state.endpoint) paintRequest();
+  if (state.request?.key === state.endpoint) paintRequest();
   else {
     $('#response').innerHTML = emptyState('compass', 'Your response starts here', 'Choose an endpoint and run a request to see the result.');
     $('#response').setAttribute('aria-busy','false');
@@ -404,11 +420,26 @@ function params() {
   document.querySelectorAll('[data-param]').forEach(input => { if (input.value) query.set(input.dataset.param, input.value); });
   return query;
 }
+function postPayload(selected) {
+  const properties = resolveSchema(selected.op.requestBody?.content?.['application/json']?.schema).properties || {};
+  return Object.fromEntries([...document.querySelectorAll('[data-param]')].filter(input => input.value).map(input => {
+    const value = input.value, type = normalizeSchema(properties[input.dataset.param]).type;
+    if (type === 'boolean') return [input.dataset.param, value === 'true'];
+    if (type === 'integer' || type === 'number') return [input.dataset.param, Number(value)];
+    if (type === 'array' || type === 'object') { try { return [input.dataset.param, JSON.parse(value)]; } catch {} }
+    return [input.dataset.param, value];
+  }));
+}
 function updateSnippet() {
   if (!$('#pg-endpoint')) return;
-  const query = params();
-  const url = location.origin + $('#pg-endpoint').value + (query.size ? '?' + query : '');
-  const snippets = {
+  const selected = endpoints(state.spec).find(endpoint => endpointId(endpoint) === $('#pg-endpoint').value), post = selected.method === 'POST';
+  const query = post ? null : params(), payload = post ? postPayload(selected) : {}, url = location.origin + selected.path + (!post && query.size ? '?' + query : '');
+  const json = JSON.stringify(payload, null, 2), compact = JSON.stringify(payload);
+  const snippets = post ? {
+    curl:`curl -X POST '${url}' \\\n  -H 'x-api-key: YOUR_API_KEY' \\\n  -H 'content-type: application/json' \\\n  -d ${shellQuote(compact)}`,
+    node:`const response = await fetch(${JSON.stringify(url)}, {\n  method: 'POST',\n  headers: {\n    'x-api-key': process.env.SOCIALSCRAPE_API_KEY,\n    'content-type': 'application/json'\n  },\n  body: JSON.stringify(${json})\n});\n\nconst data = await response.json();\nconsole.log(data);`,
+    python:`import os\nimport requests\n\nresponse = requests.post(\n    ${JSON.stringify(url)},\n    headers={"x-api-key": os.environ["SOCIALSCRAPE_API_KEY"]},\n    json=${json},\n)\nprint(response.json())`
+  } : {
     curl:`curl '${url}' \\\n  -H 'x-api-key: YOUR_API_KEY'`,
     node:`const response = await fetch(${JSON.stringify(url)}, {\n  headers: { 'x-api-key': process.env.SOCIALSCRAPE_API_KEY }\n});\n\nconst data = await response.json();\nconsole.log(data);`,
     python:`import os\nimport requests\n\nresponse = requests.get(\n    ${JSON.stringify(url)},\n    headers={"x-api-key": os.environ["SOCIALSCRAPE_API_KEY"]},\n)\nprint(response.json())`
@@ -423,7 +454,7 @@ function updateSnippet() {
 }
 function paintRequest() {
   const request = state.request, form = $('#request-form');
-  if (!form || !request || $('#pg-endpoint').value !== request.path) return;
+  if (!form || !request || $('#pg-endpoint').value !== request.key) return;
   const area = $('#response'), badge = $('#response-status'), button = $('#run-request'), copy = $('[data-copy="response-raw"]');
   const mount = response => {
     area.innerHTML = '<div class="response-content"></div>';
@@ -465,10 +496,10 @@ function paintRequest() {
 async function runRequest() {
   if (state.request?.pending || !validateParams()) return;
   updateSnippet(); clearParamErrors();
-  const query = params(), path = $('#pg-endpoint').value, keyId = $('#pg-key').value;
-  const last = state.request?.path === path ? state.request : null;
+  const selected = endpoints(state.spec).find(endpoint => endpointId(endpoint) === $('#pg-endpoint').value), path = selected.path, method = selected.method, post = method === 'POST', query = post ? null : params(), payload = post ? postPayload(selected) : null, keyId = $('#pg-key').value;
+  const requestKey = endpointId(selected), last = state.request?.key === requestKey ? state.request : null;
   const previous = last?.text !== undefined ? {path:last.path,status:last.status,text:last.text,view:last.view} : last?.previous;
-  const request = {path, pending:true, releases:new Set(), previous, started:performance.now(), controller:new AbortController()};
+  const request = {path, key:requestKey, pending:true, releases:new Set(), previous, started:performance.now(), controller:new AbortController()};
   state.request = request; $('#request-error').hidden = true; $('#request-wait').hidden = true;
   $('#platform-menu')?.hidePopover(); paintRequest();
   $('#loading-status').textContent = 'Request running. Waiting for the API response.';
@@ -476,7 +507,7 @@ async function runRequest() {
   let ticker;
   const slow = setTimeout(() => { if (state.request !== request || !request.pending) return; request.slow = true; const wait=$('#request-wait'); wait.hidden=false; wait.innerHTML=`<span><span class="request-elapsed" aria-hidden="true">Waiting ${elapsed()} seconds. </span>Request is taking longer than expected. Stopping ends this browser wait but may not stop upstream work.</span><button class="ghost" type="button" data-stop-request>Stop waiting</button>`; ticker=setInterval(()=>{ if (state.request === request && request.pending) wait.querySelector('.request-elapsed').textContent=`Waiting ${elapsed()} seconds. `; },1000); paintRequest(); }, 10000);
   try {
-    const response = await fetch(path + (query.size ? '?' + query : ''), {headers:{'x-portal-key-id':keyId}, signal:request.controller.signal});
+    const response = await fetch(path + (!post && query.size ? '?' + query : ''), {method, headers:{'x-portal-key-id':keyId, ...(post ? {'content-type':'application/json'} : {})}, ...(post ? {body:JSON.stringify(payload)} : {}), signal:request.controller.signal});
     if (state.request !== request) return;
     request.text = await response.text(); request.status = response.status; request.ok = response.ok;
     request.duration = Math.round(performance.now() - request.started);
@@ -499,14 +530,15 @@ function safeDecodeHash(hash) {
   try { return {ok:true, value:decodeURIComponent(String(hash).replace(/^#/,''))}; } catch { return {ok:false, value:String(hash).replace(/^#/,'')}; }
 }
 function docSearchText(endpoint) {
-  const operation = endpoint.op, values = [endpoint.path, operation.summary, operation.description, ...(operation.tags || [])];
-  for (const param of operation.parameters || []) { const schema=normalizeSchema(param); values.push(param.name,param.description,...(schema.enum || [])); }
+  const operation = endpoint.op, body = resolveSchema(operation.requestBody?.content?.['application/json']?.schema).properties || {}, values = [endpoint.path, endpoint.method, endpoint.tag, operation.summary, operation.description, ...(operation.tags || [])];
+  for (const param of [...(operation.parameters || []), ...Object.entries(body).map(([name,schema]) => ({name,schema,description:schema.description}))]) { const schema=normalizeSchema(param); values.push(param.name,param.description,...(schema.enum || [])); }
   values.push(...Object.values(operation.responses || {}).map(response => response.description));
   return values.filter(value => value !== undefined && value !== null).join(' ').toLowerCase();
 }
+const featuredEndpoint = endpoint => endpoint.tag === 'Facebook Ad Library' && ['/v1/facebook/adLibrary/search/ads','/v1/facebook/adLibrary/company/ads'].includes(endpoint.path);
 async function docs() {
-  const schema = await spec(), all = endpoints(schema), groups = [...new Set(all.map(endpoint => endpoint.platform))];
-  return `<div class="docs"><aside class="docs-nav" aria-label="API reference"><details class="docs-disclosure"${innerWidth > 760 ? ' open' : ''}><summary>Browse endpoints</summary><div class="docs-nav-content"><label class="field"><span class="sr-only">Search endpoints</span><input type="search" class="search-input" id="doc-search" placeholder="Search endpoints…"></label><span class="sr-only" id="docs-search-status" role="status" aria-live="polite" aria-atomic="true"></span><a class="docs-link" href="/app/docs" data-doc-intro>Introduction</a>${groups.map((group,index) => `<div class="docs-group" data-group><span class="docs-group-label" id="docs-group-${index}">${platformLabel(group)}</span><div role="group" aria-labelledby="docs-group-${index}">${all.filter(endpoint => endpoint.platform === group).map(endpoint => `<a class="docs-link" data-doc="${esc(docSearchText(endpoint))}" data-doc-path="${esc(endpoint.path)}" href="/app/docs#${encodeURIComponent(endpoint.path)}"><span class="method">GET</span><span>${esc(endpoint.op.summary || endpoint.path)}</span><span class="docs-current-note" hidden>Current · outside search</span></a>`).join('')}</div></div>`).join('')}<p id="docs-no-results" class="help" hidden>No matching endpoints. Try another search.</p></div></details></aside><article class="doc-content" id="doc-main"></article></div>`;
+  const schema = await spec(), all = endpoints(schema), present = new Set(all.map(endpoint => endpoint.tag)), groups = [...docTagOrder.filter(tag => present.has(tag)), ...[...present].filter(tag => !docTagOrder.includes(tag))];
+  return `<div class="docs"><aside class="docs-nav" aria-label="API reference"><details class="docs-disclosure"${innerWidth > 760 ? ' open' : ''}><summary>Browse endpoints</summary><div class="docs-nav-content"><label class="field"><span class="sr-only">Search endpoints</span><input type="search" class="search-input" id="doc-search" placeholder="Search endpoints…"></label><span class="sr-only" id="docs-search-status" role="status" aria-live="polite" aria-atomic="true"></span><a class="docs-link" href="/app/docs" data-doc-intro>Introduction</a>${groups.map((group,index) => `<div class="docs-group" data-group><span class="docs-group-label" id="docs-group-${index}">${tagLabel(group)}</span><div role="group" aria-labelledby="docs-group-${index}">${all.filter(endpoint => endpoint.tag === group).map(endpoint => `<a class="docs-link" data-doc="${esc(docSearchText(endpoint))}" data-doc-path="${esc(endpoint.path)}" data-doc-method="${endpoint.method}" href="/app/docs#${encodeURIComponent(endpointHash(endpoint))}"><span class="method" data-method="${endpoint.method}">${endpoint.method}</span><span>${esc((endpoint.op.summary || endpoint.path).replace(/ \(not supported\)$/i, ''))}${featuredEndpoint(endpoint) ? ' <span class="featured" aria-label="Featured endpoint" title="Featured endpoint">★</span>' : ''}</span><span class="docs-current-note" hidden>Current · outside search</span></a>`).join('')}</div></div>`).join('')}<p id="docs-no-results" class="help" hidden>No matching endpoints. Try another search.</p></div></details></aside><article class="doc-content" id="doc-main"></article></div>`;
 }
 let docsSearchTimer;
 function filterDocs(query, {announce = false, immediate = false} = {}) {
@@ -520,10 +552,11 @@ function filterDocs(query, {announce = false, immediate = false} = {}) {
   if (announce) { clearTimeout(docsSearchTimer); const update=()=>{ const status=$('#docs-search-status'); if (status) status.textContent=matches ? `${plural(matches,'endpoint')} found` : 'No matching endpoints'; }; if (immediate) update(); else docsSearchTimer=setTimeout(update,200); }
 }
 function selectDoc({focus = false} = {}) {
-  const decoded = safeDecodeHash(location.hash), path = decoded.value, hasHash = location.hash.length > 1;
-  if (!hasHash) showIntro(); else if (decoded.ok && state.spec.paths[path]?.get) showEndpoint(path); else showDocNotFound(path);
+  const decoded = safeDecodeHash(location.hash), key = decoded.value, hasHash = location.hash.length > 1;
+  const methodMatch = key.match(/^(GET|POST) (\/.*)$/), method = methodMatch?.[1] || 'GET', path = methodMatch?.[2] || key;
+  if (!hasHash) showIntro(); else if (decoded.ok && state.spec.paths[path]?.[method.toLowerCase()]) showEndpoint(path, method); else showDocNotFound(key);
   document.querySelectorAll('.docs-link').forEach(link => {
-    const linkPath = safeDecodeHash(link.hash).value, current = hasHash ? link.hasAttribute('data-doc-path') && linkPath === path : link.hasAttribute('data-doc-intro');
+    const linkKey = safeDecodeHash(link.hash).value, current = hasHash ? link.hasAttribute('data-doc-path') && linkKey === key : link.hasAttribute('data-doc-intro');
     if (current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
   filterDocs(state.docSearch);
@@ -555,9 +588,13 @@ function parameterMetadata(param) {
   if (schema.items?.enum?.length) items.push(`<span><b>Item choices:</b> ${schema.items.enum.map(value => `<code>${esc(value)}</code>`).join(', ')}</span>`);
   return items.length ? `<span class="param-meta">${items.join('')}</span>` : '';
 }
-function showEndpoint(path) {
-  const operation = state.spec.paths[path].get, parameters = operation.parameters || [], unsupported = operation.tags?.includes('not supported'), command=`curl ${shellQuote(docRequestUrl(path,parameters))} \\\n  -H 'x-api-key: YOUR_API_KEY'`;
-  $('#doc-main').innerHTML = `<div class="eyebrow platform-heading">${platformLabel(platformFromPath(path))} API</div><div class="endpoint-title"><span class="method">GET</span><h1>${esc(operation.summary || path)}</h1></div><p class="lede"><code>${esc(path)}</code></p>${unsupported ? '<div class="inline-note"><span class="badge warn">Not supported</span><span>This compatibility route is not implemented through yt-dlp. Requests return 501.</span></div>' : ''}${unsupported ? '<p class="help">This route cannot run in the playground.</p>' : PORTAL.public ? `<a class="ghost docs-playground-link" href="/login">Sign in to try it ${icon('arrow-right')}</a>` : `<a class="ghost docs-playground-link" href="/app/playground?endpoint=${encodeURIComponent(path)}">Open in playground ${icon('arrow-right')}</a>`}<section class="card"><div class="card-head"><h2>Request</h2><button class="icon-button" data-copy="doc-snippet" aria-label="Copy request snippet">${icon('copy')}</button></div><pre class="code" id="doc-snippet" tabindex="0">${esc(command)}</pre></section><h2>Parameters</h2>${parameters.map(param => { const schema=normalizeSchema(param); return `<div class="param"><strong><code>${esc(param.name)}</code>${param.required ? '<span class="badge required">Required</span>' : '<span class="help">Optional</span>'}<span class="help">${esc(parameterType(schema))}</span></strong>${param.description ? `<small>${esc(param.description)}</small>` : ''}${parameterMetadata(param)}</div>`; }).join('') || '<p class="muted">No parameters.</p>'}<h2>Responses</h2>${Object.entries(operation.responses || {}).map(([code, response]) => `<div class="param"><strong><span class="badge ${Number(code) < 400 ? 'good' : ''}">${esc(code)}</span>${esc(response.description)}</strong></div>`).join('')}`;
+function showEndpoint(path, method = 'GET') {
+  const operation = state.spec.paths[path][method.toLowerCase()], bodySchema = resolveSchema(operation.requestBody?.content?.['application/json']?.schema), bodyRequired = new Set(bodySchema.required || []);
+  const parameters = method === 'POST' ? Object.entries(bodySchema.properties || {}).map(([name,schema]) => ({name, required:bodyRequired.has(name), description:schema.description, schema})) : operation.parameters || [];
+  const payload = Object.fromEntries(parameters.filter(param => param.required).map(param => { const schema=normalizeSchema(param); return [param.name,param.example ?? schema.example ?? schema.default ?? `YOUR_${param.name.toUpperCase()}`]; }));
+  const command = method === 'POST' ? `curl -X POST ${shellQuote(new URL(path,location.origin).href)} \\\n  -H 'x-api-key: YOUR_API_KEY' \\\n  -H 'content-type: application/json' \\\n  -d ${shellQuote(JSON.stringify(payload))}` : `curl ${shellQuote(docRequestUrl(path,parameters))} \\\n  -H 'x-api-key: YOUR_API_KEY'`;
+  const unsupported = operation['x-socialscrape-status'] === 'not_supported', tag = operation.tags?.[0] || platformName(platformFromPath(path));
+  $('#doc-main').innerHTML = `<div class="eyebrow platform-heading">${tagLabel(tag)}</div><div class="endpoint-title"><span class="method" data-method="${method}">${method}</span><h1>${esc((operation.summary || path).replace(/ \(not supported\)$/i, ''))}</h1></div><p class="lede"><code>${esc(path)}</code></p>${unsupported ? '<div class="inline-note"><span class="badge warn">Not supported</span><span>This compatibility route is not implemented through yt-dlp. Requests return 501.</span></div>' : ''}${unsupported ? '<p class="help">You can still send a compatibility test request from the playground.</p>' : ''}${PORTAL.public ? `<a class="ghost docs-playground-link" href="/login">Sign in to try it ${icon('arrow-right')}</a>` : `<a class="ghost docs-playground-link" href="/app/playground?endpoint=${encodeURIComponent(path)}&method=${method}">Open in playground ${icon('arrow-right')}</a>`}<section class="card"><div class="card-head"><h2>Request</h2><button class="icon-button" data-copy="doc-snippet" aria-label="Copy request snippet">${icon('copy')}</button></div><pre class="code" id="doc-snippet" tabindex="0">${esc(command)}</pre></section><h2>${method === 'POST' ? 'Request body' : 'Parameters'}</h2>${parameters.map(param => { const schema=normalizeSchema(param); return `<div class="param"><strong><code>${esc(param.name)}</code>${param.required ? '<span class="badge required">Required</span>' : '<span class="help">Optional</span>'}<span class="help">${esc(parameterType(schema))}</span></strong>${param.description ? `<small>${esc(param.description)}</small>` : ''}${parameterMetadata(param)}</div>`; }).join('') || `<p class="muted">No ${method === 'POST' ? 'request body fields' : 'parameters'}.</p>`}<h2>Responses</h2>${Object.entries(operation.responses || {}).map(([code, response]) => `<div class="param"><strong><span class="badge ${Number(code) < 400 ? 'good' : ''}">${esc(code)}</span>${esc(response.description)}</strong></div>`).join('')}`;
 }
 function showDocNotFound(path) {
   $('#doc-main').innerHTML=`<div class="eyebrow">Developer reference</div><h1>Endpoint not found</h1><p class="lede">No documented endpoint matches <code>${esc(path || location.hash.slice(1))}</code>.</p><section class="card"><h2>Find an endpoint</h2><p class="help">Search the endpoint list or return to the API introduction.</p><div class="row"><button class="ghost" data-focus-doc-search>Search endpoints</button><a class="text-link" href="/app/docs">Back to introduction</a></div></section>`;

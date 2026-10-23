@@ -1,7 +1,7 @@
 {
   "name": "@socialscrape/cli",
   "version": "1.0.0",
-  "description": "CLI for the SocialScrape API — ScrapeCreators-compatible YouTube, TikTok, and Instagram endpoints from the terminal",
+  "description": "CLI for the SocialScrape API — ScrapeCreators-compatible social and ad-library endpoints from the terminal",
   "type": "module",
   "bin": { "socialscrape": "bin/socialscrape.js" },
   "scripts": { "start": "node bin/socialscrape.js", "test": "node --test" },

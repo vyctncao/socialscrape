@@ -9,6 +9,9 @@ Platform modules declare routes like:
         info = await with_ydl("youtube", lambda ydl: ydl.extract_info(url, download=False))
         return {...}          # the payload; "success": true is added here
 
+Pass ``post=True`` to register the same handler for POST. Its JSON object uses
+GET's query parameter names; scalar values are normalized to query-string text.
+
 and list what they deliberately leave out:
 
     UNSUPPORTED = {"/v1/instagram/basic-profile": "why it can't be done with yt-dlp"}
@@ -25,8 +28,10 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, Query, Security
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
+from pydantic import ConfigDict, Field, create_model
 
 from .catalog import CATALOG
 from .errors import NotSupported, UpstreamError, error_responses
@@ -45,6 +50,36 @@ class RouteInfo:
 
 IMPLEMENTED: dict[str, RouteInfo] = {}
 UNSUPPORTED_REASONS: dict[str, str] = {}
+
+_POST_SCHEMAS = {
+    "/v1/facebook/adLibrary/search/ads": {
+        "query": ("string", "Keyword to search for", None),
+        "sort_by": ("string", "Sort by impressions or most recent.", ["total_impressions", "relevancy_monthly_grouped"]),
+        "search_type": ("string", "Search by exact phrase or not.", ["keyword_unordered", "keyword_exact_phrase"]),
+        "ad_type": ("string", "Search all ads or political and issue ads.", ["all", "political_and_issue_ads"]),
+        "country": ("string", "Two-letter country code, or ALL.", None),
+        "language": ("string", "Two-letter language code.", None),
+        "status": ("string", "Ad status.", ["ALL", "ACTIVE", "INACTIVE"]),
+        "media_type": ("string", "Ad media type.", ["ALL", "IMAGE", "VIDEO", "MEME", "IMAGE_AND_MEME", "NONE"]),
+        "start_date": ("string", "Impressions start date in YYYY-MM-DD format.", None),
+        "end_date": ("string", "Impressions end date in YYYY-MM-DD format.", None),
+        "trim": ("boolean", "Return a trimmed response.", None),
+        "cursor": ("string", "Cursor to paginate through results.", None),
+    },
+    "/v1/facebook/adLibrary/company/ads": {
+        "pageId": ("string", "Ad Library page id; use this or companyName.", None),
+        "companyName": ("string", "Company name; use this or pageId.", None),
+        "country": ("string", "Two-letter country code, or ALL.", None),
+        "status": ("string", "Ad status.", ["ALL", "ACTIVE", "INACTIVE"]),
+        "media_type": ("string", "Ad media type.", ["ALL", "IMAGE", "VIDEO", "MEME", "IMAGE_AND_MEME", "NONE"]),
+        "language": ("string", "Two-letter language code.", None),
+        "sort_by": ("string", "Sort by impressions or most recent.", ["total_impressions", "relevancy_monthly_grouped"]),
+        "start_date": ("string", "Start date in YYYY-MM-DD format.", None),
+        "end_date": ("string", "End date in YYYY-MM-DD format.", None),
+        "trim": ("boolean", "Return a trimmed response.", None),
+        "cursor": ("string", "Cursor to paginate through results.", None),
+    },
+}
 
 
 # Dependencies that only document the x-api-key header (ScrapeCreators' apiKeyAuth scheme, so /docs gets an
@@ -65,9 +100,41 @@ def envelope(payload: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "credits_charged": 0, **payload}
 
 
-def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = None,
+def _entry(path: str) -> dict[str, Any]:
+    return next((entry for entry in CATALOG if entry["path"] == path), {})
+
+
+def _body_model(path: str, fn: Callable[..., Any]) -> type:
+    entry = _entry(path)
+    signature = inspect.signature(fn)
+    fields: dict[str, tuple[Any, Any]] = {}
+    for name in entry.get("params", []):
+        if name == "cache_max_age":
+            continue
+        parameter = signature.parameters.get(name)
+        query = parameter.default if parameter else None
+        kind, description, enum = _POST_SCHEMAS.get(path, {}).get(
+            name, ("string", getattr(query, "description", None), None))
+        default = ... if name in entry.get("required", []) else None
+        schema = {"type": kind, **({"enum": enum} if enum else {})}
+        fields[name] = (Any, Field(default, description=description, json_schema_extra=schema))
+    return create_model(f"{fn.__name__.title().replace('_', '')}Body",
+                        __config__=ConfigDict(extra="ignore"), **fields)
+
+
+def _body_value(value: Any) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    raise ValueError
+
+
+def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = None, post: bool = False,
            status: str = "implemented", **route_kwargs: Any):
-    """Register a GET route whose handler returns the response payload dict."""
+    """Register GET and, with ``post=True``, equivalent JSON-object POST routes."""
 
     def decorate(fn: Callable[..., Awaitable[dict[str, Any]]]):
         @functools.wraps(fn)
@@ -85,9 +152,31 @@ def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = Non
 
         responses = {**error_responses(400, 401, 403, 404, 500, 501, 502, 503, "default"),
                      **route_kwargs.pop("responses", {})}
-        router.add_api_route(path, handler, methods=["GET"], summary=route_kwargs.pop("summary", None)
-                             or _summary(path), dependencies=[Security(_api_key), Depends(_cache_max_age)],
-                             responses=responses, **route_kwargs)
+        summary = route_kwargs.pop("summary", None) or _summary(path)
+        common = {"summary": summary, "tags": [_entry(path).get("tag", path.split("/")[2])],
+                  "responses": responses, **route_kwargs}
+        router.add_api_route(path, handler, methods=["GET"],
+                             dependencies=[Security(_api_key), Depends(_cache_max_age)], **common)
+        if post:
+            model = _body_model(path, fn)
+
+            async def post_handler(body: Any) -> JSONResponse:
+                values = body.model_dump(exclude_unset=True)
+                try:
+                    kwargs = {name: _body_value(value) for name, value in values.items()}
+                except ValueError as exc:
+                    raise RequestValidationError([{"type": "string_type", "loc": ("body",),
+                                                   "msg": "Input should be a valid string", "input": values}]) from exc
+                for name, parameter in inspect.signature(fn).parameters.items():
+                    if name not in kwargs and parameter.default is not inspect.Parameter.empty:
+                        default = parameter.default
+                        kwargs[name] = getattr(default, "default", default)
+                return await handler(**kwargs)
+
+            post_handler.__name__ = f"{fn.__name__}_post"
+            post_handler.__signature__ = inspect.Signature([inspect.Parameter(
+                "body", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model)])  # type: ignore[attr-defined]
+            router.add_api_route(path, post_handler, methods=["POST"], dependencies=[Security(_api_key)], **common)
         IMPLEMENTED[path] = RouteInfo(source, notes, status)
         return fn
 
@@ -115,9 +204,12 @@ def add_unsupported_routes(app: FastAPI) -> None:
 
         # Hide the private default args from the OpenAPI schema / query parsing.
         not_supported.__signature__ = inspect.Signature()  # type: ignore[attr-defined]
-        app.add_api_route(path, not_supported, methods=["GET"], summary=f"{entry['summary']} (not supported)",
-                          tags=["not supported"], include_in_schema=True, dependencies=[Security(_api_key)],
-                          status_code=501, responses=error_responses(400, 401, 501))
+        for method in entry.get("methods", ["GET"]):
+            app.add_api_route(path, not_supported, methods=[method],
+                              summary=f"{entry['summary']} (not supported)", tags=[entry["tag"]],
+                              openapi_extra={"x-socialscrape-status": "not_supported"}, include_in_schema=True,
+                              dependencies=[Security(_api_key)], status_code=501,
+                              responses=error_responses(400, 401, 501))
 
 
 def coverage() -> list[dict[str, Any]]:
@@ -129,6 +221,9 @@ def coverage() -> list[dict[str, Any]]:
             "path": path,
             "platform": path.split("/")[2],
             "summary": entry["summary"],
+            "tag": entry["tag"],
+            "methods": entry.get("methods", ["GET"]),
+            "featured": entry.get("featured", False),
             "status": info.status if info else "not_supported",
             "source": info.source if info else None,
             "notes": (info.notes if info else UNSUPPORTED_REASONS.get(path)),

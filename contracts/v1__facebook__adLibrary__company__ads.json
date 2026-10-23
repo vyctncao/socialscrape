@@ -1,0 +1,221 @@
+{
+  "endpoint": "/v1/facebook/adLibrary/company/ads",
+  "fields": {
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "cursor": [
+      "string"
+    ],
+    "results": [
+      "array"
+    ],
+    "results[]": [
+      "object"
+    ],
+    "results[].ad_archive_id": [
+      "string"
+    ],
+    "results[].end_date": [
+      "integer"
+    ],
+    "results[].end_date_string": [
+      "string"
+    ],
+    "results[].is_aaa_eligible": [
+      "boolean"
+    ],
+    "results[].is_active": [
+      "boolean"
+    ],
+    "results[].page_id": [
+      "string"
+    ],
+    "results[].page_name": [
+      "string"
+    ],
+    "results[].political_countries": [
+      "array"
+    ],
+    "results[].publisher_platform": [
+      "array"
+    ],
+    "results[].publisher_platform[]": [
+      "string"
+    ],
+    "results[].reach_estimate": [
+      "null"
+    ],
+    "results[].snapshot": [
+      "object"
+    ],
+    "results[].snapshot.additional_info": [
+      "null"
+    ],
+    "results[].snapshot.body": [
+      "object"
+    ],
+    "results[].snapshot.body.text": [
+      "string"
+    ],
+    "results[].snapshot.branded_content": [
+      "null"
+    ],
+    "results[].snapshot.brazil_tax_id": [
+      "null"
+    ],
+    "results[].snapshot.byline": [
+      "null"
+    ],
+    "results[].snapshot.caption": [
+      "string"
+    ],
+    "results[].snapshot.cards": [
+      "array"
+    ],
+    "results[].snapshot.country_iso_code": [
+      "null"
+    ],
+    "results[].snapshot.cta_text": [
+      "string"
+    ],
+    "results[].snapshot.cta_type": [
+      "string"
+    ],
+    "results[].snapshot.current_page_name": [
+      "string"
+    ],
+    "results[].snapshot.disclaimer_label": [
+      "null"
+    ],
+    "results[].snapshot.display_format": [
+      "string"
+    ],
+    "results[].snapshot.ec_certificates": [
+      "array"
+    ],
+    "results[].snapshot.event": [
+      "null"
+    ],
+    "results[].snapshot.extra_images": [
+      "array"
+    ],
+    "results[].snapshot.extra_links": [
+      "array"
+    ],
+    "results[].snapshot.extra_links[]": [
+      "string"
+    ],
+    "results[].snapshot.extra_texts": [
+      "array"
+    ],
+    "results[].snapshot.extra_videos": [
+      "array"
+    ],
+    "results[].snapshot.extra_videos[]": [
+      "object"
+    ],
+    "results[].snapshot.extra_videos[].video_hd_handle": [
+      "string"
+    ],
+    "results[].snapshot.extra_videos[].video_sd_handle": [
+      "string"
+    ],
+    "results[].snapshot.extra_videos[].watermarked_video_hd_url": [
+      "null"
+    ],
+    "results[].snapshot.extra_videos[].watermarked_video_sd_url": [
+      "null"
+    ],
+    "results[].snapshot.images": [
+      "array"
+    ],
+    "results[].snapshot.is_reshared": [
+      "boolean"
+    ],
+    "results[].snapshot.link_description": [
+      "null"
+    ],
+    "results[].snapshot.link_url": [
+      "string"
+    ],
+    "results[].snapshot.page_categories": [
+      "array"
+    ],
+    "results[].snapshot.page_categories[]": [
+      "string"
+    ],
+    "results[].snapshot.page_entity_type": [
+      "string"
+    ],
+    "results[].snapshot.page_id": [
+      "string"
+    ],
+    "results[].snapshot.page_is_deleted": [
+      "boolean"
+    ],
+    "results[].snapshot.page_is_profile_page": [
+      "boolean"
+    ],
+    "results[].snapshot.page_like_count": [
+      "integer"
+    ],
+    "results[].snapshot.page_name": [
+      "string"
+    ],
+    "results[].snapshot.page_profile_picture_url": [
+      "string"
+    ],
+    "results[].snapshot.page_profile_uri": [
+      "string"
+    ],
+    "results[].snapshot.root_reshared_post": [
+      "null"
+    ],
+    "results[].snapshot.title": [
+      "string"
+    ],
+    "results[].snapshot.videos": [
+      "array"
+    ],
+    "results[].snapshot.videos[]": [
+      "object"
+    ],
+    "results[].snapshot.videos[].video_hd_url": [
+      "string"
+    ],
+    "results[].snapshot.videos[].video_preview_image_url": [
+      "string"
+    ],
+    "results[].snapshot.videos[].video_sd_url": [
+      "string"
+    ],
+    "results[].snapshot.videos[].watermarked_video_hd_url": [
+      "string"
+    ],
+    "results[].snapshot.videos[].watermarked_video_sd_url": [
+      "string"
+    ],
+    "results[].spend": [
+      "null"
+    ],
+    "results[].start_date": [
+      "integer"
+    ],
+    "results[].start_date_string": [
+      "string"
+    ],
+    "results[].total_active_time": [
+      "null"
+    ],
+    "results[].url": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ]
+  }
+}

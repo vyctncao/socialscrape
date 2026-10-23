@@ -40,6 +40,7 @@ from ..errors import (
     NotSupported,
     UpstreamBlocked,
     UpstreamError,
+    error_responses,
     require_one,
 )
 from ..registry import sc_get
@@ -1043,7 +1044,8 @@ async def instagram_profile(handle: str = Query(...), trim: str | None = None) -
     return {"data": {"user": map_profile(user, post_count_from_meta(html))}}
 
 
-@router.post("/v1/instagram/profile", summary="Profile (POST compatibility)", include_in_schema=True)
+@router.post("/v1/instagram/profile", summary="Profile (POST compatibility)", include_in_schema=True,
+             tags=["Instagram"], responses=error_responses(400, 401, 403, 404, 500, 502, 503, "default"))
 async def instagram_profile_post(request: Request) -> Any:
     try:
         payload = await request.json()

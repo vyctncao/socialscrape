@@ -1,0 +1,50 @@
+{
+  "endpoint": "/v1/google/company/ads",
+  "fields": {
+    "ads": [
+      "array"
+    ],
+    "ads[]": [
+      "object"
+    ],
+    "ads[].adUrl": [
+      "string"
+    ],
+    "ads[].advertiserId": [
+      "string"
+    ],
+    "ads[].advertiserName": [
+      "string"
+    ],
+    "ads[].creativeId": [
+      "string"
+    ],
+    "ads[].firstShown": [
+      "string"
+    ],
+    "ads[].format": [
+      "string"
+    ],
+    "ads[].imageUrl": [
+      "null"
+    ],
+    "ads[].lastShown": [
+      "string"
+    ],
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "cursor": [
+      "string"
+    ],
+    "number_of_ads_estimate": [
+      "integer"
+    ],
+    "success": [
+      "boolean"
+    ]
+  }
+}

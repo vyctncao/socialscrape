@@ -1,6 +1,6 @@
 # SocialScrape CLI
 
-CLI for the [SocialScrape API](https://scrape.mimic.host) — ScrapeCreators-compatible YouTube, TikTok, and Instagram endpoints from the terminal and MCP configuration for AI agents.
+CLI for the [SocialScrape API](https://scrape.mimic.host) — ScrapeCreators-compatible social and ad-library endpoints for YouTube, TikTok, Instagram, Facebook, and Google from the terminal and MCP configuration for AI agents.
 
 ## Install
 
@@ -35,7 +35,7 @@ Formats are compact JSON (default), pretty JSON, table, CSV, and Markdown. `--ou
 
 ## Commands
 
-The dynamic catalog provides all 66 SocialScrape YouTube, TikTok, and Instagram endpoints, plus account routes. Run `socialscrape list [platform]` and `socialscrape <platform> <command> --help` for details.
+The dynamic catalog provides all 74 SocialScrape YouTube, TikTok, Instagram, Facebook, and Google endpoints, plus account routes. Run `socialscrape list [platform]` and `socialscrape <platform> <command> --help` for details.
 
 ```bash
 socialscrape balance

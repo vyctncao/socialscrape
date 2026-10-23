@@ -1,0 +1,116 @@
+{
+  "1": [
+    {
+      "1": "AR01614014350098432001",
+      "2": "CR02322464747397578753",
+      "3": {
+        "1": {
+          "4": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&obfuscatedCustomerId=5877551976&creativeId=805504663662&uiFeatures=12,54&versionId=153&assets=%3DH4sIAAAAAAAAAOPi5uLkmPR11YrdPAI8AFR79cINAAAA&sig=ACiVB_wXi3g5j4JmG2kGiK4w0HTTtBQDqA&htmlParentId=fletch-render-11494339961304576620&responseCallback=fletchCallback11494339961304576620"
+        }
+      },
+      "4": 3,
+      "6": {
+        "1": "1776437315",
+        "2": 226736000
+      },
+      "7": {
+        "1": "1792792904",
+        "2": 867183000
+      },
+      "12": "lululemon athletica canada inc.",
+      "13": 190,
+      "14": "lululemon.com"
+    },
+    {
+      "1": "AR01614014350098432001",
+      "2": "CR00821104683643830273",
+      "3": {
+        "3": {
+          "2": "<img src=\"https://tpc.googlesyndication.com/archive/simgad/6556235902051060879\" height=\"468\" width=\"348\">"
+        },
+        "5": true
+      },
+      "4": 1,
+      "6": {
+        "1": "1752716118",
+        "2": 854857000
+      },
+      "7": {
+        "1": "1792792412",
+        "2": 899068000
+      },
+      "12": "lululemon athletica canada inc.",
+      "13": 464,
+      "14": "lululemon.com"
+    },
+    {
+      "1": "AR01614014350098432001",
+      "2": "CR12123411616712622081",
+      "3": {
+        "3": {
+          "2": "<img src=\"https://tpc.googlesyndication.com/archive/simgad/8881159308126354507\" height=\"164\" width=\"348\">"
+        },
+        "5": true
+      },
+      "4": 1,
+      "6": {
+        "1": "1773656148",
+        "2": 901218000
+      },
+      "7": {
+        "1": "1792792360",
+        "2": 661591000
+      },
+      "12": "lululemon athletica canada inc.",
+      "13": 192,
+      "14": "lululemon.com"
+    },
+    {
+      "1": "AR01614014350098432001",
+      "2": "CR10640019686080643073",
+      "3": {
+        "3": {
+          "2": "<img src=\"https://tpc.googlesyndication.com/archive/simgad/5449625564037658700\" height=\"408\" width=\"348\">"
+        },
+        "5": true
+      },
+      "4": 1,
+      "6": {
+        "1": "1684542999",
+        "2": 137865000
+      },
+      "7": {
+        "1": "1792792155",
+        "2": 189548000
+      },
+      "12": "lululemon athletica canada inc.",
+      "13": 1243,
+      "14": "lululemon.com"
+    },
+    {
+      "1": "AR01614014350098432001",
+      "2": "CR17651152346207485953",
+      "3": {
+        "3": {
+          "2": "<img src=\"https://tpc.googlesyndication.com/archive/simgad/7641104679940410779\" height=\"255\" width=\"348\">"
+        },
+        "5": true
+      },
+      "4": 1,
+      "6": {
+        "1": "1791977747",
+        "2": 860295000
+      },
+      "7": {
+        "1": "1792792140",
+        "2": 315868000
+      },
+      "12": "lululemon athletica canada inc.",
+      "13": 10,
+      "14": "lululemon.com"
+    }
+  ],
+  "2": "CgoAP7zmhdw1SAyPEhDQ4sA4d6kvGZ0S8ewAAAAAGgn8+Gax+FJZSiE=",
+  "4": "10000",
+  "5": "20000"
+}

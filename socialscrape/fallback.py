@@ -52,7 +52,7 @@ DEFAULT_TRIGGERS = ("unsupported", "errors")
 MAX_BODY_BYTES = 16 * 1024 * 1024
 API_KEY_SETTING = "scrapecreators.api_key"
 OPTIONS_SETTING = "scrapecreators.options"
-_CATALOG_PATHS = frozenset(entry["path"] for entry in CATALOG)
+_CATALOG_METHODS = {entry["path"]: frozenset(entry.get("methods", ("GET",))) for entry in CATALOG}
 # The catalog's pagination params: the only ones that can carry our own cursors (cursor.PREFIX).
 _CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id"})
 # Sent with every fallback request. One that comes in with it isn't asked of ScrapeCreators again: an upstream URL
@@ -314,14 +314,17 @@ def _user_agent() -> str:
         return "socialscrape"
 
 
-def _fetch(url: str, api_key: str, timeout: float) -> tuple[int | None, bytes, str | None]:
-    """GET `url` with the ScrapeCreators key: (status, body, None), or (status if one came, b"", problem) when no
+def _fetch(url: str, api_key: str, timeout: float, method: str = "GET", body: bytes | None = None
+           ) -> tuple[int | None, bytes, str | None]:
+    """Request `url` with the ScrapeCreators key: (status, body, None), or (status if one came, b"", problem) when no
     whole answer did, problem being timeout, network_error or bad_response (a body past MAX_BODY_BYTES).
 
     The whole answer must come within `timeout`. urllib's timeout is per socket read, so a body trickled a byte at a
     time would keep the thread past it: each read here is one socket read (read1), allowed only the time left."""
-    request = urllib.request.Request(url, headers={"x-api-key": api_key, "accept": "application/json",
-                                                   "user-agent": _user_agent(), "via": _VIA})
+    headers = {"x-api-key": api_key, "accept": "application/json", "user-agent": _user_agent(), "via": _VIA}
+    if body is not None:
+        headers["content-type"] = "application/json"
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
     opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_ssl_context()), _NoRedirect())
     deadline = time.monotonic() + timeout
     status = None
@@ -409,7 +412,7 @@ def _failure(status: int | None, answer: dict[str, Any] | None, problem: str | N
 
 
 class FallbackMiddleware(BaseHTTPMiddleware):
-    """Asks ScrapeCreators when a catalog GET fails with an enabled trigger (see _trigger), and answers with:
+    """Asks ScrapeCreators when a catalog request fails with an enabled trigger (see _trigger), and answers with:
 
     - its success (2xx, a JSON object) as it is, with HEADER;
     - its 400, 403, 404 or 422 (a JSON object) as it is, with HEADER, when we had no answer of our own (a 501 or
@@ -424,15 +427,22 @@ class FallbackMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
-        if request.method != "GET" or path not in _CATALOG_PATHS:
+        if request.method not in _CATALOG_METHODS.get(path, ()):
             return await call_next(request)
+        body = await request.body() if request.method == "POST" else None
+        try:
+            body_params = json.loads(body) if body else {}
+        except (ValueError, RecursionError):
+            body_params = {}
+        if not isinstance(body_params, dict):  # the route answers its 400; there are no cursors to look at
+            body_params = {}
         c = config(self.env, getattr(request.app.state, "portal", None))
         if (not c.active or path.split("/")[2] not in c.platforms or _VIA in request.headers.get("via", "")
                 # The caller asked for this server's own answer (the dashboard's endpoint tests do).
                 or request.headers.get(HEADER, "").strip().lower() == "off"
                 # Our own cursors mean nothing to ScrapeCreators.
-                or any(name in _CURSOR_PARAMS and value.startswith(cursor.PREFIX)
-                       for name, value in request.query_params.multi_items())):
+                or any(name in _CURSOR_PARAMS and isinstance(value, str) and value.startswith(cursor.PREFIX)
+                       for name, value in (*request.query_params.multi_items(), *body_params.items()))):
             return await call_next(request)
         try:
             response = await call_next(request)
@@ -452,14 +462,14 @@ class FallbackMiddleware(BaseHTTPMiddleware):
                 return Response(payload, local_status, headers=headers)
             headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
         code = local.get("error")
-        status, body, problem = await self._ask(request, c.api_key or "")
-        answer = _json_object(body) if problem is None else None
+        status, answer_body, problem = await self._ask(request, c.api_key or "", body)
+        answer = _json_object(answer_body) if problem is None else None
         no_local_answer = local_status == 501 or code == "bad_cursor"
         if answer is not None and status is not None and (
                 200 <= status < 300 or (no_local_answer and answer is not None)
                 or (no_local_answer and status in (400, 403, 404, 422))):
             log.info("%s: local %s %s, served by ScrapeCreators (%s)", path, local_status, code, status)
-            return Response(body, status, headers={HEADER: PROVIDER}, media_type="application/json")
+            return Response(answer_body, status, headers={HEADER: PROVIDER}, media_type="application/json")
         detail = _failure(status, answer, problem, c.api_key or "")
         log.info("%s: local %s %s, ScrapeCreators failed too (%s %s)", path, local_status, code, status,
                  detail["error"])
@@ -468,7 +478,8 @@ class FallbackMiddleware(BaseHTTPMiddleware):
                                         "message": detail["message"], "fallback": detail}, 502, headers=headers)
         return LenientJSONResponse({**local, "fallback": detail}, local_status, headers=headers)
 
-    async def _ask(self, request: Request, api_key: str) -> tuple[int | None, bytes, str | None]:
+    async def _ask(self, request: Request, api_key: str, body: bytes | None = None
+                   ) -> tuple[int | None, bytes, str | None]:
         # Without cache_max_age: an answer from ScrapeCreators' cache would go into ours as new, and then be served to a
         # cache_max_age it is older than.
         query = urlencode([(k, v) for k, v in request.query_params.multi_items() if k != CACHE_PARAM])
@@ -476,6 +487,7 @@ class FallbackMiddleware(BaseHTTPMiddleware):
         timeout = get_settings().request_timeout
         loop = asyncio.get_running_loop()
         try:  # the time queued for a thread counts too
-            return await asyncio.wait_for(loop.run_in_executor(_pool(), _fetch, url, api_key, timeout), timeout)
+            return await asyncio.wait_for(
+                loop.run_in_executor(_pool(), _fetch, url, api_key, timeout, request.method, body), timeout)
         except TimeoutError:
             return None, b"", "timeout"

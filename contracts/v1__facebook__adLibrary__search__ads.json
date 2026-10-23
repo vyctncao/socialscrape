@@ -1,0 +1,203 @@
+{
+  "endpoint": "/v1/facebook/adLibrary/search/ads",
+  "fields": {
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "cursor": [
+      "string"
+    ],
+    "searchResults": [
+      "array"
+    ],
+    "searchResultsCount": [
+      "integer"
+    ],
+    "searchResults[]": [
+      "object"
+    ],
+    "searchResults[].ad_archive_id": [
+      "string"
+    ],
+    "searchResults[].end_date": [
+      "integer"
+    ],
+    "searchResults[].end_date_string": [
+      "string"
+    ],
+    "searchResults[].is_aaa_eligible": [
+      "boolean"
+    ],
+    "searchResults[].is_active": [
+      "boolean"
+    ],
+    "searchResults[].page_id": [
+      "string"
+    ],
+    "searchResults[].page_name": [
+      "string"
+    ],
+    "searchResults[].political_countries": [
+      "array"
+    ],
+    "searchResults[].publisher_platform": [
+      "array"
+    ],
+    "searchResults[].publisher_platform[]": [
+      "string"
+    ],
+    "searchResults[].reach_estimate": [
+      "null"
+    ],
+    "searchResults[].snapshot": [
+      "object"
+    ],
+    "searchResults[].snapshot.additional_info": [
+      "null"
+    ],
+    "searchResults[].snapshot.body": [
+      "object"
+    ],
+    "searchResults[].snapshot.body.text": [
+      "string"
+    ],
+    "searchResults[].snapshot.branded_content": [
+      "null"
+    ],
+    "searchResults[].snapshot.brazil_tax_id": [
+      "null"
+    ],
+    "searchResults[].snapshot.byline": [
+      "null"
+    ],
+    "searchResults[].snapshot.caption": [
+      "string"
+    ],
+    "searchResults[].snapshot.cards": [
+      "array"
+    ],
+    "searchResults[].snapshot.country_iso_code": [
+      "null"
+    ],
+    "searchResults[].snapshot.cta_text": [
+      "string"
+    ],
+    "searchResults[].snapshot.cta_type": [
+      "string"
+    ],
+    "searchResults[].snapshot.current_page_name": [
+      "string"
+    ],
+    "searchResults[].snapshot.disclaimer_label": [
+      "null"
+    ],
+    "searchResults[].snapshot.display_format": [
+      "string"
+    ],
+    "searchResults[].snapshot.ec_certificates": [
+      "array"
+    ],
+    "searchResults[].snapshot.event": [
+      "null"
+    ],
+    "searchResults[].snapshot.extra_images": [
+      "array"
+    ],
+    "searchResults[].snapshot.extra_links": [
+      "array"
+    ],
+    "searchResults[].snapshot.extra_texts": [
+      "array"
+    ],
+    "searchResults[].snapshot.extra_videos": [
+      "array"
+    ],
+    "searchResults[].snapshot.images": [
+      "array"
+    ],
+    "searchResults[].snapshot.images[]": [
+      "object"
+    ],
+    "searchResults[].snapshot.images[].image_crops": [
+      "array"
+    ],
+    "searchResults[].snapshot.images[].original_image_url": [
+      "string"
+    ],
+    "searchResults[].snapshot.images[].resized_image_url": [
+      "string"
+    ],
+    "searchResults[].snapshot.images[].watermarked_resized_image_url": [
+      "string"
+    ],
+    "searchResults[].snapshot.is_reshared": [
+      "boolean"
+    ],
+    "searchResults[].snapshot.link_description": [
+      "string"
+    ],
+    "searchResults[].snapshot.link_url": [
+      "string"
+    ],
+    "searchResults[].snapshot.page_categories": [
+      "array"
+    ],
+    "searchResults[].snapshot.page_categories[]": [
+      "string"
+    ],
+    "searchResults[].snapshot.page_entity_type": [
+      "string"
+    ],
+    "searchResults[].snapshot.page_id": [
+      "string"
+    ],
+    "searchResults[].snapshot.page_is_deleted": [
+      "boolean"
+    ],
+    "searchResults[].snapshot.page_is_profile_page": [
+      "boolean"
+    ],
+    "searchResults[].snapshot.page_like_count": [
+      "integer"
+    ],
+    "searchResults[].snapshot.page_name": [
+      "string"
+    ],
+    "searchResults[].snapshot.page_profile_picture_url": [
+      "string"
+    ],
+    "searchResults[].snapshot.page_profile_uri": [
+      "string"
+    ],
+    "searchResults[].snapshot.root_reshared_post": [
+      "null"
+    ],
+    "searchResults[].snapshot.title": [
+      "string"
+    ],
+    "searchResults[].snapshot.videos": [
+      "array"
+    ],
+    "searchResults[].spend": [
+      "null"
+    ],
+    "searchResults[].start_date": [
+      "integer"
+    ],
+    "searchResults[].start_date_string": [
+      "string"
+    ],
+    "searchResults[].total_active_time": [
+      "null"
+    ],
+    "searchResults[].url": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ]
+  }
+}

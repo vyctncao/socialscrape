@@ -1,0 +1,26 @@
+{
+  "endpoint": "/v1/facebook/adLibrary/ad/transcript",
+  "fields": {
+    "credits_remaining": [
+      "integer"
+    ],
+    "data": [
+      "object"
+    ],
+    "data.ad_id": [
+      "string"
+    ],
+    "data.transcript": [
+      "string"
+    ],
+    "data.transcript_available": [
+      "boolean"
+    ],
+    "data.url": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ]
+  }
+}

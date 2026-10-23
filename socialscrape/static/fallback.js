@@ -5,7 +5,7 @@ window.FallbackPage = (() => {
     ['restricted', 'Restricted', 'Private, login-gated, age- or geo-restricted content (403).'],
     ['not_found', 'Not found', 'Content this server couldn’t find (404).']
   ];
-  const platforms = [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['youtube', 'YouTube']];
+  const platforms = [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['youtube', 'YouTube'], ['facebook', 'Facebook'], ['google', 'Google']];
   let baseline = '', dirty = false, removeGuard = null;
 
   function checkRow(group, value, label, description, checked) {

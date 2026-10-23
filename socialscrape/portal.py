@@ -26,7 +26,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from cryptography.fernet import Fernet, InvalidToken
 
-from .config import ConfigError, validate_proxy
+from .config import PLATFORMS, ConfigError, validate_proxy
 
 SESSION_COOKIE = "socialscrape_session"
 SESSION_SECONDS = 60 * 60 * 24 * 30
@@ -279,7 +279,7 @@ class PortalStore:
             kind: [{"id": item["id"], "position": index + 1, "updated_at": item["updated_at"]}
                    for index, item in enumerate(self._pool(platform, kind))]
             for kind in ("proxy", "cookies")
-        } for platform in ("instagram", "tiktok", "youtube")}
+        } for platform in PLATFORMS}
 
     def platform_pool(self, platform: str) -> tuple[list[str], list[str]]:
         return ([item["value"] for item in self._pool(platform, "proxy")],
@@ -735,7 +735,9 @@ class PortalStore:
                 "SELECT CAST((created_at-?)/86400 AS INTEGER) bucket,"
                 "CASE WHEN path LIKE '/v%/instagram/%' THEN 'instagram' "
                 "WHEN path LIKE '/v%/tiktok/%' THEN 'tiktok' "
-                "WHEN path LIKE '/v%/youtube/%' THEN 'youtube' ELSE 'other' END platform,COUNT(*) count "
+                "WHEN path LIKE '/v%/youtube/%' THEN 'youtube' "
+                "WHEN path LIKE '/v%/facebook/%' THEN 'facebook' "
+                "WHEN path LIKE '/v%/google/%' THEN 'google' ELSE 'other' END platform,COUNT(*) count "
                 f"FROM requests WHERE created_at>=? {clause} GROUP BY bucket,platform ORDER BY bucket,platform",
                 (now, now - 29 * 86400, *args),
             ).fetchall()
@@ -749,7 +751,8 @@ class PortalStore:
             ).fetchone()[0]
         points = {(int(r["bucket"]), r["platform"]): r["count"] for r in daily}
         days = [{platform: points.get((i - 29, platform), 0)
-                 for platform in ("instagram", "tiktok", "youtube", "other")} for i in range(30)]
+                 for platform in ("instagram", "tiktok", "youtube", "facebook", "google", "other")}
+                for i in range(30)]
         for day in days:
             day["total"] = sum(day.values())
         return {"total": total, "daily": days, "routes": [dict(r) for r in routes], "fallback_count": fallback_count}
@@ -762,7 +765,7 @@ def _portal_asset_version() -> str:
     for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js",
                  "selftest.css", "selftest.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
                  "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg",
-                 *BRAND_ASSETS):
+                 "brand/platforms/facebook.svg", "brand/platforms/google.svg", *BRAND_ASSETS):
         digest.update(name.encode())
         digest.update((assets / name).read_bytes())
     return digest.hexdigest()[:16]
@@ -772,7 +775,8 @@ def _versioned_page(page: str) -> str:
     version = _portal_asset_version()
     page = page.replace("__ASSET_VERSION__", version).replace("__BRAND__", _brand("/app"))
     for name in ("portal.css", "portal.js", "preview.js", "fallback.css", "fallback.js", "selftest.css", "selftest.js",
-                 "appearance.js", "brand/tokens.css", "brand/icons.svg", *BRAND_ASSETS):
+                 "appearance.js", "brand/tokens.css", "brand/icons.svg", "brand/platforms/facebook.svg",
+                 "brand/platforms/google.svg", *BRAND_ASSETS):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
@@ -827,7 +831,7 @@ def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
 
 
 def _check_platform_setting(platform: str, kind: str) -> None:
-    if platform not in ("instagram", "tiktok", "youtube") or kind not in ("proxy", "cookies"):
+    if platform not in PLATFORMS or kind not in ("proxy", "cookies"):
         raise HTTPException(404, "Unknown platform setting")
 
 
@@ -843,7 +847,8 @@ def _validate_cookies(platform: str, value: str) -> None:
         jar._really_load(io.StringIO(value), "dashboard cookies.txt", True, True)
     except Exception:
         raise ValueError("Upload a valid Netscape cookies.txt file") from None
-    suffix = {"instagram": "instagram.com", "tiktok": "tiktok.com", "youtube": "youtube.com"}[platform]
+    suffix = {"instagram": "instagram.com", "tiktok": "tiktok.com", "youtube": "youtube.com",
+              "facebook": "facebook.com", "google": "google.com"}[platform]
     if not any((cookie.domain or "").lstrip(".").lower().endswith(suffix) for cookie in jar):
         raise ValueError(f"The cookies.txt file has no {suffix} cookies")
 
@@ -855,6 +860,8 @@ def _test_proxy(platform: str, proxy: str) -> dict[str, Any]:
         "instagram": "https://www.instagram.com/instagram/",
         "tiktok": "https://www.tiktok.com/@tiktok",
         "youtube": "https://www.youtube.com/robots.txt",
+        "facebook": "https://www.facebook.com/ads/library/",
+        "google": "https://adstransparency.google.com/",
     }
     proxies = {"http": proxy, "https": proxy}
     started = monotonic()

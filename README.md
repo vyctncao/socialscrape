@@ -5,9 +5,9 @@
 
 # Social Scrape API
 
-A self-hosted, [ScrapeCreators](https://docs.scrapecreators.com)-compatible API for **YouTube, TikTok and Instagram**, built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+A self-hosted, [ScrapeCreators](https://docs.scrapecreators.com)-compatible API for **YouTube, TikTok, Instagram, and the Facebook, TikTok, and Google ad libraries**, built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
-It uses ScrapeCreators' paths, query parameters, `x-api-key` header and response shapes, so most existing clients only need a new base URL. Each endpoint either returns real data from yt-dlp or answers `501` with the reason it can't. **37 of the 66** YouTube/TikTok/Instagram endpoints are implemented.
+It uses ScrapeCreators' paths, query parameters, `x-api-key` header and response shapes, so most existing clients only need a new base URL. Each endpoint either returns real data from yt-dlp or answers `501` with the reason it can't. **51 of 74** cataloged endpoints are implemented, including all 10 ad-library operations (12 HTTP operations when the two Facebook POST variants are counted).
 
 ## Quick start
 
@@ -20,6 +20,7 @@ uv run socialscrape                      # http://127.0.0.1:8000  (HOST / PORT t
 curl 'http://127.0.0.1:8000/v1/youtube/video?url=https://www.youtube.com/watch?v=jNQXAC9IVRw'
 curl 'http://127.0.0.1:8000/v1/tiktok/profile?handle=stoolpresidente'
 curl 'http://127.0.0.1:8000/v1/instagram/post?url=https://www.instagram.com/p/DeKe2vzD9xZ/'
+curl 'http://127.0.0.1:8000/v1/facebook/adLibrary/search/ads?query=running%20shoes'
 ```
 
 - `/docs`: interactive OpenAPI docs without the portal; with the portal enabled it redirects to the dashboard's documentation at `/app/docs`, which anyone can read without signing in. The OpenAPI spec powers the dashboard docs and playground.
@@ -52,8 +53,7 @@ on persistent storage. Set a long random `SOCIALSCRAPE_SETUP_TOKEN` as a deploym
 owner, then remove it; without that code, nobody can claim an empty deployment. Alternatively,
 `SOCIALSCRAPE_OWNER_EMAIL` and `SOCIALSCRAPE_OWNER_PASSWORD` can bootstrap the first owner non-interactively. Supply
 all three only as deployment secrets and remove them after the first successful startup—never commit them. Existing
-`SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility. Owners can configure ordered pools of up to five proxies and five authenticated-account cookie files for Instagram,
-TikTok and YouTube under **Settings → Proxies & accounts**. Values are encrypted in the portal database with
+`SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility. Owners can configure ordered pools of up to five proxies and five authenticated-account cookie files for Instagram, TikTok, YouTube, Facebook, and Google under **Settings → Proxies & accounts**. Values are encrypted in the portal database with
 `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY`, never returned after saving, and applied to new requests immediately. On a
 retryable block or network/login failure, the service advances to the next proxy and account without merging cookie
 jars. Use only dedicated throwaway accounts; the dashboard accepts Netscape `cookies.txt` exports and never stores
@@ -66,12 +66,12 @@ Configuration is through environment variables (the `socialscrape` command takes
 | `SOCIALSCRAPE_PORTAL_PATH` | Persistent SQLite database for invite-only sign-in, member API keys, history, usage, playground and docs. Empty disables the dashboard. |
 | `SOCIALSCRAPE_API_KEYS` | Comma-separated accepted `x-api-key` values. Empty means auth is off; set it before exposing the server. ASCII only: a non-ASCII key stops startup. |
 | `SOCIALSCRAPE_PROXY` | Outbound proxy URL (`http`, `https`, `socks4(a)` or `socks5(h)`). Platforms throttle datacenter IPs quickly. |
-| `SOCIALSCRAPE_COOKIES_{YOUTUBE,TIKTOK,INSTAGRAM}` | Netscape `cookies.txt` per platform. Use throwaway accounts. An unusable file makes that platform answer `500 cookies_error`. |
+| `SOCIALSCRAPE_COOKIES_{YOUTUBE,TIKTOK,INSTAGRAM,FACEBOOK,GOOGLE}` | Netscape `cookies.txt` per platform. Use throwaway accounts. An unusable file makes that platform answer `500 cookies_error`. |
 | `SOCIALSCRAPE_TRANSCRIBE` | `none` (default), `faster-whisper` or `mlx-whisper` enables AI transcription (`uv sync --extra whisper` / `--extra mlx`). Without the package, transcription answers `501 transcription_unavailable`. |
 | `SOCIALSCRAPE_CACHE_PATH` | SQLite file backing `cache_max_age` (default `.cache/socialscrape.sqlite3`). Blank disables the cache. |
 | `SOCIALSCRAPE_SCRAPECREATORS_API_KEY` | ScrapeCreators key for the [fallback](#scrapecreators-fallback). Empty disables it unless an owner saves one in the dashboard. Ignored without `SOCIALSCRAPE_API_KEYS` or the portal. |
 | `SOCIALSCRAPE_SCRAPECREATORS_FALLBACK` | When it falls back: `unsupported`, `errors`, `restricted`, `not_found`, comma separated, or `all` or `none` (default `unsupported,errors`). |
-| `SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS` | The platforms it falls back for, comma separated (default all three). |
+| `SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS` | The platforms it falls back for, comma separated (default all five). |
 | `SOCIALSCRAPE_SCRAPECREATORS_URL` | Where it asks (default `https://api.scrapecreators.com`): a relay's base URL, or a test server. |
 | `HOST` / `PORT` | Bind address and port (default `127.0.0.1:8000`). |
 
@@ -86,7 +86,7 @@ Configuration is through environment variables (the `socialscrape` command takes
   | `401` | Bad or missing API key (`unauthorized`) |
   | `403` | Private, login-gated, age-restricted or geo-blocked content (`forbidden`, `age_restricted`, `geo_restricted`, `restricted_profile`) |
   | `404` | Nonexistent or removed content, or a path with no endpoint here (`not_found`, e.g. another platform's ScrapeCreators path) |
-  | `405` | A method other than `GET` (`method_not_allowed`, with an `Allow` header). Endpoints are GET-only, like ScrapeCreators' |
+  | `405` | A method the operation does not support (`method_not_allowed`, with an `Allow` header). Most endpoints are GET-only; Facebook ad search and company ads also accept POST JSON bodies. |
   | `422` | `/v1/instagram/profile/post-count` only: Instagram shows an abbreviated count and `allow_estimated` isn't true (`estimate_only`, with `estimated_media_count`) |
   | `500` | Unclassified upstream error (`upstream_error`) or timeout (`timeout`), an unusable server setting (`cookies_error`, `config_error`, or `cookies_rejected` when Instagram logs the configured session out), a failing Whisper model (`transcription_failed`), or an internal error (`server_error`; the traceback is in the server log) |
   | `501` | Endpoint not supported (`not_supported`, with the reason), or transcription off (`transcription_disabled`) or not installed (`transcription_unavailable`) |
@@ -148,7 +148,7 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 | ~~`/v1/youtube/shorts/trending`~~ | YouTube removed Trending, and no extractor calls the Shorts feed. |
 | ~~`/v1/youtube/search/typeahead`~~ | Suggestions come from Google's suggest API, which no extractor calls. |
 
-### TikTok: 10 / 29
+### TikTok: 14 / 29
 
 | Endpoint | Notes |
 |---|---|
@@ -161,7 +161,7 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 | `/v1/tiktok/song`, `/v1/tiktok/song/videos` | App API, `cursor` paging. `clipId` is the sound's id, the address of its page (`tiktok.com/music/<title>-<id>`) or a short link to it (`vm.tiktok.com/<code>`). Counts past int32 are the app's pinned 2147483597. |
 | `/v1/tiktok/collection/videos` | Public collections, 30 per page. Only TikTok's statusCode 100001 (removed or non-public) is a 404; a private one (10216/10222) is a 403, a refusal of anonymous requests a 503, an unknown code a 500. |
 
-The other 19 return 501: comments and replies, followers and following, audience, every search endpoint, trending, popular creators, Shop, showcase and the Ad Library. yt-dlp has no TikTok extractor for any of them.
+The other 15 return 501: comments and replies, followers and following, audience, the remaining search endpoints, trending, popular creators, Shop, and showcase. The TikTok Ad Library search and detail operations use TikTok's public Commercial Content Library and Creative Center surfaces.
 
 ### Instagram: 12 / 20
 
@@ -179,12 +179,22 @@ Anonymous Instagram is heavily restricted. Most endpoints return **only the firs
 
 The other 8 return 501: basic-profile by id, tagged posts, top search, profile search, audio reels, trending reels, comment replies and the profile embed.
 
+### Ad libraries: 10 / 10 endpoints (12 HTTP operations)
+
+| Library | Endpoints | Notes |
+|---|---|---|
+| Facebook Ad Library | `/v1/facebook/adLibrary/ad`, `/ad/transcript`, `/search/ads`, `/company/ads`, `/search/companies` | Detail, transcript, keyword/company search, company lookup, filters, and opaque pagination. Search and company ads accept either GET query parameters or a POST JSON object, which is useful for long cursors. |
+| TikTok Ad Library | `/v1/tiktok/ad-library/search`, `/ad` | Searches the Commercial Content Library and reads Creative Center Top Ad details, with a library fallback for non-Top Ads. |
+| Google Ad Library | `/v1/google/company/ads`, `/v1/google/ad`, `/v1/google/adLibrary/advertisers/search` | Searches Ads Transparency Center creatives and advertisers and optionally hydrates company results with creative details. |
+
+Ad-library traffic uses the same ordered proxy/account pools as the other platforms. Configure Facebook and Google with `SOCIALSCRAPE_COOKIES_FACEBOOK` and `SOCIALSCRAPE_COOKIES_GOOGLE`, or add encrypted proxy and cookie entries under **Settings → Proxies & accounts**. Public ad-library surfaces can work anonymously, but suitable egress may still be necessary when Meta, TikTok, or Google rate-limits a server IP.
+
 `/meta/coverage` has the full, current notes for every endpoint.
 
 ## Caveats
 
 - **Approximate values.** Some values are YouTube's display text, not exact figures: relative times (`"3 weeks ago"`) turned into dates, and abbreviated counts (`"2.5K"`). The notes say where.
-- **Rate limits.** All three platforms throttle. Use `SOCIALSCRAPE_PROXY` (residential works best) and `cache_max_age`. Blocks surface as `503`.
+- **Rate limits.** Every platform throttles, and the ad libraries quickly: Google answers a burst from one IP with its "sorry" CAPTCHA page for a while, and Meta can block an IP after a few dozen Ad Library requests. Use `SOCIALSCRAPE_PROXY` or the per-platform proxy pools (residential works best) and `cache_max_age`. Blocks surface as `503`.
 - **Cookies.** Optional. They unlock login-gated paths (e.g. Instagram comments via `media/<pk>/comments/`), but those paths were **not verified** here, since only anonymous access was tested. Never use your personal account. An Instagram session that has been logged out answers `500 cookies_rejected` (replace the file); the files are never written. Check `/health` `cookie_errors` after changing one.
 - **TikTok sound API.** `/v2/tiktok/video` (app path), `/profile/region` and `/song*` rely on the app API behind `TikTokSoundIE`, which yt-dlp marks as broken. They work today but could stop without notice.
 - **No JS runtime needed.** YouTube stream URLs would need a JS runtime (deno), but no endpoint returns them, so metadata, comments and captions all work without one.
@@ -193,7 +203,7 @@ The other 8 return 501: basic-profile by id, tagged posts, top search, profile s
 
 ## MCP server
 
-SocialScrape exposes its 66 YouTube, TikTok, and Instagram compatibility routes plus four account tools at `POST /mcp`. It implements stateless MCP Streamable HTTP for protocol versions `2025-06-18` and `2025-03-26`; no session ID is required. Configure a client with the same API key used for REST:
+SocialScrape exposes its 74 compatibility routes across YouTube, TikTok, Instagram, Facebook, and Google plus four account tools at `POST /mcp`. It implements stateless MCP Streamable HTTP for protocol versions `2025-06-18` and `2025-03-26`; no session ID is required. Configure a client with the same API key used for REST:
 
 ```json
 {

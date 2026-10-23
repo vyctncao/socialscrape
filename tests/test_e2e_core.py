@@ -87,7 +87,7 @@ def test_meta_coverage_is_consistent(client):
     assert body["implemented"] + body["needs_setup"] == body["total"]
     assert body["unsupported"] == 0
     for row in rows:
-        assert row["platform"] == row["path"].split("/")[2] and row["platform"] in ("youtube", "tiktok", "instagram")
+        assert row["platform"] == row["path"].split("/")[2] and row["platform"] in ("youtube", "tiktok", "instagram", "facebook", "google")
         assert row["summary"] == CATALOG_BY_PATH[row["path"]]["summary"]
         assert row["notes"], row["path"]
         if row["status"] == "implemented":
@@ -276,7 +276,7 @@ def test_openapi_lists_no_params_on_501_routes(client):
     for path in _unsupported(client):
         op = spec[path]["get"]
         assert "parameters" not in op, path
-        assert op["tags"] == ["not supported"] and op["summary"].endswith("(not supported)"), path
+        assert op["tags"] == [CATALOG_BY_PATH[path]["tag"]] and op["x-socialscrape-status"] == "not_supported" and op["summary"].endswith("(not supported)"), path
 
 
 # --- settings / env ----------------------------------------------------------------

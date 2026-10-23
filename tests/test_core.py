@@ -9,11 +9,13 @@ import time
 import urllib.parse
 
 import pytest
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
 from socialscrape import cursor, subtitles, util
 from socialscrape.catalog import CATALOG
-from socialscrape.errors import BadRequest, NotFound
+from socialscrape.errors import BadRequest, NotFound, validation_error_handler
 from socialscrape.ytdlp import translate_error
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor.common import InfoExtractor
@@ -22,7 +24,7 @@ from yt_dlp.utils import DownloadError, ExtractorError, clean_html, unescapeHTML
 
 def test_every_catalog_path_is_routed(client):
     cov = client.get("/meta/coverage").json()
-    assert cov["total"] == len(CATALOG) == 66
+    assert cov["total"] == len(CATALOG) == 74
     # FastAPI >= 0.143 nests included routers (no flat `.path`), so read the schema instead.
     routed = set(client.app.openapi()["paths"])
     for row in cov["endpoints"]:
@@ -1125,6 +1127,28 @@ def test_cache_key_keeps_repeated_param_order(tmp_path):
     assert c.get("/v9/test/echo?x=1&h=a&cache_max_age=1d").headers["x-cache"] == "hit"  # other names still sorted
 
 
+def test_post_bypasses_cache(tmp_path):
+    from fastapi import FastAPI
+
+    from socialscrape.cache import CacheMiddleware, ResponseCache
+
+    app = FastAPI()
+    app.add_middleware(CacheMiddleware, cache=ResponseCache(str(tmp_path / "c.sqlite3")))
+    calls = {"count": 0}
+
+    @app.post("/v9/test/echo")
+    async def echo(request: Request):
+        calls["count"] += 1
+        return {"success": True, "body": await request.json(), "count": calls["count"]}
+
+    c = TestClient(app)
+    first = c.post("/v9/test/echo?cache_max_age=1d", json={"query": "one"})
+    second = c.post("/v9/test/echo?cache_max_age=invalid", json={"query": "two"})
+    assert first.json() == {"success": True, "body": {"query": "one"}, "count": 1}
+    assert second.json() == {"success": True, "body": {"query": "two"}, "count": 2}
+    assert "x-cache" not in first.headers and "x-cache" not in second.headers
+
+
 # --- network errors -----------------------------------------------------------------------
 
 
@@ -1917,10 +1941,32 @@ def test_usage_groups_daily_requests_by_platform(env, tmp_path, monkeypatch):
     c = TestClient(create_app(), base_url="https://testserver")
     c.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
                             "setup_token": "setup"})
-    for path in ("/v1/instagram/basic-profile", "/v1/tiktok/profile/region", "/v1/youtube/shorts/trending"):
+    for path in ("/v1/instagram/basic-profile", "/v1/tiktok/profile/region", "/v1/youtube/shorts/trending",
+                 "/v1/facebook/adLibrary/search/companies", "/v1/google/adLibrary/advertisers/search"):
         c.get(path)
     day = c.get("/portal/api/usage").json()["daily"][-1]
-    assert day == {"instagram": 1, "tiktok": 1, "youtube": 1, "other": 0, "total": 3}
+    assert day == {"instagram": 1, "tiktok": 1, "youtube": 1, "facebook": 1, "google": 1,
+                   "other": 0, "total": 5}
+
+
+def test_request_history_records_post_json_as_replayable_query(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    portal = tmp_path / "portal.sqlite3"
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="")
+    c = TestClient(create_app(), base_url="https://testserver")
+    c.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                           "setup_token": "setup"})
+    body = {"query": "running shoes", "country": "US", "trim": True}
+    c.post("/v1/facebook/adLibrary/search/ads", json=body)
+    entry = c.get("/portal/api/history").json()["requests"][0]
+    assert entry["method"] == "POST"
+    assert urllib.parse.parse_qs(entry["query"]) == {"query": ["running shoes"], "country": ["US"],
+                                                     "trim": ["true"]}
+    # JSON nested past what Python reads is the route's 400, not a 500 from recording it.
+    r = c.post("/v1/facebook/adLibrary/search/ads", content="[" * 100_000, headers={"content-type": "application/json"})
+    assert r.status_code == 400
 
 
 def test_request_history_caps_large_response_bodies(env, tmp_path, monkeypatch):
@@ -1965,7 +2011,7 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
         return ("# Netscape HTTP Cookie File\n"
                 f".instagram.com\tTRUE\t/\tTRUE\t2147483647\t{name}\tsecret\n")
 
-    empty = {platform: {"proxy": [], "cookies": []} for platform in ("instagram", "tiktok", "youtube")}
+    empty = {platform: {"proxy": [], "cookies": []} for platform in ("youtube", "tiktok", "instagram", "facebook", "google")}
     assert owner.get("/portal/api/settings/platforms").json() == empty
     ids = [owner.post("/portal/api/settings/platforms/instagram/proxy", headers=headers,
                       json={"value": proxy}).json()["id"] for proxy in proxies]
@@ -2063,6 +2109,15 @@ def test_documentation_loading_and_interaction_contract():
     assert '.docs-group-label{' in css
     assert 'min-height:var(--mimic-control-height,40px)' in css
     assert '@media(any-pointer:coarse)' in css
+    assert "const docTagOrder = ['TikTok', 'TikTok Shop', 'Instagram', 'YouTube', 'Facebook Ad Library', 'TikTok Ad Library', 'Google Ad Library']" in script
+    assert "['get','post']" in script
+    assert 'data-doc-method="${endpoint.method}"' in script
+    assert 'aria-label="Featured endpoint"' in script
+    assert "method === 'POST' ? 'Request body' : 'Parameters'" in script
+    assert "method: 'POST'" in script and "requests.post(" in script
+    assert '.method[data-method=POST]' in css
+    assert (static / 'brand' / 'platforms' / 'facebook.svg').is_file()
+    assert (static / 'brand' / 'platforms' / 'google.svg').is_file()
 
 
 def test_agent_integrations_portal_contract():
@@ -2156,3 +2211,91 @@ def test_owner_saves_encrypted_tiktok_api_credentials(env, tmp_path, monkeypatch
     assert active_platform_credential("tiktok.research_token") == "research-private-token"
     assert owner.delete("/portal/api/settings/platform-credentials/tiktok-research_token", headers=csrf).json() == {
         "removed": True}
+
+
+def test_ad_library_catalog_metadata(client):
+    by_path = {row["path"]: row for row in client.get("/meta/coverage").json()["endpoints"]}
+    assert by_path["/v1/tiktok/ad-library/ad"]["tag"] == "TikTok Ad Library"
+    assert by_path["/v1/google/ad"]["tag"] == "Google Ad Library"
+    for path in ("/v1/facebook/adLibrary/search/ads", "/v1/facebook/adLibrary/company/ads"):
+        assert by_path[path]["tag"] == "Facebook Ad Library"
+        assert by_path[path]["methods"] == ["GET", "POST"]
+        assert by_path[path]["featured"] is True
+    assert by_path["/v1/facebook/adLibrary/ad"]["methods"] == ["GET"]
+    assert by_path["/v1/facebook/adLibrary/ad"]["featured"] is False
+    # ScrapeCreators files these under TikTok Shop, not TikTok, and the dashboard groups by tag.
+    shop = {path for path, row in by_path.items() if row["tag"] == "TikTok Shop"}
+    assert shop == {"/v1/tiktok/product", "/v1/tiktok/shop/product/reviews", "/v1/tiktok/shop/products",
+                    "/v1/tiktok/shop/search", "/v1/tiktok/user/showcase"}
+    openapi = client.get("/openapi.json").json()["paths"]
+    assert openapi["/v1/tiktok/user/showcase"]["get"]["tags"] == ["TikTok Shop"]
+
+
+def test_sc_get_post_coerces_body_and_ignores_unknown_fields(monkeypatch):
+    from fastapi import APIRouter, FastAPI, Query
+    from socialscrape import registry
+    from socialscrape.registry import sc_get
+
+    monkeypatch.setattr(registry, "IMPLEMENTED", dict(registry.IMPLEMENTED))
+    router = APIRouter()
+
+    @sc_get(router, "/v1/facebook/adLibrary/search/ads", source="test", post=True)
+    async def search(query: str = Query(...), trim: str | None = None, cursor: str | None = None):
+        return {"query": query, "trim": trim, "cursor": cursor}
+
+    app = FastAPI()
+    app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.include_router(router)
+    c = TestClient(app)
+    body = c.post("/v1/facebook/adLibrary/search/ads",
+                  json={"query": 42, "trim": True, "cursor": None, "unknown": "ignored"}).json()
+    assert body == {"success": True, "credits_charged": 0, "query": "42", "trim": "true", "cursor": None}
+    assert c.post("/v1/facebook/adLibrary/search/ads", json={"query": "  running​"}).json()["query"] == "running"
+
+
+def test_sc_get_post_validation_and_openapi(monkeypatch):
+    from fastapi import APIRouter, FastAPI, Query
+    from socialscrape import registry
+    from socialscrape.registry import sc_get
+
+    monkeypatch.setattr(registry, "IMPLEMENTED", dict(registry.IMPLEMENTED))
+    router = APIRouter()
+
+    @sc_get(router, "/v1/facebook/adLibrary/search/ads", source="test", post=True)
+    async def search(query: str = Query(..., description="Keyword to search for"), trim: str | None = None):
+        return {"query": query}
+
+    app = FastAPI()
+    app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.include_router(router)
+    c = TestClient(app)
+    for content, expected in ((None, "Field required"), ([], "valid dictionary"), ({}, "query: Field required")):
+        r = c.post("/v1/facebook/adLibrary/search/ads", json=content)
+        assert r.status_code == 400 and expected in r.json()["message"]
+    schema = app.openapi()["components"]["schemas"]["SearchBody"]
+    assert schema["required"] == ["query"]
+    assert schema["properties"]["query"]["description"] == "Keyword to search for"
+    assert app.openapi()["paths"]["/v1/facebook/adLibrary/search/ads"]["post"]["requestBody"]["required"] is True
+
+
+def test_facebook_post_and_openapi_status(client):
+    path = "/v1/facebook/adLibrary/search/ads"
+    r = client.post(path, json={})
+    assert r.status_code == 400 and r.json()["error"] == "bad_request"
+    operations = client.app.openapi()["paths"][path]
+    assert set(operations) == {"get", "post"}
+    assert all(op["tags"] == ["Facebook Ad Library"] and
+               "x-socialscrape-status" not in op for op in operations.values())
+    assert "requestBody" in operations["post"] and "requestBody" not in operations["get"]
+
+
+def test_facebook_and_google_cookie_platforms(monkeypatch):
+    from socialscrape.config import PLATFORMS, get_settings
+    assert PLATFORMS == ("youtube", "tiktok", "instagram", "facebook", "google")
+    monkeypatch.setenv("SOCIALSCRAPE_COOKIES_FACEBOOK", "~/facebook.txt")
+    monkeypatch.setenv("SOCIALSCRAPE_COOKIES_GOOGLE", "~/google.txt")
+    get_settings.cache_clear()
+    try:
+        assert set(get_settings().cookie_files) >= {"facebook", "google"}
+    finally:
+        get_settings.cache_clear()

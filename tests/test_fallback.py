@@ -21,7 +21,7 @@ from socialscrape.config import ConfigError, get_settings
 from socialscrape.errors import (BadRequest, Forbidden, NotFound, NotSupported, UpstreamBlocked, UpstreamError,
                                  UpstreamUnreachable)
 from socialscrape.main import create_app
-from socialscrape.platforms import tiktok
+from socialscrape.platforms import facebook_ads, tiktok, tiktok_ads
 from socialscrape.portal import PortalStore
 
 CLIENT_KEY = "client-key"
@@ -42,9 +42,18 @@ class Upstream:
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
+                self._answer()
+
+            def do_POST(self):
+                self._answer()
+
+            def _answer(self):
                 parts = urlsplit(self.path)
-                upstream.requests.append({"path": parts.path, "query": parse_qsl(parts.query, keep_blank_values=True),
-                                          "headers": {k.lower(): v for k, v in self.headers.items()}})
+                length = int(self.headers.get("content-length", "0"))
+                upstream.requests.append({"method": self.command, "path": parts.path,
+                                          "query": parse_qsl(parts.query, keep_blank_values=True),
+                                          "headers": {k.lower(): v for k, v in self.headers.items()},
+                                          "body": self.rfile.read(length).decode("utf-8")})
                 status, body, headers, delay = (upstream.replies.pop(0) if upstream.replies
                                                 else (200, json.dumps(SC_OK).encode(), {}, 0))
                 time.sleep(delay)
@@ -134,6 +143,47 @@ def test_an_unsupported_route_is_served_by_scrapecreators_with_only_its_key(make
     assert sent["headers"]["via"] == "1.1 socialscrape"
     assert not {"cookie", "x-portal-key-id", "authorization"} & set(sent["headers"])
     assert CLIENT_KEY not in json.dumps(sent)
+
+
+def test_blocked_tiktok_ad_library_search_uses_fallback(make, upstream, monkeypatch):
+    async def blocked(*args, **kwargs):
+        raise UpstreamBlocked("TikTok blocked the Ad Library request")
+
+    monkeypatch.setattr(tiktok_ads, "with_ydl", blocked)
+    response = make().get("/v1/tiktok/ad-library/search", params={"query": "running shoes"})
+    assert response.status_code == 200 and response.json() == SC_OK
+    assert response.headers[fallback.HEADER] == fallback.PROVIDER
+    [sent] = upstream.requests
+    assert sent["path"] == "/v1/tiktok/ad-library/search"
+    assert sent["query"] == [("query", "running shoes")]
+
+
+def test_catalog_post_fallback_forwards_the_json_body(make, upstream, monkeypatch):
+    path = "/v1/facebook/adLibrary/search/ads"
+    body = {"query": "running shoes", "country": "US", "trim": True, "cursor": "upstream-token"}
+
+    async def failed(*args, **kwargs):
+        raise UpstreamError("Meta failed")
+
+    monkeypatch.setattr(facebook_ads, "with_ydl", failed)
+    c = make(SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS="facebook")
+    response = c.post(path, json=body)
+    assert response.status_code == 200 and response.json() == SC_OK
+    [sent] = upstream.requests
+    assert sent["method"] == "POST" and sent["path"] == path and sent["query"] == []
+    assert json.loads(sent["body"]) == body
+    assert sent["headers"]["content-type"] == "application/json"
+    assert sent["headers"]["x-api-key"] == SC_KEY and sent["headers"]["via"] == "1.1 socialscrape"
+
+    own_cursor = {**body, "cursor": "ss1.e30"}
+    assert c.post(path, json=own_cursor).status_code == 500
+    assert len(upstream.requests) == 1
+
+    # JSON that isn't an object gets the route's own 400, as it would without the fallback.
+    for not_an_object in ([1, 2], "nike", 3):
+        r = c.post(path, json=not_an_object)
+        assert r.status_code == 400 and r.json()["error"] == "bad_request", r.json()
+    assert len(upstream.requests) == 1
 
 
 def test_a_local_answer_never_asks_scrapecreators(make, upstream, monkeypatch):
@@ -431,7 +481,7 @@ def test_owner_settings_are_encrypted_never_returned_and_apply_at_once(portal, u
     owner, csrf, _ = portal(SOCIALSCRAPE_SCRAPECREATORS_API_KEY="env-key-1")
     settings = owner.get("/portal/api/settings/fallback").json()
     assert settings == {"provider": "scrapecreators", "active": True, "enabled": True,
-                        "triggers": ["unsupported", "errors"], "platforms": ["youtube", "tiktok", "instagram"],
+                        "triggers": ["unsupported", "errors"], "platforms": ["youtube", "tiktok", "instagram", "facebook", "google"],
                         "options_source": "environment", "options_updated_at": None,
                         "api_key": {"configured": True, "source": "environment", "updated_at": None}}
 

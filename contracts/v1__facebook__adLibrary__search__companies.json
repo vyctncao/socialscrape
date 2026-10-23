@@ -1,0 +1,59 @@
+{
+  "endpoint": "/v1/facebook/adLibrary/search/companies",
+  "fields": {
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "searchResults": [
+      "array"
+    ],
+    "searchResults[]": [
+      "object"
+    ],
+    "searchResults[].category": [
+      "string"
+    ],
+    "searchResults[].country": [
+      "null"
+    ],
+    "searchResults[].entity_type": [
+      "string"
+    ],
+    "searchResults[].ig_followers": [
+      "integer"
+    ],
+    "searchResults[].ig_username": [
+      "string"
+    ],
+    "searchResults[].ig_verification": [
+      "boolean"
+    ],
+    "searchResults[].image_uri": [
+      "string"
+    ],
+    "searchResults[].likes": [
+      "integer"
+    ],
+    "searchResults[].name": [
+      "string"
+    ],
+    "searchResults[].page_alias": [
+      "string"
+    ],
+    "searchResults[].page_id": [
+      "string"
+    ],
+    "searchResults[].page_is_deleted": [
+      "boolean"
+    ],
+    "searchResults[].verification": [
+      "string"
+    ],
+    "success": [
+      "boolean"
+    ]
+  }
+}

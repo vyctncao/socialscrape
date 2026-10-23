@@ -16,7 +16,7 @@ from functools import lru_cache
 from typing import Callable
 from urllib.parse import urlsplit
 
-PLATFORMS = ("youtube", "tiktok", "instagram")
+PLATFORMS = ("youtube", "tiktok", "instagram", "facebook", "google")
 TRANSCRIBE_BACKENDS = ("none", "faster-whisper", "mlx-whisper")
 # What yt-dlp's curl_cffi and requests handlers accept.
 PROXY_SCHEMES = ("http", "https", "socks4", "socks4a", "socks5", "socks5h")

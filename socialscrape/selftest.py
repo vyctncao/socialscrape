@@ -86,8 +86,11 @@ PRESETS: dict[str, Preset] = {
     "/v2/instagram/reels/search": Preset({"query": "cats"}, ("reels[].id", "reels[].shortcode")),
     "/v2/instagram/user/posts": Preset({"handle": JANE}, ("items[].id", "items[].code")),
     # TikTok
-    "/v1/tiktok/ad-library/ad": Preset({"ad_id": "1873831353981330"}, ("id",), note="TikTok's current official API example ad."),
-    "/v1/tiktok/ad-library/search": Preset({"query": "nike"}, ("ads[].id",)),
+    "/v1/tiktok/ad-library/ad": Preset({"ad_id": "7679096403545178120"}, ("id",),
+                                          note="A live-verified Creative Center Top Ad."),
+    "/v1/tiktok/ad-library/search": Preset(
+        {"query": "nike"}, ("ads[].id",),
+        note="TikTok may return HTTP 421 unless ScrapeCreators fallback or acceptable egress is configured."),
     "/v1/tiktok/collection/videos": Preset({"url": TT_COLLECTION}, ("collection_id", "videos[].id"),
                                            note="A small public collection."),
     "/v1/tiktok/creators/popular": Preset({"page": "1", "creatorCountry": "US"}, ("creators[].user_id",)),
@@ -155,6 +158,21 @@ PRESETS: dict[str, Preset] = {
                                          note="A paid promotion with a named sponsor."),
     "/v1/youtube/video/transcript": Preset({"url": YT_FIRST}, ("videoId", "transcript[].text"),
                                            note="“Me at the zoo”, which has English captions."),
+    # Facebook Ad Library
+    "/v1/facebook/adLibrary/ad": Preset({"id": "1847168433318898"}, ("aaa_info",)),
+    "/v1/facebook/adLibrary/ad/transcript": Preset({"id": "1847168433318898"}, ("data",),
+                                                       note="A live-verified video ad with speech."),
+    "/v1/facebook/adLibrary/search/ads": Preset({"query": "running"}, ("cursor",)),
+    "/v1/facebook/adLibrary/company/ads": Preset({"pageId": "367152833370567"}, ("cursor",)),
+    "/v1/facebook/adLibrary/search/companies": Preset({"query": "nike"}, ("searchResults",)),
+    # Google Ad Library
+    "/v1/google/company/ads": Preset({"domain": "lululemon.com", "region": "US"},
+                                      ("ads[].advertiserId", "ads[].creativeId", "ads[].adUrl")),
+    "/v1/google/ad": Preset({"url": "https://adstransparency.google.com/advertiser/"
+                                      "AR07541154843046445057/creative/CR17778900238552006657"},
+                             ("advertiserId",)),
+    "/v1/google/adLibrary/advertisers/search": Preset({"query": "lululemon", "region": "AU"},
+                                                        ("advertisers",)),
 }
 
 

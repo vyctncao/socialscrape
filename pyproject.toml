@@ -1,7 +1,7 @@
 [project]
 name = "socialscrape"
 version = "0.1.0"
-description = "Self-hosted, ScrapeCreators-compatible API for YouTube, TikTok and Instagram, powered by yt-dlp"
+description = "Self-hosted, ScrapeCreators-compatible API for YouTube, TikTok, Instagram and the Facebook, TikTok and Google ad libraries, powered by yt-dlp"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

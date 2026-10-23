@@ -97,11 +97,11 @@ def test_full_oauth_flow_and_refresh(oauth_client):
     for scheme in ("Bearer", "bearer", "BEARER"):
         listed = client.post("/mcp", headers={"Authorization": scheme + " " + tokens["access_token"]},
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
-        assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 70
+        assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 78
 
     listed = client.post("/mcp", headers={"Authorization": "Bearer " + tokens["access_token"]},
         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
-    assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 70
+    assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 78
     assert client.get("/v1/account/credit-balance",
                       headers={"Authorization": "Bearer " + tokens["access_token"]}).status_code == 200
 

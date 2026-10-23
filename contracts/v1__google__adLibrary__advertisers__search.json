@@ -1,0 +1,41 @@
+{
+  "endpoint": "/v1/google/adLibrary/advertisers/search",
+  "fields": {
+    "advertisers": [
+      "array"
+    ],
+    "advertisers[]": [
+      "object"
+    ],
+    "advertisers[].advertiser_id": [
+      "string"
+    ],
+    "advertisers[].name": [
+      "string"
+    ],
+    "advertisers[].number_of_ads_estimate": [
+      "integer"
+    ],
+    "advertisers[].region": [
+      "string"
+    ],
+    "credits_charged": [
+      "integer"
+    ],
+    "credits_remaining": [
+      "integer"
+    ],
+    "success": [
+      "boolean"
+    ],
+    "websites": [
+      "array"
+    ],
+    "websites[]": [
+      "object"
+    ],
+    "websites[].domain": [
+      "string"
+    ]
+  }
+}
