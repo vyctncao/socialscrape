@@ -2022,3 +2022,31 @@ def test_documentation_loading_and_interaction_contract():
     assert '.docs-group-label{' in css
     assert 'min-height:var(--mimic-control-height,40px)' in css
     assert '@media(any-pointer:coarse)' in css
+
+
+def test_agent_integrations_portal_contract():
+    static = __import__('pathlib').Path(__file__).parents[1] / 'socialscrape' / 'static'
+    shell = (static / 'portal.html').read_text()
+    loading = (static / 'loading.html').read_text()
+    script = (static / 'portal.js').read_text()
+    css = (static / 'portal.css').read_text()
+    assert 'data-page="agents" href="/app/agents"' in shell
+    assert 'aria-label="Agent integrations" aria-describedby="tip-agents"' in shell
+    assert 'data-loading-page="agents"' in loading
+    assert '<h1>Agent integrations</h1>' in loading
+    assert "location.origin, mcpUrl = `${origin}/mcp`" in script
+    assert 'npx skills add vyctncao/social-media-research-skills' in script
+    assert 'npm install -g @socialscrape/cli' in script
+    assert "'x-api-key':'YOUR_API_KEY'" in script
+    assert "btoa(JSON.stringify({url:mcpUrl}))" in script
+    assert 'cursor://anysphere.cursor-deeplink/mcp/install?name=socialscrape&config=' in script
+    assert "JSON.stringify({name:'socialscrape',type:'http',url:mcpUrl})" in script
+    assert 'vscode:mcp/install?' in script
+    assert 'Install in Cursor' in script and 'Install in VS Code' in script
+    assert 'Claude.ai or Claude Desktop' in script
+    assert '<strong>Settings</strong>' in script and '<strong>Connectors</strong>' in script
+    assert '<strong>Add custom connector</strong>' in script and '<strong>URL</strong>' in script
+    assert 'claude mcp add --transport http socialscrape ${mcpUrl} --header "x-api-key: YOUR_API_KEY"' in script
+    assert 'API keys are shown only once when created.' in script
+    assert 'href="/app/keys">create an API key' in script
+    assert '.agent-cards{' in css and '@media(max-width:760px)' in css
