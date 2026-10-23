@@ -1861,3 +1861,11 @@ def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatc
                         headers=headers).json() == {"removed": True}
     status = owner.get("/portal/api/settings/platforms").json()["instagram"]
     assert status["proxy"][0]["position"] == status["cookies"][0]["position"] == 1
+
+    monkeypatch.setattr("socialscrape.portal._test_proxy", lambda platform, proxy: {
+        "ok": True, "status": 200, "blocked": False, "exit_ip": "203.0.113.9", "latency_ms": 321,
+    })
+    tested = owner.post(f"/portal/api/settings/platforms/instagram/proxy/{ids[1]}/test", headers=headers).json()
+    assert tested == {"ok": True, "status": 200, "blocked": False,
+                      "exit_ip": "203.0.113.9", "latency_ms": 321}
+    assert proxies[0] not in owner.get("/portal/api/settings/platforms").text

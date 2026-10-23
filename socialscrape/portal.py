@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import html
@@ -12,6 +13,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from time import monotonic
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -230,6 +232,14 @@ class PortalStore:
         pool.append({"id": entry_id, "value": value, "updated_at": time.time()})
         self._save_pool(owner, platform, kind, pool)
         return entry_id
+
+    def platform_setting_value(self, owner: Principal, platform: str, kind: str, entry_id: str) -> str:
+        if owner.role != "owner":
+            raise PermissionError
+        item = next((item for item in self._pool(platform, kind) if item["id"] == entry_id), None)
+        if not item:
+            raise ValueError("Platform setting not found")
+        return item["value"]
 
     def remove_platform_setting(self, owner: Principal, platform: str, kind: str, entry_id: str) -> bool:
         if owner.role != "owner":
@@ -569,6 +579,33 @@ def _validate_cookies(platform: str, value: str) -> None:
         raise ValueError(f"The cookies.txt file has no {suffix} cookies")
 
 
+def _test_proxy(platform: str, proxy: str) -> dict[str, Any]:
+    import requests
+
+    targets = {
+        "instagram": "https://www.instagram.com/instagram/",
+        "tiktok": "https://www.tiktok.com/@tiktok",
+        "youtube": "https://www.youtube.com/robots.txt",
+    }
+    proxies = {"http": proxy, "https": proxy}
+    started = monotonic()
+    try:
+        exit_response = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=10)
+        exit_response.raise_for_status()
+        exit_ip = exit_response.json().get("ip")
+        response = requests.get(
+            targets[platform], proxies=proxies, timeout=12, allow_redirects=False,
+            headers={"User-Agent": "Mozilla/5.0 SocialScrape proxy test"},
+        )
+        location = response.headers.get("location", "").lower()
+        blocked = response.status_code in (401, 403, 429) or "login" in location or "checkpoint" in location
+        return {"ok": response.status_code < 500 and not blocked, "status": response.status_code,
+                "blocked": blocked, "exit_ip": exit_ip, "latency_ms": round((monotonic() - started) * 1000)}
+    except requests.RequestException as exc:
+        return {"ok": False, "status": None, "blocked": False, "exit_ip": None,
+                "latency_ms": round((monotonic() - started) * 1000), "error": type(exc).__name__}
+
+
 def _session(request: Request) -> Principal | None:
     return request.app.state.portal.principal_for_session(request.cookies.get(SESSION_COOKIE))
 
@@ -768,6 +805,17 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         except (ConfigError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from None
         return {"id": entry_id}
+
+    @router.post("/portal/api/settings/platforms/{platform}/proxy/{entry_id}/test")
+    async def test_platform_proxy(request: Request, platform: str, entry_id: str):
+        p = _owner(request)
+        _csrf(request, p)
+        _check_platform_setting(platform, "proxy")
+        try:
+            proxy = store.platform_setting_value(p, platform, "proxy", entry_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from None
+        return await asyncio.to_thread(_test_proxy, platform, proxy)
 
     @router.delete("/portal/api/settings/platforms/{platform}/{kind}/{entry_id}")
     async def remove_platform_setting(request: Request, platform: str, kind: str, entry_id: str):

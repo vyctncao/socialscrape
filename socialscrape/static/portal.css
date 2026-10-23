@@ -510,3 +510,10 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .gallery-fact{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .media-meta>*{min-width:0;max-width:100%}
 .media-meta .text-link{overflow-wrap:anywhere}
+.credential-pool li{min-height:72px;padding:var(--space-3) var(--space-4)}
+.pool-actions{flex-wrap:wrap;justify-content:flex-end}
+.pool-actions .ghost,.pool-actions .danger{min-height:36px;padding:0 var(--space-3);font-size:var(--fs-xs)}
+.compact-setting-form{align-self:start;width:100%;max-width:620px;padding:var(--space-4);border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-1)}
+.compact-setting-form .primary{justify-self:start;min-width:140px}
+.pool-full{align-self:start;margin:0;max-width:420px}
+@media(max-width:760px){.credential-pool li{align-items:flex-start;flex-direction:column}.pool-actions{justify-content:flex-start;width:100%}.compact-setting-form{padding:var(--space-3)}}
