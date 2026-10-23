@@ -11,14 +11,23 @@ const fmt = time => time ? new Date(time * 1000).toLocaleString() : 'Never';
 const number = value => Number(value).toLocaleString();
 const mask = key => key ? `${key.prefix}••••••••••••` : 'No API key yet';
 const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0};
+const cacheKey = name => `socialscrape:${PORTAL.email}:${name}`;
+function cacheRead(name, maxAge = 5 * 60_000) {
+  try { const item=JSON.parse(sessionStorage.getItem(cacheKey(name))); return item && Date.now()-item.at<maxAge ? item.value : null; } catch { return null; }
+}
+function cacheWrite(name, value) { try { sessionStorage.setItem(cacheKey(name), JSON.stringify({at:Date.now(), value})); } catch {} }
 
 async function api(url, options = {}) {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), options.timeout || 8000);
   const headers = {...options.headers, 'x-csrf-token':PORTAL.csrf};
   if (options.body && typeof options.body !== 'string') {
     headers['content-type'] = 'application/json';
     options.body = JSON.stringify(options.body);
   }
-  const response = await fetch(url, {...options, headers});
+  let response;
+  try { response = await fetch(url, {...options, headers, signal:controller.signal}); }
+  catch (error) { throw Error(error.name === 'AbortError' ? 'The dashboard took too long to respond. Try again.' : 'Could not reach the dashboard. Check your connection and retry.'); }
+  finally { clearTimeout(timer); }
   if (response.status === 401) { location.href = '/login'; throw Error('Sign in to continue.'); }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -51,15 +60,17 @@ function showError(error, selector = '#action-error') {
   element.hidden = false;
   element.textContent = error.message || String(error);
 }
-async function loadKeys() {
-  const data = await api('/portal/api/keys');
+async function loadKeys({cached = false} = {}) {
+  const data = cached && cacheRead('keys') || await api('/portal/api/keys');
+  cacheWrite('keys', data);
   state.keys = data.keys;
   const active = data.keys.filter(key => !key.revoked_at);
   $('#top-key').textContent = `${number(active.length)} active ${active.length === 1 ? 'key' : 'keys'}`;
   return data.keys;
 }
-async function loadUsage() {
-  const data = await api('/portal/api/usage');
+async function loadUsage({cached = false} = {}) {
+  const data = cached && cacheRead('usage', 60_000) || await api('/portal/api/usage');
+  cacheWrite('usage', data);
   $('#top-requests').textContent = `${number(data.total)} ${data.total === 1 ? 'request' : 'requests'}`;
   return data;
 }
@@ -353,6 +364,101 @@ async function savePlatformSetting(form) {
   finally { button.disabled = false; button.textContent = label; }
 }
 
+function hidePopovers() {
+  document.querySelectorAll('.account-popup:popover-open, .platform-menu:popover-open').forEach(popup => popup.hidePopover());
+}
+function positionPopup(popup, trigger, kind) {
+  const anchor = trigger.getBoundingClientRect(), inset = 12, gap = 8;
+  if (kind === 'platform') popup.style.width = `${anchor.width}px`;
+  const rect = {width:popup.offsetWidth, height:popup.offsetHeight};
+  let left = anchor.left, top = anchor.bottom + gap;
+  if (kind === 'account' && innerWidth > 760) {
+    left = anchor.right + gap;
+    top = anchor.bottom - rect.height;
+  } else if (kind === 'account' || top + rect.height > innerHeight - inset) {
+    top = anchor.top - rect.height - gap;
+  }
+  popup.style.left = `${Math.max(inset, Math.min(left, innerWidth - rect.width - inset))}px`;
+  popup.style.top = `${Math.max(inset, Math.min(top, innerHeight - rect.height - inset))}px`;
+}
+function initAccountMenus() {
+  const role = PORTAL.role === 'owner' ? 'Workspace owner' : 'Team member';
+  document.querySelectorAll('[data-account-trigger]').forEach(trigger => {
+    const popup = document.getElementById(trigger.getAttribute('popovertarget'));
+    const identity = `<span class="person-avatar" aria-hidden="true">${esc(PORTAL.email.slice(0,1).toUpperCase())}</span><span class="account-copy"><strong>${role}</strong><small title="${esc(PORTAL.email)}">${esc(PORTAL.email)}</small></span>`;
+    trigger.innerHTML = `${identity}${icon('dots-three')}`;
+    popup.innerHTML = `<div class="account-menu-header"><span class="person-avatar" aria-hidden="true">${esc(PORTAL.email.slice(0,1).toUpperCase())}</span><span class="account-copy"><strong id="${popup.id}-title">${role}</strong><small title="${esc(PORTAL.email)}">${esc(PORTAL.email)}</small></span><button type="button" class="account-theme-toggle" data-theme-toggle aria-label="Switch theme">${icon(document.documentElement.dataset.theme === 'light' ? 'moon' : 'sun')}</button></div><div class="account-separator" role="separator"></div>${PORTAL.role === 'owner' ? `<a href="/app/settings" class="account-action" data-account-action><span class="account-action-icon">${icon('gear-six')}</span><span>Settings</span>${icon('caret-right')}</a><div class="account-separator" role="separator"></div>` : ''}<form method="post" action="/logout"><button type="submit" class="account-action sign-out" data-account-action><span class="account-action-icon">${icon('sign-out')}</span><span>Log out</span></button></form>`;
+    popup.addEventListener('toggle', event => {
+      const open = event.newState === 'open';
+      trigger.setAttribute('aria-expanded', String(open));
+      if (open) positionPopup(popup, trigger, 'account');
+      else if (popup.contains(document.activeElement)) trigger.focus();
+    });
+    popup.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); popup.hidePopover(); trigger.focus(); }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const actions = [...popup.querySelectorAll('button, a')];
+      let index = actions.indexOf(document.activeElement);
+      index = event.key === 'Home' ? 0 : event.key === 'End' ? actions.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + actions.length) % actions.length;
+      actions[index].focus();
+    });
+    trigger.addEventListener('keydown', event => {
+      if (!['ArrowUp','ArrowDown'].includes(event.key)) return;
+      event.preventDefault(); popup.showPopover();
+      const actions = [...popup.querySelectorAll('button, a')];
+      actions[event.key === 'ArrowUp' ? actions.length - 1 : 0].focus();
+    });
+  });
+}
+function initPlatformPicker() {
+  const trigger = $('#platform-trigger'), popup = $('#platform-menu');
+  let openingEdge;
+  popup.addEventListener('toggle', event => {
+    const open = event.newState === 'open';
+    trigger.setAttribute('aria-expanded', String(open));
+    if (open) {
+      positionPopup(popup, trigger, 'platform');
+      const choices = [...popup.querySelectorAll('[role=option]')];
+      const choice = openingEdge === 'last' ? choices.at(-1) : openingEdge === 'first' ? choices[0] : popup.querySelector('[aria-selected=true]');
+      choice.focus(); openingEdge = null;
+    }
+  });
+  trigger.addEventListener('keydown', event => {
+    if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
+    event.preventDefault(); openingEdge = event.key === 'ArrowUp' ? 'last' : 'first'; popup.showPopover();
+  });
+  popup.addEventListener('click', event => {
+    const choice = event.target.closest('[data-platform-choice]');
+    if (!choice) return;
+    $('#pg-platform').value = choice.dataset.platformChoice;
+    $('#platform-selected').innerHTML = platformLabel(choice.dataset.platformChoice);
+    popup.querySelectorAll('[role=option]').forEach(option => option.setAttribute('aria-selected', String(option === choice)));
+    fillEndpoints(); popup.hidePopover(); trigger.focus();
+  });
+  popup.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); popup.hidePopover(); trigger.focus(); return; }
+    if (event.key === 'Tab') { popup.hidePopover(); return; }
+    if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const choices = [...popup.querySelectorAll('[role=option]')];
+    let index = choices.indexOf(document.activeElement);
+    index = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+    choices[index].focus();
+  });
+}
+window.addEventListener('resize', () => {
+  if (innerWidth > 760 && $('#nav-dialog').open) {
+    document.querySelectorAll('#nav-dialog .account-popup:popover-open').forEach(popup => popup.hidePopover());
+    $('#nav-dialog').close();
+  }
+  document.querySelectorAll('.account-popup:popover-open, .platform-menu:popover-open').forEach(popup => {
+    const trigger = document.querySelector(`[popovertarget="${popup.id}"]`);
+    if (trigger.getBoundingClientRect().width) positionPopup(popup, trigger, popup.classList.contains('account-popup') ? 'account' : 'platform');
+    else popup.hidePopover();
+  });
+});
+
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
   return ['playground','keys','team','history','usage','docs','settings'].includes(route) ? route : 'overview';
@@ -452,6 +558,7 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('popstate', async event => { saveDraft(); await render(); window.scrollTo(0, event.state?.scrollY || 0); });
 window.addEventListener('hashchange', () => { if (page() === 'docs' && $('#doc-main')) selectDoc(); });
-render();
-loadUsage().catch(() => { $('#top-requests').textContent = 'Usage could not load'; });
-loadKeys().catch(() => { $('#top-key').textContent = 'View API keys'; });
+const startup = Promise.race([render(), new Promise((_, reject) => setTimeout(() => reject(Error('Dashboard startup timed out.')), 10_000))]);
+startup.catch(error => { const view=$('#view'); view.setAttribute('aria-busy','false'); view.innerHTML=layout('Could not load this page','Your workspace is still here.',`<section class="card"><div class="form-error" role="alert">${esc(error.message)}</div><button class="ghost" id="retry-page">${icon('arrows-clockwise')}Try again</button></section>`); });
+loadUsage({cached:true}).then(() => loadUsage().catch(()=>{})).catch(() => { $('#top-requests').textContent = 'Usage unavailable'; });
+loadKeys({cached:true}).then(() => loadKeys().catch(()=>{})).catch(() => { $('#top-key').textContent = 'View API keys'; });
