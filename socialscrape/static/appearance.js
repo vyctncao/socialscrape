@@ -16,10 +16,11 @@
   }
   function updateButtons() {
     const light = document.documentElement.dataset.theme === 'light';
+    const version = encodeURIComponent(document.documentElement.dataset.assetVersion || '');
     document.querySelectorAll('[data-theme-toggle]').forEach(button => {
       button.setAttribute('aria-label', `Switch to ${light ? 'dark' : 'light'} theme`);
       button.title = button.getAttribute('aria-label');
-      button.innerHTML = `<svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#${light ? 'moon' : 'sun'}"></use></svg>`;
+      button.innerHTML = `<svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg?v=${version}#${light ? 'moon' : 'sun'}"></use></svg>`;
     });
   }
   document.addEventListener('DOMContentLoaded', () => { updateButtons(); updateSidebar(); });

@@ -1,8 +1,9 @@
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const icon = name => `<svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#${name}"></use></svg>`;
+const asset = path => `/assets/${path}?v=${encodeURIComponent(document.documentElement.dataset.assetVersion || '')}`;
+const icon = name => `<svg class="icon" aria-hidden="true"><use href="${asset('brand/icons.svg')}#${name}"></use></svg>`;
 const platforms = ['instagram', 'tiktok', 'youtube'];
-const platformIcon = platform => platforms.includes(platform) ? `<img class="platform-icon" data-platform="${platform}" src="/assets/brand/platforms/${platform}.svg" alt="" width="20" height="20">` : '';
+const platformIcon = platform => platforms.includes(platform) ? `<img class="platform-icon" data-platform="${platform}" src="${asset(`brand/platforms/${platform}.svg`)}" alt="" width="20" height="20">` : '';
 const platformLabel = platform => `<span class="platform-label">${platformIcon(platform)}<span>${esc(platformName(platform))}</span></span>`;
 const platformFromPath = path => String(path).split('/')[2];
 const platformList = () => platforms.map(platform => `<span class="badge platform-badge">${platformLabel(platform)}</span>`).join('');

@@ -12,6 +12,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -383,9 +384,30 @@ class PortalStore:
                 "routes": [dict(r) for r in routes]}
 
 
+@cache
+def _portal_asset_version() -> str:
+    assets = Path(__file__).with_name("static")
+    digest = hashlib.sha256()
+    for name in ("portal.html", "portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
+                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg"):
+        digest.update(name.encode())
+        digest.update((assets / name).read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _versioned_page(page: str) -> str:
+    version = _portal_asset_version()
+    page = page.replace("__ASSET_VERSION__", version)
+    for name in ("portal.css", "portal.js", "appearance.js", "brand/tokens.css", "brand/icons.svg"):
+        path = f"/assets/{name}"
+        page = page.replace(f'{path}"', f'{path}?v={version}"')
+        page = page.replace(f"{path}#", f"{path}?v={version}#")
+    return page
+
+
 def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
     shell = body if bare else f'<main class="auth-card">{body}</main>'
-    return HTMLResponse(f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport"
+    return HTMLResponse(_versioned_page(f'''<!doctype html><html lang="en" data-asset-version="__ASSET_VERSION__"><head><meta charset="utf-8"><meta name="viewport"
 content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</title>
 <link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
@@ -400,7 +422,7 @@ content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</ti
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
 <span class="auth-art-label"><img src="/assets/brand/logomark-chalk.svg" alt="">MIMIC</span>
-</aside></div></body></html>''')
+</aside></div></body></html>'''))
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
@@ -567,7 +589,7 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
             return RedirectResponse("/login", 303)
         page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(principal.email))
         portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf})
-        return HTMLResponse(page.replace("__PORTAL__", portal_data))
+        return HTMLResponse(_versioned_page(page.replace("__PORTAL__", portal_data)))
 
     @router.get("/portal/api/me")
     async def me(request: Request):

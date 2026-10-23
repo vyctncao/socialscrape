@@ -21,10 +21,16 @@ resources:
       - name: data
         path: /data
     ports:
+      # The live port uses custom_domain: scrape.mimic.host and TLS. The
+      # Stackfile schema cannot preserve custom_domain, so publish code with
+      # `stackdome create release --stack socialscrape-app --wait` using the
+      # saved stack definition. Applying this file would clear the domain;
+      # Stackdome blocks hostname changes on an already-public live port.
       - name: http
         port: 8000
         protocol: HTTP
         public: true
+        tls: true
         subdomain: ""
 volumes:
   data:

@@ -1666,6 +1666,8 @@ def test_empty_portal_cannot_be_claimed_without_the_private_setup_code(env, tmp_
 
 
 def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
+    import re
+
     from socialscrape.main import create_app
 
     portal = tmp_path / "portal.sqlite3"
@@ -1684,6 +1686,14 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert setup.status_code == 303
     dashboard = owner.get("/app").text
     assert "Social Scrape" in dashboard and "/app/playground" in dashboard
+    script_url = re.search(r'<script src="(/assets/portal\.js\?v=([a-f0-9]{16}))"', dashboard)
+    assert script_url  # New markup must use a new browser cache key after UI changes.
+    script = owner.get(script_url[1])
+    assert script.status_code == 200 and "javascript" in script.headers["content-type"]
+    assert owner.get(script_url[1], headers={"if-none-match": script.headers["etag"]}).status_code == 304
+    login = TestClient(create_app(), base_url="https://testserver").get("/login").text
+    assert f'/assets/appearance.js?v={script_url[2]}' in login
+    assert f'/assets/portal.css?v={script_url[2]}' in dashboard and "__ASSET_VERSION__" not in dashboard
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 
