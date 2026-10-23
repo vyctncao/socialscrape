@@ -346,3 +346,15 @@ details>summary{display:flex;gap:var(--space-2);align-items:center;min-height:40
 .history-facts dd{margin:4px 0 0;overflow-wrap:anywhere}
 .history-response{max-height:60vh;min-height:220px;margin:0;white-space:pre-wrap;overflow:auto}
 @media(max-width:760px){.history-facts{grid-template-columns:1fr}.modal:has(.history-response){width:calc(100% - 20px)}}
+:root{--chart-instagram:#d95926;--chart-tiktok:#3987e5;--chart-youtube:#199e70}
+:root[data-theme=light]{--chart-instagram:#eb6834;--chart-tiktok:#2a78d6;--chart-youtube:#1baf7a}
+.chart-legend{display:flex;flex-wrap:wrap;gap:var(--space-4);list-style:none;padding:0;margin:var(--space-5) 0 0;color:var(--text-2);font-size:var(--fs-xs)}
+.chart-legend li{display:flex;align-items:center;gap:var(--space-2)}
+.legend-swatch{width:12px;height:12px;border-radius:3px;border:2px solid var(--surface-1)}
+.legend-swatch.instagram,.bar-segment.instagram{background:var(--chart-instagram)}
+.legend-swatch.tiktok,.bar-segment.tiktok{background:var(--chart-tiktok)}
+.legend-swatch.youtube,.bar-segment.youtube{background:var(--chart-youtube)}
+.bar-stack{flex:1;min-width:0;display:flex;flex-direction:column-reverse;justify-content:start;gap:2px;border-radius:4px 4px 0 0;overflow:hidden;outline:none}
+.bar-stack:focus-visible{box-shadow:0 0 0 2px var(--surface-0),0 0 0 4px var(--border-focus)}
+.bar-segment{display:block;min-height:2px}
+@media(forced-colors:active){.bar-segment{border:1px solid CanvasText}.legend-swatch{border:1px solid CanvasText}}

@@ -446,17 +446,24 @@ class PortalStore:
         now = time.time()
         with self._lock:
             daily = self._conn.execute(
-                "SELECT CAST((created_at-?)/86400 AS INTEGER) bucket,COUNT(*) count FROM requests "
-                f"WHERE created_at>=? {clause} GROUP BY bucket ORDER BY bucket", (now, now - 29 * 86400, *args)
+                "SELECT CAST((created_at-?)/86400 AS INTEGER) bucket,"
+                "CASE WHEN path LIKE '/v%/instagram/%' THEN 'instagram' "
+                "WHEN path LIKE '/v%/tiktok/%' THEN 'tiktok' "
+                "WHEN path LIKE '/v%/youtube/%' THEN 'youtube' ELSE 'other' END platform,COUNT(*) count "
+                f"FROM requests WHERE created_at>=? {clause} GROUP BY bucket,platform ORDER BY bucket,platform",
+                (now, now - 29 * 86400, *args),
             ).fetchall()
             routes = self._conn.execute(
                 f"SELECT path,COUNT(*) count FROM requests WHERE created_at>=? {clause} "
                 "GROUP BY path ORDER BY count DESC,path LIMIT 10", (now - 30 * 86400, *args)
             ).fetchall()
             total = self._conn.execute(f"SELECT COUNT(*) count FROM requests WHERE 1=1 {clause}", args).fetchone()[0]
-        points = {int(r["bucket"]): r["count"] for r in daily}
-        return {"total": total, "daily": [points.get(i - 29, 0) for i in range(30)],
-                "routes": [dict(r) for r in routes]}
+        points = {(int(r["bucket"]), r["platform"]): r["count"] for r in daily}
+        days = [{platform: points.get((i - 29, platform), 0)
+                 for platform in ("instagram", "tiktok", "youtube", "other")} for i in range(30)]
+        for day in days:
+            day["total"] = sum(day.values())
+        return {"total": total, "daily": days, "routes": [dict(r) for r in routes]}
 
 
 @cache
