@@ -239,9 +239,10 @@ def run(argv: list[str] | None = None) -> None:
         app = create_app()
     except ConfigError as exc:
         raise SystemExit(f"socialscrape: {exc}") from None
-    if not get_settings().api_keys and not _is_loopback(host):
-        log.warning("listening on %s with SOCIALSCRAPE_API_KEYS unset: anyone who can reach this address can use "
-                    "the API", host)
+    settings = get_settings()
+    if not settings.api_keys and not settings.portal_path and not _is_loopback(host):
+        log.warning("listening on %s with SOCIALSCRAPE_API_KEYS unset and the portal disabled: anyone who can reach "
+                    "this address can use the API", host)
     main_thread = threading.current_thread() is threading.main_thread()  # signal.signal works only there
     try:
         # log_level: uvicorn's own loggers (startup lines, access log) don't follow the root logger's level.
