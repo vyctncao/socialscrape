@@ -433,12 +433,16 @@ class FallbackMiddleware(BaseHTTPMiddleware):
         answer = _json_object(body) if problem is None else None
         no_local_answer = local_status == 501 or code == "bad_cursor"
         if answer is not None and status is not None and (
-                200 <= status < 300 or (no_local_answer and status in (400, 403, 404, 422))):
+                200 <= status < 300 or (no_local_answer and answer is not None)
+                or (no_local_answer and status in (400, 403, 404, 422))):
             log.info("%s: local %s %s, served by ScrapeCreators (%s)", path, local_status, code, status)
             return Response(body, status, headers={HEADER: PROVIDER}, media_type="application/json")
         detail = _failure(status, answer, problem, c.api_key or "")
         log.info("%s: local %s %s, ScrapeCreators failed too (%s %s)", path, local_status, code, status,
                  detail["error"])
+        if no_local_answer:
+            return LenientJSONResponse({"success": False, "error": "fallback_unavailable",
+                                        "message": detail["message"], "fallback": detail}, 502, headers=headers)
         return LenientJSONResponse({**local, "fallback": detail}, local_status, headers=headers)
 
     async def _ask(self, request: Request, api_key: str) -> tuple[int | None, bytes, str | None]:
