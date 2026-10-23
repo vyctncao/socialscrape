@@ -20,7 +20,8 @@ import * as prompts from "@clack/prompts";
 import { resolveApiKey, storeApiKey } from "../auth.js";
 import { callApi } from "../api-client.js";
 
-const MCP_URL = `${(process.env.SOCIALSCRAPE_BASE_URL || "https://scrape.mimic.host").replace(/\/$/, "")}/mcp`;
+const BASE_URL = (process.env.SOCIALSCRAPE_BASE_URL || "https://scrape.mimic.host").replace(/\/$/, "");
+const MCP_URL = `${BASE_URL}/mcp`;
 
 export const TARGETS = {
   cursor: {
@@ -233,7 +234,7 @@ export async function agentAddCommand(target, globalOpts) {
   if (!apiKey) {
     const key = await prompts.text({
       message: "Enter your SocialScrape API key",
-      placeholder: "paste from https://app.scrape.mimic.host",
+      placeholder: `paste from ${BASE_URL}/app/keys`,
       validate: (v) => (v.length < 5 ? "Too short" : undefined),
     });
 

@@ -19,3 +19,15 @@ test("overwriting output restricts an existing file to owner only", (t) => {
 
   assert.equal(statSync(dest).mode & 0o777, 0o600);
 });
+
+import { getSuggestion } from "../src/output.js";
+
+test("402 points the owner at the fallback settings on the configured origin", () => {
+  const previous = process.env.SOCIALSCRAPE_BASE_URL;
+  process.env.SOCIALSCRAPE_BASE_URL = "http://127.0.0.1:8799/";
+  try {
+    assert.match(getSuggestion(402), /http:\/\/127\.0\.0\.1:8799\/app\/fallback$/);
+  } finally {
+    if (previous === undefined) delete process.env.SOCIALSCRAPE_BASE_URL; else process.env.SOCIALSCRAPE_BASE_URL = previous;
+  }
+});

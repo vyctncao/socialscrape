@@ -2,6 +2,7 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { closeSync, constants, existsSync, fchmodSync, lstatSync, openSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { basename, dirname, isAbsolute, relative, resolve } from "path";
+import { apiBaseUrl } from "./api-client.js";
 
 const isTTY = process.stdout.isTTY;
 
@@ -172,10 +173,10 @@ export function printError(result, opts = {}) {
   process.exitCode = 1;
 }
 
-function getSuggestion(status) {
+export function getSuggestion(status) {
   switch (status) {
     case 401: return "Run 'socialscrape auth login' to set your API key, or pass --api-key";
-    case 402: return "No credits remaining. Purchase more at https://app.scrape.mimic.host/billing";
+    case 402: return `The ScrapeCreators fallback account has no credits left. A workspace owner can top it up or change its key at ${apiBaseUrl()}/app/fallback`;
     case 429: return "Rate limited. Wait a moment and retry.";
     case 404: return "Endpoint or resource not found. Run 'socialscrape list' to see available endpoints.";
     case 501: return "This endpoint is listed but not implemented locally; configure a fallback or try another endpoint.";
