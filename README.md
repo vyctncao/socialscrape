@@ -207,6 +207,14 @@ SocialScrape exposes its 66 YouTube, TikTok, and Instagram compatibility routes 
 
 Every tool is read-only. Tool calls run through the application in-process, so REST authentication, request history, caching, and configured fallback behavior also apply to MCP. Set `SOCIALSCRAPE_PUBLIC_URL` in production so authentication challenges point at the canonical public origin.
 
+MCP clients can alternatively discover OAuth 2.1 from the protected-resource metadata advertised by `/mcp`. SocialScrape supports public-client dynamic registration, authorization code grants with PKCE S256, member consent, one-hour bearer tokens, and rotating refresh tokens. The portal must be enabled because approval and token attribution use portal members. Cursor, Claude, Claude Code, and VS Code can therefore use a URL-only configuration:
+
+```json
+{"mcpServers":{"socialscrape":{"url":"https://scrape.mimic.host/mcp"}}}
+```
+
+OAuth discovery lives at `/.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-authorization-server`; registration, authorization, and token endpoints are under `/oauth`. Bearer-authenticated REST requests act as the approving member as well as authenticating `/mcp`; removing that member revokes their grants through the portal database's foreign-key cascade.
+
 ## Development
 
 ```bash

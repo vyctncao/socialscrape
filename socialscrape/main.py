@@ -44,6 +44,7 @@ log = logging.getLogger("socialscrape")
 PUBLIC_PATHS = {"/health", "/redoc", "/openapi.json", "/meta/coverage", "/favicon.svg", "/favicon.ico"}
 LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs"}
 PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/assets/", "/app", "/docs")
+OAUTH_PUBLIC_PREFIXES = ("/.well-known/", "/oauth/")
 
 
 class ApiKeyMiddleware(BaseHTTPMiddleware):
@@ -55,8 +56,26 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         portal = getattr(request.app.state, "portal", None)
         public_paths = PUBLIC_PATHS if portal else LEGACY_PUBLIC_PATHS
         portal_route = portal and (path == "/" or request.url.path.startswith(PORTAL_PUBLIC_PREFIXES))
-        if path in public_paths or portal_route:
+        oauth_route = request.url.path.startswith(OAUTH_PUBLIC_PREFIXES)
+        if path in public_paths or portal_route or oauth_route:
             return await call_next(request)
+        bearer = request.headers.get("authorization", "")
+        if path == "/mcp" and bearer.startswith("Bearer ") and request.headers.get("x-api-key"):
+            return JSONResponse({"jsonrpc": "2.0", "error": {"code": -32600,
+                                 "message": "Send only one authentication credential"}, "id": None}, status_code=400)
+        if portal and bearer.startswith("Bearer "):
+            origin = settings.public_url or str(request.base_url).rstrip("/")
+            if principal := portal.authenticate_bearer(bearer[7:], origin + "/mcp"):
+                request.state.principal = principal
+                return await call_next(request)
+            if path == "/mcp":
+                return JSONResponse(
+                    {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Authorization required"}, "id": None},
+                    status_code=401, headers={"WWW-Authenticate":
+                                             f'Bearer resource_metadata="{origin}/.well-known/oauth-protected-resource/mcp"'},
+                )
+            err = Unauthorized("Missing or invalid bearer token")
+            return JSONResponse(err.body(), status_code=err.status)
         if portal and (principal := portal.principal_for_session(request.cookies.get("socialscrape_session"))):
             request.state.principal = principal
             selected = request.headers.get("x-portal-key-id", "")
@@ -164,6 +183,8 @@ def create_app() -> FastAPI:
         portal.bootstrap_owner(os.environ.get("SOCIALSCRAPE_OWNER_EMAIL"),
                                os.environ.get("SOCIALSCRAPE_OWNER_PASSWORD"))
         install_portal(app, portal)
+        from .oauth import install_oauth
+        install_oauth(app)
         fallback.install_routes(app, portal)
         selftest.install_routes(app)
 
