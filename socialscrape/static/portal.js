@@ -113,6 +113,52 @@ function pageTabs(current) {
   return `<nav class="page-tabs" aria-label="${{playground:'Playground', usage:'Usage', settings:'Settings'}[name]} sections">${sections[name].map(([page, href, label]) => `<a href="${href}"${page === current ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
 }
 
+function agentCopyRow(label, id, value) {
+  return `<div class="agent-copy-row"><span class="agent-copy-label">${label}</span><code id="${id}">${esc(value)}</code><button class="icon-button" type="button" data-copy="${id}" aria-label="Copy ${label.toLowerCase()}">${icon('copy')}</button></div>`;
+}
+function agentInstallUrls(origin) {
+  const mcpUrl = `${origin}/mcp`;
+  const payload = {name:'socialscrape',url:mcpUrl};
+  return {
+    cursor:`cursor://anysphere.cursor-deeplink/mcp/install?name=socialscrape&config=${encodeURIComponent(btoa(JSON.stringify(payload)))}`,
+    vscode:`vscode:mcp/install?${encodeURIComponent(JSON.stringify(payload))}`
+  };
+}
+function agents() {
+  const origin = location.origin, mcpUrl = `${origin}/mcp`;
+  const installUrls = agentInstallUrls(origin);
+  const skill = 'npx skills add vyctncao/social-media-research-skills';
+  const cli = 'npm install -g @socialscrape/cli';
+  const config = JSON.stringify({mcpServers:{socialscrape:{url:mcpUrl,headers:{'x-api-key':'YOUR_API_KEY'}}}}, null, 2);
+  return layout('Agent integrations', 'Connect SocialScrape to the tools your agents already use. Add a skill, use the CLI, or give any MCP client access to social data.', `
+    <section class="card agent-setup">
+      <div class="card-head"><div><h2>Agent integrations</h2><p class="muted">Choose the setup that fits your agent. MCP clients can authorize with OAuth, or use an API key for direct configuration.</p></div></div>
+      <div class="agent-copy-list">
+        ${agentCopyRow('Agent skill', 'agent-skill-command', skill)}
+        ${agentCopyRow('CLI', 'agent-cli-command', cli)}
+        ${agentCopyRow('MCP config', 'agent-mcp-config', config)}
+      </div>
+      <p class="agent-key-note">API keys are shown only once when created. Replace <code>YOUR_API_KEY</code> with a saved key, or <a class="text-link" href="/app/keys">create an API key</a>.</p>
+      <div class="agent-action-row">
+        <a class="primary" href="${esc(installUrls.cursor)}">Install in Cursor</a>
+        <a class="ghost" href="${esc(installUrls.vscode)}">Install in VS Code</a>
+        <button class="ghost" type="button" data-claude-setup>Claude setup</button>
+      </div>
+    </section>
+    <div class="agent-cards">
+      <section class="card agent-card"><span class="agent-card-icon">${icon('file-text')}</span><h2>Agent Skill</h2><p>Install reusable social media research workflows for supported agents.</p>${agentCopyRow('Command', 'agent-skill-card-command', skill)}</section>
+      <section class="card agent-card"><span class="agent-card-icon">${icon('globe')}</span><h2>MCP Server</h2><p>Connect any MCP client to SocialScrape over streamable HTTP.</p>${agentCopyRow('URL', 'agent-mcp-url', mcpUrl)}</section>
+      <section class="card agent-card"><span class="agent-card-icon">${icon('compass')}</span><h2>CLI</h2><p>Explore and call SocialScrape endpoints from your terminal.</p>${agentCopyRow('Command', 'agent-cli-card-command', cli)}</section>
+    </div>`);
+}
+function showClaudeSetup(trigger) {
+  const origin = location.origin, mcpUrl = `${origin}/mcp`;
+  const command = `claude mcp add --transport http socialscrape ${mcpUrl}`;
+  openDialog({title:'Claude setup', description:'Connect SocialScrape to Claude.ai, Claude Desktop, or Claude Code.', body:`
+    <section class="claude-setup-section"><h3>Claude.ai or Claude Desktop</h3><ol class="setup-steps"><li>Open <strong>Settings</strong>.</li><li>Select <strong>Connectors</strong>.</li><li>Choose <strong>Add custom connector</strong>.</li><li>Enter <code>${esc(mcpUrl)}</code> as the <strong>URL</strong>.</li></ol><p class="help">OAuth handles authentication when you connect.</p></section>
+    <section class="claude-setup-section"><h3>Claude Code</h3><ol class="setup-steps"><li>Run this command.</li></ol>${agentCopyRow('Command', 'claude-code-command', command)}<ol class="setup-steps" start="2"><li>Run <code>/mcp</code> in Claude Code.</li><li>Select <strong>Authenticate</strong>.</li></ol><p class="help">Claude Code opens the OAuth authorization flow for your SocialScrape account.</p></section>`, footer:'<button class="ghost" data-dialog-close>Done</button>', restoreFocus:() => trigger, initialFocus:'[data-dialog-close]'});
+}
+
 async function overview({retryFailedOnly = false} = {}) {
   const names = ['keys','usage','coverage'], loaders = [loadKeys,loadUsage,() => api('/meta/coverage')];
   const results = await Promise.allSettled(names.map((name, index) => retryFailedOnly && state.overviewParts[name]?.status === 'fulfilled' ? state.overviewParts[name].value : loaders[index]()));
@@ -734,7 +780,7 @@ window.addEventListener('resize', () => {
 
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
-  return ['playground','keys','team','history','usage','docs','tests','settings','fallback'].includes(route) ? route : 'overview';
+  return ['playground','keys','team','history','usage','docs','agents','tests','settings','fallback'].includes(route) ? route : 'overview';
 }
 function loadingShape(current) {
   const key = PORTAL.role === 'member' && ['team','settings','fallback'].includes(current) ? `${current}member` : current;
@@ -783,7 +829,7 @@ async function render({retryFailedOnly = false} = {}) {
   document.querySelectorAll('.nav a').forEach(link => {
     if (link.dataset.page === sectionOf(current)) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
-  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, tests:EndpointTests.render, settings:settingsPage, fallback:FallbackPage.render};
+  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, agents, tests:EndpointTests.render, settings:settingsPage, fallback:FallbackPage.render};
   try {
     const html = await views[current]({retryFailedOnly});
     if (renderId !== state.renderId) return;
@@ -867,6 +913,7 @@ document.addEventListener('click', event => {
   const language = event.target.closest('[data-language]');
   if (language) { state.language = language.dataset.language; updateSnippet(); }
   const copy = event.target.closest('[data-copy]'); if (copy) copyElement(copy.dataset.copy);
+  const claudeSetup = event.target.closest('[data-claude-setup]'); if (claudeSetup) { showClaudeSetup(claudeSetup); return; }
   if (event.target.closest('[data-dialog-close]')) closeDialog();
   if (event.target.closest('[data-stop-request]')) state.request?.controller?.abort();
   const historyRetry = event.target.closest('[data-history-retry]');
