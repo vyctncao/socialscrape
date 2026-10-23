@@ -232,3 +232,8 @@ details>summary{display:flex;gap:var(--space-2);align-items:center;min-height:40
 @media(max-width:420px){.form-stack,.form-stack>#pg-params{grid-template-columns:1fr}.top-workspace span{max-width:112px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.header-docs>span{display:none}.header-docs{width:44px;padding:0}.content{padding:var(--space-6) var(--space-4)}.card{padding:var(--space-4)}.card-head{gap:var(--space-2)}.card-head h2{font-size:16px}.content-foot{padding:var(--space-5) var(--space-4);gap:8px}.request-info{font-size:11px}}
 @media(pointer:coarse){:root{--mimic-control-height:44px}.icon-button{min-width:44px;min-height:44px}.docs-link{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.parameter-fields{display:grid;gap:var(--space-5);padding-top:var(--space-4)}
+.advanced summary{justify-content:start;gap:var(--space-2);font-size:12px;min-height:40px}
+.advanced[open] summary>.icon{transform:rotate(180deg)}
+.advanced summary>.icon{width:14px;height:14px}
+.settings-card{max-width:760px}

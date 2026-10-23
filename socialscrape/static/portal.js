@@ -4,7 +4,7 @@ const icon = name => `<svg class="icon" aria-hidden="true"><use href="/assets/br
 const fmt = time => time ? new Date(time * 1000).toLocaleString() : 'Never';
 const number = value => Number(value).toLocaleString();
 const mask = key => key ? `${key.prefix}••••••••••••` : 'No API key yet';
-const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, renderId:0};
+const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0};
 
 async function api(url, options = {}) {
   const headers = {...options.headers, 'x-csrf-token':PORTAL.csrf};
@@ -54,7 +54,7 @@ async function loadKeys() {
 }
 async function loadUsage() {
   const data = await api('/portal/api/usage');
-  $('#top-requests').textContent = `${number(data.total)} requests`;
+  $('#top-requests').textContent = `${number(data.total)} ${data.total === 1 ? 'request' : 'requests'}`;
   return data;
 }
 
@@ -90,6 +90,17 @@ async function team() {
     ${tableRegion('Workspace members', `<table><thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">API keys</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${data.members.map(member => `<tr><td>${esc(member.email)}</td><td><span class="badge">${member.role === 'owner' ? 'Owner' : 'Member'}</span></td><td>${number(member.key_count)}</td><td>${fmt(member.created_at)}</td><td>${fmt(member.last_login_at)}</td><td>${member.role === 'member' ? `<button class="danger" data-remove="${member.id}" aria-label="Remove ${esc(member.email)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>`)}`);
 }
 
+async function settingsPage() {
+  if (PORTAL.role !== 'owner') return layout('Network settings', 'Workspace connection settings.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update the proxy used for API requests.')}</section>`);
+  const data = await api('/portal/api/settings/proxy');
+  return layout('Network settings', 'Manage the proxy used for outbound requests to social platforms.', `
+    <section class="card settings-card"><div class="card-head"><h2>Outbound proxy</h2><span class="badge ${data.configured ? 'good' : ''}">${data.configured ? 'Saved' : 'No saved proxy'}</span></div>
+    <p class="muted">A proxy can help when a platform limits requests from your server’s IP address.</p>
+    ${data.configured ? `<div class="inline-note">${icon('shield-check')}<span>A proxy is saved. Its address and credentials are kept private. Updated ${esc(fmt(data.updated_at))}.</span></div>` : ''}
+    <form id="proxy-form" class="stack" style="margin-top:24px"><label class="field">${data.configured ? 'Replace proxy URL' : 'Proxy URL'}<input id="proxy-url" name="proxy" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port" aria-describedby="proxy-hint"><span class="help" id="proxy-hint">Supports HTTP, HTTPS, and SOCKS proxies. Include the protocol, host, and port. Saved credentials are encrypted and are never returned to the browser.</span></label><div class="field-error" id="action-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${data.configured ? 'Replace proxy' : 'Save proxy'}</button>${data.configured ? '<button class="danger" type="button" id="clear-proxy">Remove saved proxy</button>' : ''}</div></form></section>
+    <div class="inline-note settings-card" style="margin-top:24px">${icon('globe')}<span>Saving a proxy updates the workspace configuration. It does not verify that the proxy can reach each platform. Removing it restores the server’s environment proxy, if configured.</span></div>`);
+}
+
 async function requestHistory() {
   const data = await api('/portal/api/history?limit=200');
   return layout('Request history', 'Inspect API activity, response status, and timing.', `
@@ -120,7 +131,7 @@ async function playground() {
   const schema = await spec(), groups = [...new Set(endpoints(schema).map(endpoint => endpoint.platform))];
   await loadKeys();
   return layout('Playground', 'Explore an endpoint. Make a request. Take the code with you.', `
-    <div class="playground"><section class="card playground-config"><div class="section-label">Configure request</div><form class="form-stack" id="request-form"><label class="field">Platform<select id="pg-platform">${groups.map(group => `<option value="${esc(group)}" ${state.platform === group ? 'selected' : ''}>${platformName(group)}</option>`).join('')}</select></label><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Run as<select id="pg-key"><option value="">Workspace session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}">${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">Snippets use your integration’s API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
+    <div class="playground"><section class="card playground-config"><div class="section-label">Configure request</div><form class="form-stack" id="request-form"><label class="field">Platform<select id="pg-platform">${groups.map(group => `<option value="${esc(group)}" ${state.platform === group ? 'selected' : ''}>${platformName(group)}</option>`).join('')}</select></label><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Run as<select id="pg-key"><option value="">Workspace session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">Snippets use your integration’s API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
     <div class="request-workbench"><section class="card"><div class="card-head"><div class="request-info"><span class="method">GET</span><code id="request-path"></code></div><button class="icon-button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button></div><div class="code-tabs" role="tablist" aria-label="Code language">${[['curl','cURL'],['node','Node.js'],['python','Python']].map(([lang, label]) => `<button id="tab-${lang}" role="tab" aria-controls="snippet" aria-selected="${state.language === lang}" tabindex="${state.language === lang ? 0 : -1}" data-language="${lang}">${label}</button>`).join('')}</div><pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}" style="margin-top:16px"></pre></section>
     <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status">Ready</span><button class="icon-button" data-copy="response" aria-label="Copy response" title="Copy response" hidden>${icon('copy')}</button></div></div><div id="response" aria-live="polite"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
 }
@@ -141,7 +152,8 @@ function fillParams() {
   state.endpoint = $('#pg-endpoint').value;
   const operation = state.spec.paths[state.endpoint].get;
   $('#request-path').textContent = state.endpoint;
-  $('#pg-params').innerHTML = (operation.parameters || []).filter(param => param.in !== 'header').map((param, index) => {
+  const parameters = (operation.parameters || []).filter(param => param.in !== 'header');
+  const renderParam = (param, index) => {
     const type = param.schema?.type;
     const label = `<span class="field-label"><code>${esc(param.name)}</code>${param.required ? '<span class="badge required">Required</span>' : '<span class="help">Optional</span>'}</span>`;
     const value = state.drafts[state.endpoint]?.[param.name] || '';
@@ -149,7 +161,10 @@ function fillParams() {
     const hint = param.description || (type === 'integer' ? 'Enter a whole number.' : '');
     const control = options ? `<select id="param-${index}" data-param="${esc(param.name)}" ${param.required ? 'required' : ''} aria-describedby="param-hint-${index}"><option value="">${param.required ? 'Choose a value' : 'Default'}</option>${options.map(option => `<option value="${esc(option)}" ${String(option) === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>` : `<input id="param-${index}" data-param="${esc(param.name)}" type="${type === 'integer' || type === 'number' ? 'number' : 'text'}" ${type === 'integer' ? 'step="1"' : ''} ${param.required ? 'required' : ''} value="${esc(value)}" placeholder="${esc(param.schema?.default ?? (param.name === 'url' ? 'https://…' : ''))}" aria-describedby="param-hint-${index}">`;
     return `<label class="field" for="param-${index}">${label}${control}<span class="help" id="param-hint-${index}">${esc(hint)}</span></label>`;
-  }).join('');
+  };
+  const required = parameters.filter(param => param.required);
+  const optional = parameters.filter(param => !param.required);
+  $('#pg-params').innerHTML = required.map(renderParam).join('') + (optional.length ? `<details class="advanced"><summary>${icon('caret-down')}Optional parameters <span class="badge">${optional.length}</span></summary><div class="parameter-fields">${optional.map((param, index) => renderParam(param, required.length + index)).join('')}</div></details>` : '');
   const unsupported = operation.tags?.includes('not supported');
   $('#endpoint-note').hidden = !unsupported;
   $('#endpoint-note').innerHTML = `${icon('warning-circle')}<span>This endpoint is part of the compatibility API but is not implemented. Running it returns 501. <a href="/app/docs#${encodeURIComponent(state.endpoint)}">View details</a></span>`;
@@ -189,9 +204,12 @@ async function runRequest() {
   responseArea.setAttribute('aria-busy', 'true');
   const copy = $('[data-copy="response"]'); copy.hidden = true;
   const query = params(), url = $('#pg-endpoint').value + (query.size ? '?' + query : '');
+  const keyId = $('#pg-key').value;
+  const fields = [...$('#request-form').querySelectorAll('input, select')];
+  fields.forEach(field => { field.disabled = true; });
   const started = performance.now();
   try {
-    const response = await fetch(url, {headers:{'x-portal-key-id':$('#pg-key').value}});
+    const response = await fetch(url, {headers:{'x-portal-key-id':keyId}});
     const text = await response.text();
     if (!responseArea.isConnected) return;
     let content = text;
@@ -207,6 +225,7 @@ async function runRequest() {
     status.className = 'badge bad'; status.textContent = 'Connection failed';
     showError(Error('Could not reach the API. Check your connection, then run the request again.'), '#request-error');
   } finally {
+    fields.forEach(field => { field.disabled = false; });
     button.disabled = false; button.innerHTML = `${icon('play')}Run request`;
     responseArea.setAttribute('aria-busy', 'false');
   }
@@ -217,8 +236,8 @@ async function docs() {
   return `<div class="docs"><aside class="docs-nav" aria-label="API reference"><label class="field"><span class="sr-only">Search endpoints</span><input type="search" class="search-input" id="doc-search" placeholder="Search endpoints…"></label><a class="docs-link" href="/app/docs" data-doc-intro>Introduction</a>${groups.map(group => `<div class="docs-group" data-group><h3>${platformName(group)}</h3>${all.filter(endpoint => endpoint.platform === group).map(endpoint => `<a class="docs-link" data-doc="${esc(endpoint.path + ' ' + endpoint.op.summary)}" href="/app/docs#${encodeURIComponent(endpoint.path)}"><span class="method">GET</span><span>${esc(endpoint.op.summary || endpoint.path)}</span></a>`).join('')}</div>`).join('')}<p id="docs-no-results" class="help" hidden>No matching endpoints. Try another search.</p></aside><article class="doc-content" id="doc-main"></article></div>`;
 }
 function filterDocs(query) {
-  const q = query.toLowerCase().trim(); let matches = 0;
-  document.querySelectorAll('[data-doc]').forEach(link => { link.hidden = !link.dataset.doc.toLowerCase().includes(q); if (!link.hidden) matches++; });
+  const terms = query.toLowerCase().trim().split(/\s+/); let matches = 0;
+  document.querySelectorAll('[data-doc]').forEach(link => { link.hidden = !terms.every(term => link.dataset.doc.toLowerCase().includes(term)); if (!link.hidden) matches++; });
   document.querySelectorAll('[data-group]').forEach(group => { group.hidden = !group.querySelector('[data-doc]:not([hidden])'); });
   $('#docs-no-results').hidden = matches > 0;
 }
@@ -256,7 +275,7 @@ function confirmAction(title, description, confirmLabel, action) {
   $('#confirm-action').addEventListener('click', async event => {
     const button = event.currentTarget;
     button.disabled = true; button.textContent = 'Please wait…';
-    try { await action(); closeDialog(); await render(); toast(`${confirmLabel === 'Revoke key' ? 'API key revoked' : 'Member removed'}.`); }
+    try { await action(); closeDialog(); await render(); toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.'})[confirmLabel] || 'Change saved.'); }
     catch (error) { showError(error, '#dialog-error'); }
     finally { button.disabled = false; button.textContent = confirmLabel; }
   });
@@ -295,9 +314,23 @@ async function submitCreation(form) {
   finally { button.disabled = false; button.innerHTML = label; }
 }
 
+async function saveProxy(form) {
+  const button = form.querySelector('button[type=submit]');
+  if (button.disabled) return;
+  const label = button.textContent;
+  button.disabled = true; button.textContent = 'Saving…'; $('#action-error').hidden = true;
+  try {
+    await api('/portal/api/settings/proxy', {method:'PUT', body:{url:$('#proxy-url').value.trim()}});
+    $('#proxy-url').value = '';
+    await render();
+    toast('Proxy configuration saved.');
+  } catch (error) { showError(error); }
+  finally { button.disabled = false; button.textContent = label; }
+}
+
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
-  return ['playground','keys','team','history','usage','docs'].includes(route) ? route : 'overview';
+  return ['playground','keys','team','history','usage','docs','settings'].includes(route) ? route : 'overview';
 }
 async function render() {
   const renderId = ++state.renderId, current = page(), view = $('#view');
@@ -305,13 +338,13 @@ async function render() {
   document.querySelectorAll('.nav a').forEach(link => {
     if (link.dataset.page === current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
-  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs};
+  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage};
   try {
     const html = await views[current]();
     if (renderId !== state.renderId) return;
     view.innerHTML = html;
     if (current === 'playground') fillEndpoints();
-    if (current === 'docs') selectDoc();
+    if (current === 'docs') { $('#doc-search').value = state.docSearch; filterDocs(state.docSearch); selectDoc(); }
     const title = view.querySelector('h1')?.textContent || 'SocialScrape';
     document.title = `${title} · SocialScrape`;
   } catch (error) {
@@ -323,6 +356,7 @@ async function go(path) {
   saveDraft();
   const nav = $('#nav-dialog'); if (nav.open) nav.close();
   const url = new URL(path, location.origin), oldPage = page();
+  window.history.replaceState({...window.history.state, scrollY:window.scrollY}, '');
   window.history.pushState({}, '', url.pathname + url.search + url.hash);
   if (oldPage === 'docs' && page() === 'docs') selectDoc(); else await render();
   $('#view').focus({preventScroll:true}); window.scrollTo(0,0);
@@ -331,11 +365,12 @@ async function go(path) {
 $('#user-initial').textContent = PORTAL.email.slice(0,1).toUpperCase();
 $('#user-role').textContent = PORTAL.role === 'owner' ? 'Workspace owner' : 'Team member';
 const mobileNav = $('#nav').cloneNode(true); mobileNav.removeAttribute('id'); $('#mobile-nav').append(mobileNav);
+if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"]').forEach(link => link.remove());
 $('#mobile-menu').addEventListener('click', () => $('#nav-dialog').showModal());
 $('#dialog').addEventListener('close', () => {
   $('#dialog').replaceChildren();
   const fallback = $('#view').querySelector('input, button, a') || $('#view');
-  (dialogTrigger?.isConnected ? dialogTrigger : fallback).focus({preventScroll:true});
+  (dialogTrigger?.isConnected && dialogTrigger !== document.body ? dialogTrigger : fallback).focus({preventScroll:true});
 });
 for (const dialog of [$('#dialog'), $('#nav-dialog')]) dialog.addEventListener('click', event => {
   if (event.target !== dialog) return;
@@ -354,20 +389,24 @@ document.addEventListener('click', event => {
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
   if (event.target.closest('#retry-page')) render();
+  if (event.target.closest('#clear-proxy')) confirmAction('Remove the saved proxy?', 'Future requests will use the server’s environment proxy, if configured, or connect directly.', 'Remove proxy', () => api('/portal/api/settings/proxy', {method:'DELETE'}));
 });
 document.addEventListener('submit', event => {
-  if (['key-form','invite-form','request-form'].includes(event.target.id)) {
+  if (['key-form','invite-form','request-form','proxy-form'].includes(event.target.id)) {
     event.preventDefault();
-    if (event.target.id === 'request-form') runRequest(); else submitCreation(event.target);
+    if (event.target.id === 'request-form') runRequest();
+    else if (event.target.id === 'proxy-form') saveProxy(event.target);
+    else submitCreation(event.target);
   }
 });
 document.addEventListener('input', event => {
   if (event.target.matches('[data-param]')) updateSnippet();
-  if (event.target.id === 'doc-search') filterDocs(event.target.value);
+  if (event.target.id === 'doc-search') { state.docSearch = event.target.value; filterDocs(event.target.value); }
 });
 document.addEventListener('change', event => {
   if (event.target.id === 'pg-platform') fillEndpoints();
   if (event.target.id === 'pg-endpoint') fillParams();
+  if (event.target.id === 'pg-key') state.selectedKey = event.target.value;
   if (event.target.matches('[data-param]')) updateSnippet();
 });
 document.addEventListener('keydown', event => {
@@ -378,7 +417,7 @@ document.addEventListener('keydown', event => {
   index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
   state.language = tabs[index].dataset.language; updateSnippet(); tabs[index].focus();
 });
-window.addEventListener('popstate', () => render());
+window.addEventListener('popstate', async event => { saveDraft(); await render(); window.scrollTo(0, event.state?.scrollY || 0); });
 window.addEventListener('hashchange', () => { if (page() === 'docs' && $('#doc-main')) selectDoc(); });
 render();
 loadUsage().catch(() => { $('#top-requests').textContent = 'Usage could not load'; });
