@@ -25,7 +25,7 @@ resources:
         port: 8000
         protocol: HTTP
         public: true
-        subdomain: socialscrape
+        subdomain: ""
 volumes:
   data:
     size: 1Gi
