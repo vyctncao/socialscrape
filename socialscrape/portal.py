@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import hashlib
 import hmac
 import html
@@ -38,6 +39,10 @@ BRAND_ASSETS = ("brand/favicon.svg", "brand/favicon.ico", "brand/favicon.png",
                 "brand/logomark.svg", "brand/logomark-chalk.svg", "brand/logomark.png", "brand/logomark-chalk.png",
                 "brand/logo.svg", "brand/logo-white.svg", "brand/logo.png", "brand/logo-white.png")
 _active_store: Any = None
+
+
+def dt_iso(timestamp: float) -> str:
+    return dt.datetime.fromtimestamp(timestamp, dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -505,6 +510,55 @@ class PortalStore:
         detail["has_response"] = bool(detail["has_response"])
         detail["response"] = (detail.pop("response_body") or b"").decode("utf-8", "replace")
         return detail
+
+    def api_usage(self, principal: Principal, *, endpoint: str | None = None, status: int | None = None,
+                  page: int = 1, page_size: int = 100) -> list[dict[str, Any]]:
+        clauses, args = [], []
+        if principal.role != "owner":
+            clauses.append("member_id=?")
+            args.append(principal.id)
+        if endpoint:
+            clauses.append("path LIKE ?")
+            args.append(f"%{endpoint}%")
+        if status is not None:
+            clauses.append("status=?")
+            args.append(status)
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT id,path,query,status,duration_ms,created_at,method,cached,fallback FROM requests {where} "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?", (*args, page_size, (page - 1) * page_size)
+            ).fetchall()
+        return [{"id": str(row["id"]), "endpoint": row["path"] + ("?" + row["query"] if row["query"] else ""),
+                 "status_code": row["status"], "duration_ms": row["duration_ms"],
+                 "success": 200 <= row["status"] < 400,
+                 "request_time": dt_iso(row["created_at"]), "http_method": row["method"],
+                 "created_at": dt_iso(row["created_at"]), "credits": 0,
+                 "cached": bool(row["cached"]), "fallback": bool(row["fallback"])} for row in rows]
+
+    def daily_usage(self, principal: Principal) -> list[dict[str, str]]:
+        clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
+        now = time.time()
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT date(created_at,'unixepoch') day,COUNT(*) count FROM requests "
+                f"WHERE created_at>=? {clause} GROUP BY day", (now - 30 * 86400, *args)
+            ).fetchall()
+        counts = {row["day"]: row["count"] for row in rows}
+        today = dt.datetime.fromtimestamp(now, dt.timezone.utc).date()
+        return [{"usage_date": f"{day.isoformat()}T00:00:00.000Z", "total_credits": "0",
+                 "request_count": str(counts.get(day.isoformat(), 0))}
+                for day in (today - dt.timedelta(days=i) for i in range(30))]
+
+    def most_used_routes(self, principal: Principal, start: float, end: float) -> list[dict[str, str]]:
+        clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT path,COUNT(*) count FROM requests WHERE created_at>=? AND created_at<=? {clause} "
+                "GROUP BY path ORDER BY count DESC,path LIMIT 20", (start, end, *args)
+            ).fetchall()
+        return [{"base_endpoint": row["path"], "call_count": str(row["count"]), "total_credits": "0"}
+                for row in rows]
 
     def usage(self, principal: Principal) -> dict[str, Any]:
         clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))

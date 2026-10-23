@@ -1,0 +1,2508 @@
+[
+  {
+    "name": "v1_account_credit_balance",
+    "title": "SocialScrape - Get credit balance",
+    "description": "Returns SocialScrape's unlimited request status. SocialScrape does not charge API credits.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_account_get_api_usage",
+    "title": "SocialScrape - Get request history",
+    "description": "Returns a paginated list of API requests visible to the caller, with optional endpoint and status filters.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "description": "Filter by endpoint name (partial match) (e.g. /v1/tiktok/profile)",
+          "type": "string"
+        },
+        "statusCode": {
+          "description": "Filter by HTTP status code (e.g. 200)",
+          "type": "string"
+        },
+        "page": {
+          "description": "Page number for pagination (max 100) (e.g. 1)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_account_get_daily_usage_count",
+    "title": "SocialScrape - Get daily usage",
+    "description": "Returns request counts for each of the last 30 days. SocialScrape does not charge API credits.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_account_get_most_used_routes",
+    "title": "SocialScrape - Get most used routes",
+    "description": "Returns the top 20 API routes by request count. Defaults to the last 24 hours and supports ranges up to one year.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "start_time": {
+          "description": "Start of time range (ISO 8601 format) (e.g. 2025-04-01T00:00:00.000Z)",
+          "type": "string"
+        },
+        "end_time": {
+          "description": "End of time range (ISO 8601 format) (e.g. 2025-04-15T23:59:59.000Z)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_audio_reels",
+    "title": "Instagram - Get Reels By Audio Id",
+    "description": "Fetches the reels Instagram exposes for an audio page like instagram.com/reels/audio/{audio_id}/. Pass the audio_id from that URL. Use cursor from the previous response to request the next page when Instagram returns one.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "audio_id": {
+          "description": "Audio ID from the Instagram audio page URL. (e.g. 1392969992841787)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Pass the previous response's cursor for the next page. (e.g. Gsbyq-aju4eF02y...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "audio_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_basic_profile",
+    "title": "Instagram - Basic Profile",
+    "description": "Fetches a lightweight Instagram profile summary by user ID, returning username, full name, biography, profile picture URL, verification status, follower count, following count, media count, and account privacy and type. Ideal for quick lookups or enrichment when you already have the numeric user ID. Use this when speed matters and you do not need posts. It skips the post-fetching and enrichment calls made by [Profile](https://docs.scrapecreators.com/v1/instagram/profile), so it is usually faster. Response times can vary.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "description": "Numeric Instagram user ID. (e.g. 314216)",
+          "type": "string"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_post",
+    "title": "Instagram - Post/Reel Info",
+    "description": "Fetches detailed metadata for a single Instagram post or reel by shortcode or URL. Returns caption text, like count, comment count, video URL, video play count, video duration, display images, owner info, tagged users, carousel sidecar children when applicable, and the published time in `data.xdt_shortcode_media.created_at` as an ISO 8601 UTC date. The original Unix timestamp remains available in `data.xdt_shortcode_media.taken_at_timestamp`. Play counts are Instagram-only views and exclude cross-posted Facebook views. Set `include_play_count=false` to omit the play count and skip its additional fetch for a faster response.\n\nPlay counts can sometimes be inaccurate.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Instagram post or reel URL",
+          "type": "string"
+        },
+        "region": {
+          "description": "Two-letter country code for the proxy location. (e.g. US)",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true for a trimmed response.",
+          "type": "boolean"
+        },
+        "download_media": {
+          "description": "Set to true for permanent Supabase video/image URLs. Costs 10 credits if media is found, 1 credit otherwise.",
+          "type": "boolean"
+        },
+        "include_play_count": {
+          "description": "Set to false to omit video_play_count for a faster response. Defaults to true.",
+          "type": "boolean"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_post_comment_replies",
+    "title": "Instagram - Comment Replies",
+    "description": "Retrieves the public replies to a specific Instagram comment. Pass the post or reel URL and the parent comment's `id` from the Comments endpoint. Returns reply text, timestamps, engagement counts, parent comment ID, and user details. Paginate with `cursor` when `has_more` is true.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Instagram post or reel URL. (e.g. https://www.instagram.com/reel/C8rKmYvsrck)",
+          "type": "string"
+        },
+        "comment_id": {
+          "description": "Parent comment ID from the Comments endpoint. (e.g. 18038110327814211)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Pass the previous response's cursor for more replies. (e.g. QVFDc29...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "comment_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_profile",
+    "title": "Instagram - Profile",
+    "description": "After recent Instagram changes, fetching creator metadata and posts requires several requests to Instagram, so this endpoint can be slower. If you only need profile details without posts, use [Basic Profile](https://docs.scrapecreators.com/v1/instagram/basic-profile) with the numeric userId for a usually faster lookup. Retrieves comprehensive public Instagram profile information including biography, bio links, follower and following counts, verification status, and profile picture URLs. Private profiles also return all available public profile metadata through the same existing data.user mapper: ID, username, full name, biography and bio links/entities, website/linkshim, standard/HD profile photos, verification, business/professional/category information, public contact fields when Instagram returns them, and counts, without exposing private posts. The response and unchanged status, success, error, message, and billing rules are described below. Also returns recent timeline posts with engagement metrics such as likes, comments, and video view counts, plus a list of related profiles. Useful for account overview, audience analysis, or discovering similar creators. Video play counts are separate from video view counts. Profile-pinned videos may have video_play_count=null when their count is not found in a short recent-Reels scan; available pinned counts are kept and non-pinned videos require numeric plays. Use /v1/instagram/post with an individual post or reel URL for a deeper play-count lookup. Instagram may return media_count as null or return only the current post batch in edge_owner_to_timeline_media.count. Use Profile Post Count when you specifically need the total number of posts. An explicit rendered age gate (for example, You must be 21 years old or over to see this profile. Log in to continue.) returns HTTP 403, success=true, age_restricted=true, error=forbidden, errorStatus=403, and message=Profile is age restricted, without charging credits. This means Instagram identified an existing profile but requires an age-verified login to view it; we do not bypass the gate. It applies to GET, trimmed GET, and POST handle requests. The age_restricted field is omitted when age gating has not been explicitly confirmed; its absence is not proof that the account has no age limit. For GET handle requests, Profile is private means Instagram returned is_private=true. Account doesn't exist means the handle lookup returned no matching account, not confirmed deletion. The historical Profile is restricted placeholder was used for reported content with no public timeline items. Its handler compatibility branch remains, but the current metadata-first pipeline no longer infers restriction from an empty timeline alone; it retains matching metadata as a partial HTTP 200. These placeholders return HTTP 200, success=true, error=not_found, errorStatus=404, and userId=null, and cost one credit. An explicitly rendered generic audience restriction returns HTTP 404 with Profile is restricted and zero credits charged; it does not confirm an age limit. Profile is unavailable on Instagram also returns an uncharged HTTP 404 and does not identify privacy, deletion, or age gating. HTTP 500 with Shoot, IG is blocking us. Try again and it should work. is an uncharged upstream failure, not a confirmed account restriction. Do not label generic login prompts or unavailable responses as age-restricted.\n\n### Profile access response contract\n\nThe confirmed-state success flag is intentionally restored to true: success means we determined the profile state, not that the profile exists or its content is publicly retrievable. HTTP 403/404 and zero-credit billing remain unchanged. Actual retrieval failures remain success=false. HTTP status, JSON field names/types, error values, message values, and credit behavior are compatibility-sensitive. We preserve them on existing endpoint versions; incompatible changes require an explicitly versioned contract and advance notice. See the [response-contract changelog](/#response-contract-changelog).\n\n**Confirmed age gate — HTTP 403, zero credits.** For this profile endpoint, branch on errorStatus === 403 && age_restricted === true. The flag means Instagram explicitly rendered an age-verification gate, not a generic login prompt. It is omitted otherwise; omission does not mean false. It does not identify country/region restrictions.\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 100,\n  \"credits_charged\": 0,\n  \"handle\": \"example_profile\",\n  \"userId\": null,\n  \"age_restricted\": true,\n  \"error\": \"forbidden\",\n  \"errorStatus\": 403,\n  \"message\": \"Profile is age restricted\"\n}\n```\n\n**Explicit audience restriction — HTTP 404, zero credits.** This is different from an age gate and from an unavailable profile. There is currently no structured age/region reason field for this case: use HTTP 404, error=not_found, and the exact message below. Do not invent a reason or treat every 404 as a deleted account.\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 100,\n  \"credits_charged\": 0,\n  \"handle\": \"example_profile\",\n  \"userId\": null,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Profile is restricted\"\n}\n```\n\n**Confirmed unavailable page — HTTP 404, zero credits.** Instagram reports the profile as unavailable. This does not establish whether it was deleted, renamed, suspended, or hidden. This response intentionally has no handle, userId, or age_restricted field.\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 100,\n  \"credits_charged\": 0,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Profile is unavailable on Instagram\"\n}\n```\n\n**Legacy GET placeholders — HTTP 200, one credit.** These still exist. A JSON errorStatus of 404 is not the HTTP status. HTTP 200 and success=true alone do not prove usable profile data. The three legacy messages are preserved exactly:\n\n**Private profile public metadata.** Private profiles return all available public profile metadata through the existing data.user shape: ID, username, full name, biography, bio links/entities, external website/linkshim, standard/HD profile photos, verification, privacy, business/professional/category information, public contact fields when Instagram returns them, and counts. Full GET and POST handle requests use the complete existing public-profile user mapper; its fields and defaults remain unchanged except that unknown or unusable private follower/following counts are null, while a real 0 is preserved. The count paths remain data.user.edge_followed_by.count (followers) and data.user.edge_follow.count (following).\n\nGET trim=true uses the existing public-profile trim field list, retaining name, biography, bio links/entities, external_url, profile photos, privacy/verification, business/professional flags, category_name, business_address_json, and counts. Full-only fields such as external_url_linkshimmed, business_email, and business_phone_number are omitted from trimmed GET. POST handle requests ignore trim and return the full mapped user, as before.\n\nFull metadata means all mapped profile fields, not raw Instagram internals, private posts, or an age-gate bypass. Public contact information is not guaranteed; unavailable values keep the public mapper's existing defaults. Age-restricted responses are unchanged. Every preexisting top-level field is retained: HTTP 200, userId=null, error=not_found, errorStatus=404, message=Profile is private, and the one-credit charge stay unchanged. POST handle requests keep success=false instead of GET's success=true. The example below shows representative metadata fields, not the exhaustive full mapper output or the trimmed field set. The ID, name, links, photos, handle, and credit balance are synthetic; the counts 560 and 4675 are illustrative and can change.\n\nPrivate GET response (representative full-response metadata):\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 99,\n  \"credits_charged\": 1,\n  \"handle\": \"example_profile\",\n  \"userId\": null,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Profile is private\",\n  \"data\": {\n    \"user\": {\n      \"id\": \"12345\",\n      \"username\": \"example_profile\",\n      \"full_name\": \"Example Profile\",\n      \"biography\": \"An example profile. https://example.org/\",\n      \"bio_links\": [\n        {\n          \"title\": \"Website\",\n          \"url\": \"https://example.org/\",\n          \"lynx_url\": \"https://example.org/linkshim\",\n          \"link_type\": \"external\"\n        }\n      ],\n      \"fb_profile_biolink\": null,\n      \"biography_with_entities\": {\n        \"raw_text\": \"An example profile. https://example.org/\",\n        \"entities\": []\n      },\n      \"external_url\": \"https://example.org/\",\n      \"external_url_linkshimmed\": \"https://example.org/linkshim\",\n      \"profile_pic_url\": \"https://example.org/profile.jpg\",\n      \"profile_pic_url_hd\": \"https://example.org/profile-hd.jpg\",\n      \"is_verified\": false,\n      \"is_business_account\": false,\n      \"is_professional_account\": false,\n      \"category_name\": null,\n      \"business_category_name\": null,\n      \"overall_category_name\": null,\n      \"category_enum\": null,\n      \"business_address_json\": {},\n      \"business_contact_method\": \"UNKNOWN\",\n      \"business_email\": null,\n      \"business_phone_number\": null,\n      \"should_show_category\": false,\n      \"should_show_public_contacts\": false,\n      \"is_private\": true,\n      \"edge_followed_by\": {\n        \"count\": 560\n      },\n      \"edge_follow\": {\n        \"count\": 4675\n      }\n    }\n  }\n}\n```\n\nHistorical restricted-result compatibility branch (not the current empty-timeline policy):\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 99,\n  \"credits_charged\": 1,\n  \"handle\": \"example_profile\",\n  \"userId\": null,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Profile is restricted\"\n}\n```\n\nNo matching account from the handle lookup (not proof of deletion):\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 99,\n  \"credits_charged\": 1,\n  \"handle\": \"example_profile\",\n  \"userId\": null,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Account doesn't exist\"\n}\n```\n\nThese legacy handler branches are retained, but the active metadata-first pipeline no longer emits the heuristic restricted result merely because the timeline is empty; it returns useful matching metadata as a partial HTTP 200 instead. GET trim=true retains the same state-envelope rules. POST handle requests retain a historical difference: these HTTP-200 placeholders have success=false instead of true; they still cost one credit. The POST restricted-placeholder condition is data.user === null, while GET uses userId === null. The explicit 403/404 responses above apply to both methods. A flag-only legacy restricted scraper result is different again: POST can pass through success=true, handle, userId=null, message=Profile is restricted, and isRestricted=true without error/errorStatus. Legacy POST userId requests use a separate compatibility path and are not covered by the handle contract.\n\n**Endpoint scope.** /v1/instagram/user/posts and /v2/instagram/user/posts also return the uncharged 403 forbidden age-gate message, but do not include age_restricted, handle, or userId in that error body. Their explicit restricted-profile 404 says Profile is private, not Profile is restricted. Do not copy this profile endpoint's envelope to /v1/instagram/post or /v1/tiktok/profile; those contracts are separate. Ambiguous upstream failures are not evidence of a missing or restricted account.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "Instagram handle (e.g. jane)",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true for a trimmed response.",
+          "type": "boolean"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_profile_post_count",
+    "title": "Instagram - Profile Post Count",
+    "description": "Returns the post count shown on a public Instagram profile. Use this endpoint when Profile returns media_count as null or edge_owner_to_timeline_media.count contains only the current batch size. This endpoint makes a separate Instagram profile-page request so it does not add latency to the main Profile endpoint. Full values such as 12,345 Posts return the exact integer with is_estimated set to false. For profiles with more than 10,000 posts, Instagram may expose only a compact value such as 12K Posts or 1.2M Posts. Set allow_estimated=true to return the scaled integer with is_estimated set to true. Estimated counts are opt-in: when allow_estimated is omitted or false, the endpoint returns an uncharged 422 response explaining that exact precision is unavailable. If Instagram omits the count entirely, the endpoint returns an error without deducting a credit.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "Instagram handle (e.g. lifestyleperfume)",
+          "type": "string"
+        },
+        "allow_estimated": {
+          "description": "Set to true to accept scaled estimates for abbreviated counts above 10,000 posts. Defaults to false; estimate-only results then return an uncharged 422.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_reels_trending",
+    "title": "Instagram - Trending Reels",
+    "description": "Discovers reels through Instagram's public Popular pages and current featured topics, with pagination handled internally. Each reel's actual publication timestamp is checked: posts older than seven days, posts with unavailable dates, and unavailable posts are excluded. Results are deduplicated within each response and ordered by available play counts. This is recent popular-Reels discovery, not Instagram's official global trending ranking or a measure of view growth. Returns up to 12 reels, and repeated calls can overlap. Returns `reels` with shortcode, URL, caption, publication date, media URLs, available engagement counts, and user info. Missing engagement counts may be null. Successful requests cost one credit; if Instagram supplies too few verified recent reels, the endpoint returns an uncharged 503 rather than including older posts.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_search",
+    "title": "Instagram - Search Instagram",
+    "description": "Use this for Instagram-native account, hashtag, or place lookup. It returns ranked users, hashtags, places, and keyword suggestions from Instagram itself. It is not Google-indexed, does not require an Instagram login, returns one page only, and does not return posts. For an Instagram-curated topic page with posts, use /v1/instagram/search/popular. For the same native account results in a profile-only response, use /v1/instagram/search/profiles.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Username, hashtag, place, or keyword to search for. (e.g. nike)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_search_hashtag",
+    "title": "Instagram - Search Hashtag Posts",
+    "description": "Use this when you know the exact hashtag and want Google-indexed public Instagram posts or reels, optional date filters, and pagination. It returns post details such as caption, engagement, owner, and post time. Results are best-effort and not a complete Instagram-native hashtag feed. For an Instagram-curated topic page with generated context and suggested terms, use /v1/instagram/search/popular. Pass media_type=reels to only return reels. Cursors are limited to pages 1 through 11; cursor 12 or greater returns a 400 response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "hashtag": {
+          "description": "Hashtag to search for, with or without #. (e.g. makeup)",
+          "type": "string"
+        },
+        "date_posted": {
+          "description": "Date window for Google-indexed posts. (e.g. last-week)",
+          "type": "string",
+          "enum": [
+            "last-hour",
+            "last-day",
+            "last-week",
+            "last-month",
+            "last-year"
+          ]
+        },
+        "media_type": {
+          "description": "Use all for posts and reels, or reels for reels only. Defaults to all. (e.g. all)",
+          "type": "string",
+          "enum": [
+            "all",
+            "reels"
+          ]
+        },
+        "cursor": {
+          "description": "Next Google results page number from the previous response. Maximum 11; 12 or greater returns HTTP 400. (e.g. 2)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "hashtag"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_search_popular",
+    "title": "Instagram - Popular Search",
+    "description": "Use this to explore an Instagram topic and the posts Instagram curates for it. It scrapes the public /popular/{query} page without requiring an Instagram login. The first page returns the topic title, numeric total media count, Instagram's generated description and sources, suggested terms, posts, and an opaque cursor. Pass that cursor with the same query to fetch more posts. Later pages return query, posts, cursor, and has_more only. For an exact hashtag through Google-indexed results, use /v1/instagram/search/hashtag. For reels only, use /v2/instagram/reels/search. Each successful request costs 1 credit.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Topic to search for. (e.g. basketball)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Pass the previous response's cursor with the same query for the next page. (e.g. opaque-cursor-from-response)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_search_profiles",
+    "title": "Instagram - Search Instagram Profiles",
+    "description": "Use this for Instagram-native profile lookup. It returns every account in Instagram's first ranked native result set, then performs bounded best-effort enrichment for the first 10 accounts to preserve the previous profile fields such as biography, bio links, account flags, and follower/following/media counts. Results after the first 10 retain native ID, username, full name, verification status, profile photo, and URL, while unavailable detail fields are null or empty. It does not search Google-indexed bios or captions, Google title/description fields are null, and pagination is not supported. For users, hashtags, places, and keyword suggestions together, use /v1/instagram/search.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Profile name or username to search for. (e.g. fitness coach)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_user_embed",
+    "title": "Instagram - Embed HTML",
+    "description": "Returns the raw HTML embed snippet for an Instagram user's profile widget. The response contains a single html string that can be inserted into a webpage to render an embeddable Instagram profile card. Requires the user's handle as input.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "Instagram handle (e.g. jane)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_user_highlight_detail",
+    "title": "Instagram - Highlights Details",
+    "description": "Fetches the full contents of a specific Instagram story highlight album by its ID. Returns the highlight's cover image, title, user info, and an items array containing each story with its media type, image or video URLs, dimensions, timestamp, and sticker/interactive element data. Useful for archiving or analyzing individual highlight reels.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Story highlight ID. (e.g. 18067016518767507)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_user_highlights",
+    "title": "Instagram - Story Highlights",
+    "description": "Lists all story highlight albums for an Instagram user. Each highlight includes its ID, title, cover thumbnail URL, and owner info with username and profile picture. Accepts either a user_id or handle; providing user_id yields faster responses. If Instagram explicitly blocks handle lookup, age restrictions return HTTP 403 with message 'Profile is age restricted'; restricted profiles return HTTP 404 with message 'Profile is restricted'; confirmed unavailable profiles return HTTP 404 with message 'Profile is unavailable on Instagram'. These responses keep success: true to indicate a confirmed profile state, include an error field, and charge no credits. Check the HTTP status and error field, not success alone.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "description": "Numeric Instagram user ID; faster than using a handle. (e.g. 2700692569)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "Instagram handle; use user_id for faster responses. (e.g. jane)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_user_reels",
+    "title": "Instagram - Reels",
+    "description": "Returns a paginated list of a user's public Instagram reels (short-form videos). Each reel includes its shortcode, play count, like count, comment count, video versions with download URLs, thumbnail image, owner info, and the published time in `items[].media.created_at` as an ISO 8601 UTC date. With `trim=true`, use `items[].created_at`. The original Unix timestamp remains available as `taken_at`. Note that reel captions are not returned by this endpoint. Play counts are Instagram-only views and exclude cross-posted Facebook views. Supports cursor-based pagination via max_id; providing a user_id instead of a handle yields faster responses.\n\nPinned reels are not included. Use the post detail endpoint to get reel captions. Play counts can sometimes be inaccurate.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "description": "Numeric Instagram user ID; faster than using a handle. (e.g. 2700692569)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "Instagram handle; use user_id for faster responses. (e.g. jane)",
+          "type": "string"
+        },
+        "require_play_counts": {
+          "description": "Require play_count on returned reels; 0 is valid. Missing counts return an uncharged error. [Why counts can be missing](https://scrapecreators.com/blog/instagram-play-counts-missing).",
+          "type": "boolean"
+        },
+        "trim": {
+          "description": "Set to true for a trimmed response.",
+          "type": "boolean"
+        },
+        "max_id": {
+          "description": "Pass max_id from the previous response for the next page. (e.g. QVFCVzNnS2lI...==)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_instagram_user_tagged_posts",
+    "title": "Instagram - User Tagged Posts",
+    "description": "Returns up to 10 public posts per page from an Instagram user's Tagged tab. Each item is a flat post object with its shortcode, caption, media type, engagement counts, media URLs, and owner details. Keep passing the returned cursor to fetch additional pages until has_more is false.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "description": "Numeric Instagram user ID. (e.g. 325734299)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Cursor returned by the previous response. (e.g. 3953374600788032611)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_ad_library_ad",
+    "title": "TikTok Ad Library - Ad Library Ad",
+    "description": "Fetches one TikTok ad by ID or URL. It first checks Creative Center Top Ads (ads.tiktok.com), then TikTok's public transparency Ads Library (library.tiktok.com) when the ID is not a Top Ads material. Both sources return the same response shape. Fields TikTok does not expose for a public Ads Library ad are null, empty, or false as appropriate.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "ad_id": {
+          "description": "Creative Center Top Ads material ID or URL, or a public Ads Library ad ID or library.tiktok.com detail URL. (e.g. 1869335220395266)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ad_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_ad_library_search",
+    "title": "TikTok Ad Library - Ad Library Search",
+    "description": "Searches TikTok's public Ads Library using either query for a general search or advertiser_name for advertiser-specific results. Advertiser-name searches resolve the name through TikTok's advertiser typeahead first, then search the selected advertiser entity and return adv_biz_ids on each ad. You can pass adv_biz_ids with advertiser_name to pin the exact advertiser shown in TikTok's See all ads link. TikTok requires the name with the ID and ignores an ID-only search, so provide exactly one of query or advertiser_name. If TikTok has no matching advertiser entity, the API falls back to TikTok's name search. Results are global, sorted by the latest shown date, support cursor pagination, and include a public TikTok Ads Library URL for each ad.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "General ad search. Provide either query or advertiser_name, not both. (e.g. The Creator Loop)",
+          "type": "string"
+        },
+        "advertiser_name": {
+          "description": "Advertiser name to resolve through TikTok's typeahead and search by advertiser entity. Falls back to TikTok's name search when no entity matches. Provide either advertiser_name or query, not both. (e.g. Gymshark)",
+          "type": "string"
+        },
+        "adv_biz_ids": {
+          "description": "Advertiser business ID from a See all ads link. Use with advertiser_name to select the exact advertiser. ID-only searches return 400; TikTok ignores IDs without the name. (e.g. 7078923208527618049)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Opaque cursor returned from the previous response. (e.g. cursor from previous response)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_collection_videos",
+    "title": "TikTok - Collection Videos",
+    "description": "Fetches the videos saved in a public TikTok collection, which TikTok also calls a playlist. Pass the collection URL. Returns `videos` using TikTok's native web video object format, including `id`, `desc`, `author`, `stats`, and `video`. To fetch the next page, pass the previous response's `max_cursor` as `cursor` when `has_more` is true.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Public TikTok collection URL (e.g. https://www.tiktok.com/@kibblemaster808/collection/Want-to-go-7665668414573546258)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Cursor to get more videos. Use max_cursor from the previous response. (e.g. 4)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_creators_popular",
+    "title": "TikTok - Get popular creators",
+    "description": "Discovers trending and popular TikTok creators, filterable by follower count range, creator country, and audience country. Returns `creator_list`, an array of creator objects each with `nickname`, `unique_id`, `follower_count`, `likes_count`, `video_views`, `engagement_rate`, and avatar URLs. Sortable by engagement, follower count, or average views.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "sortBy": {
+          "description": "Sort creators by engagement, follower count, or average views (e.g. engagement)",
+          "type": "string",
+          "enum": [
+            "engagement",
+            "follower",
+            "avg_views"
+          ]
+        },
+        "followerCount": {
+          "description": "Filter by follower count range (e.g. 10K-100K)",
+          "type": "string",
+          "enum": [
+            "10K-100K",
+            "100K-1M",
+            "1M-10M",
+            "10M+"
+          ]
+        },
+        "creatorCountry": {
+          "description": "Country code of the creator (e.g. US)",
+          "type": "string",
+          "enum": [
+            "AU",
+            "BR",
+            "CA",
+            "EG",
+            "FR",
+            "DE",
+            "ID",
+            "IL",
+            "IT",
+            "JP",
+            "MY",
+            "PH",
+            "RU",
+            "SA",
+            "SG",
+            "KR",
+            "ES",
+            "TW",
+            "TH",
+            "TR",
+            "AE",
+            "GB",
+            "US",
+            "VN"
+          ]
+        },
+        "audienceCountry": {
+          "description": "Country code of the audience/follower (e.g. US)",
+          "type": "string",
+          "enum": [
+            "AU",
+            "BR",
+            "CA",
+            "EG",
+            "FR",
+            "DE",
+            "ID",
+            "IL",
+            "IT",
+            "JP",
+            "MY",
+            "PH",
+            "RU",
+            "SA",
+            "SG",
+            "KR",
+            "ES",
+            "TW",
+            "TH",
+            "TR",
+            "AE",
+            "GB",
+            "US",
+            "VN"
+          ]
+        },
+        "page": {
+          "description": "Page number (e.g. 1)",
+          "type": "number"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_get_trending_feed",
+    "title": "TikTok - Trending Feed",
+    "description": "Fetches TikTok's trending/For You feed for a given region — useful for discovering viral content and what's currently popular. Returns `aweme_list`, an array of video objects each with `aweme_id`, `desc` (caption), `statistics` (play_count, digg_count/likes, comment_count, share_count, collect_count), `video` (playback and download URLs, cover), `author` info, and `image_post_info` for photo carousels.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "region": {
+          "description": "Proxy country. Affects regional content availability, not where posts were created. (e.g. US)",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "region"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_live",
+    "title": "TikTok - Live Info",
+    "description": "Gets curated room-level info for a TikTok live from TikTok's public live-room source. Use `/v1/tiktok/user/live` first to find the `room_id`. If you only have a TikTok handle and need the user's numeric id, use `/v1/tiktok/profile` first to get `user.id`. This endpoint is separate from `/v1/tiktok/user/live` because it uses a different upstream call and returns a smaller response with the most relevant fields: `room_id`, `like_count`, `viewer_count`, `status`, `title`, `cover_url`, and `owner`. TikTok's room-access refusal returns HTTP 403 with no credit charge. The creator may have enabled audience controls; this response does not mean the profile was deleted. Other upstream failures remain errors rather than successful empty rooms.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "room_id": {
+          "description": "Live room ID from liveRoomUserInfo.roomId or liveRoom.id in /v1/tiktok/user/live when the user is live. (e.g. 7523685855395842871)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "Live owner's numeric user ID from user.id in /v1/tiktok/profile. (e.g. 6742945285876515845)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "user_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_product",
+    "title": "TikTok Shop - Product Details",
+    "description": "Fetches full details for a specific US TikTok Shop product by its URL, including stock levels and affiliate videos. Returns `product_info` with `product_base` (title, images, sold_count, price), `skus` (variants with exact `stock` counts plus TikTok's `sku_name` and `gtin` when available), and `product_detail_review` (product_rating, review_count, sample reviews). `gtin` contains `gtin_type` and `gtin_code`, or is null when TikTok does not provide a barcode. The response also includes `shop_info` (shop_name, shop_rating, followers_count) and `related_videos` (affiliate TikToks promoting the product). This endpoint currently supports the US region only. Get the details of a TikTok Shop Product. This endpoint currently supports US TikTok Shop products only.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "The URL of the product to get details for. (e.g. https://www.tiktok.com/shop/pdp/goli-ashwagandha-gummies-with-vitamin-d-ksm-66-vegan-non-gmo/1729587769570529799)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Product region. Only US is reliable; non-US requests may return bad_request or missing product data. (e.g. US)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_profile",
+    "title": "TikTok - Profile",
+    "description": "Fetches public profile data for a TikTok user by their handle or user_id — useful for looking up a creator's identity, bio, and account stats. Returns a `user` object (display name, avatar URLs, bio/signature, verification status, bio link) and a `stats` object (followerCount, followingCount, heartCount/total likes, videoCount). This only returns profile metadata, not the user's actual videos or followers list.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle. You can pass handle or user_id. (e.g. stoolpresidente)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "TikTok user id. (e.g. 6659752019493208069)",
+          "type": "string"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_profile_region",
+    "title": "TikTok - Profile Region",
+    "description": "Returns the TikTok region code for a public profile, like `US` for United States or `MX` for Mexico.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle (e.g. stoolpresidente)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_search_hashtag",
+    "title": "TikTok - Search by Hashtag",
+    "description": "Searches for TikTok videos under a specific hashtag — useful for finding content by topic or trend. Returns `aweme_list`, an array of video objects each with `aweme_id`, `desc` (caption), `statistics` (play_count, digg_count/likes, comment_count, share_count), `video` info, and `author` details. Paginate with `cursor` from the previous response. TikTok may return duplicate results. Scrapes TikTok videos by hashtag. Note: TikTok can return duplicate results for this search. Sorry about that — it looks like a TikTok-side thing, so we don't have control over it.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "hashtag": {
+          "description": "Hashtag to search for (without #)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Proxy country, not a filter for where posts were created. (e.g. US)",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "Cursor to get more videos. Get 'cursor' from previous response. (e.g. 10)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "hashtag"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_search_keyword",
+    "title": "TikTok - Search by Keyword",
+    "description": "Searches for TikTok videos by keyword or phrase — the general video search across all of TikTok. Returns `search_item_list`, an array of objects each containing `aweme_info` with `aweme_id`, `desc` (caption), `statistics` (play_count, digg_count/likes, comment_count, share_count), `video` info, and `author` details. Paginate with `cursor`. TikTok may return duplicate results. Scrapes TikTok videos matching a keyword. Note: TikTok can return duplicate results for this search. Sorry about that — it looks like a TikTok-side thing, so we don't have control over it.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Keyword to search for",
+          "type": "string"
+        },
+        "date_posted": {
+          "description": "Time Frame (e.g. all-time)",
+          "type": "string",
+          "enum": [
+            "yesterday",
+            "this-week",
+            "this-month",
+            "last-3-months",
+            "last-6-months",
+            "all-time"
+          ]
+        },
+        "sort_by": {
+          "description": "Sort by (e.g. relevance)",
+          "type": "string",
+          "enum": [
+            "relevance",
+            "most-liked",
+            "date-posted"
+          ]
+        },
+        "region": {
+          "description": "Two-letter proxy country code, such as US, GB, or FR. May help access country-restricted posts; does not filter posts by origin.",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "Cursor to get more videos. Get 'cursor' from previous response. (e.g. 10)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_search_suggestions",
+    "title": "TikTok - Search Suggestions",
+    "description": "Gets the autocomplete suggestions TikTok shows while someone is typing in search. Returns `suggestions`, a clean array of suggested search terms and the most useful metadata for each suggestion.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Search query to get suggestions for (e.g. dogs)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Region code for suggestions (e.g. US)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_search_top",
+    "title": "TikTok - Top Search",
+    "description": "Searches TikTok's 'Top' results by query — returns both videos and photo carousels, unlike keyword search which only returns videos. Returns `items`, an array of objects each with `id`, `desc` (caption), `content_type` (video or photo carousel), `statistics` (play_count, digg_count/likes, comment_count, share_count), `video` info, and `images` for carousels. Paginate with `cursor`. TikTok may return duplicate results. There is a 'Top' Search in TikTok and this is that. You can get Photo Carousels and Videos. Whereas with just the Keyword Search, you can only get Videos. Note: TikTok can return duplicate results for this search. Sorry about that — it looks like a TikTok-side thing, so we don't have control over it.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Keyword to search for (e.g. funny)",
+          "type": "string"
+        },
+        "publish_time": {
+          "description": "Time Frame TikTok was posted (e.g. all-time)",
+          "type": "string",
+          "enum": [
+            "yesterday",
+            "this-week",
+            "this-month",
+            "last-3-months",
+            "last-6-months",
+            "all-time"
+          ]
+        },
+        "sort_by": {
+          "description": "Sort by (e.g. relevance)",
+          "type": "string",
+          "enum": [
+            "relevance",
+            "most-liked",
+            "date-posted"
+          ]
+        },
+        "region": {
+          "description": "Two-letter proxy country code, such as US, GB, or FR. May help access country-restricted posts; does not filter posts by origin.",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Cursor to get more videos. Get 'cursor' from previous response. (e.g. 0)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_search_users",
+    "title": "TikTok - Search Users",
+    "description": "Searches for TikTok users by keyword or name — useful for finding creators or accounts matching a query. Returns `users`, an array of objects each containing `user_info` (nickname, unique_id, signature/bio, follower_count, following_count, avatar) and associated `items`. Paginate with `cursor` from the previous response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Search query for users",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "Cursor to get more users. Get 'cursor' from previous response. (e.g. 10)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_shop_product_reviews",
+    "title": "TikTok Shop - Product Reviews",
+    "description": "Fetches customer reviews for a TikTok Shop product by URL or product_id. Returns `product_reviews`, an array of review objects each with `rating`, `display_text`, `review_timestamp_fmt`, `review_user` (name, avatar), and `sku_specification` (variant purchased); also returns `total_reviews` count and `rating_distribution`. Paginate with `page`.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "The URL of the product (required if product_id is not provided) (e.g. https://www.tiktok.com/shop/pdp/cat-nail-clipper-by-potaroma-adjustable-sizes-built-in-file-safe-for-kittens-cats/1731578642912612516)",
+          "type": "string"
+        },
+        "product_id": {
+          "description": "The ID of the product (required if url is not provided) (e.g. 1731578642912612516)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Product region. Only US is reliable; non-US regions may return limited or inconsistent reviews. (e.g. US)",
+          "type": "string"
+        },
+        "page": {
+          "description": "The page number of the reviews (e.g. 1)",
+          "type": "number"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_shop_products",
+    "title": "TikTok Shop - Shop Products",
+    "description": "Lists all products from a specific TikTok Shop store by its URL. Returns an array of product objects each with `title`, `cover` images, `url`, `price` info, `sold_count`, `review_count`, and `rating`. Paginate with `cursor` from the previous response; filter by region; use `sort_by=top` for best-selling products or `sort_by=new_releases` for newest products. Non-US shop catalog coverage depends on TikTok exposing that shop in the selected region, so some shops can return `not_found` outside the US even when they appear in shop search. Get the products from a TikTok Shop. This endpoint costs 1 credit per request. Use the cursor from the response to paginate through results. Non-US shop catalog coverage depends on TikTok exposing that shop in the selected region.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "The TikTok Shop store URL. (e.g. https://www.tiktok.com/shop/store/goli-nutrition/7495794203056835079)",
+          "type": "string"
+        },
+        "sort_by": {
+          "description": "Sort by best-selling products (top) or newest products (new_releases). Defaults to top. (e.g. top)",
+          "type": "string",
+          "enum": [
+            "top",
+            "new_releases"
+          ]
+        },
+        "region": {
+          "description": "Shop region; defaults to US. Non-US regions are unreliable and may return not_found or limited catalogs even when the shop appears in search. (e.g. US)",
+          "type": "string",
+          "enum": [
+            "US",
+            "GB",
+            "DE",
+            "FR",
+            "IT",
+            "ID",
+            "MY",
+            "MX",
+            "PH",
+            "SG",
+            "ES",
+            "TH",
+            "VN",
+            "BR",
+            "JP",
+            "IE"
+          ]
+        },
+        "cursor": {
+          "description": "Use cursor from the previous response for the next page. Omit for the first page.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_shop_search",
+    "title": "TikTok Shop - Shop Search",
+    "description": "Searches TikTok Shop for products matching a keyword query. Returns an array of product objects each with `title`, `cover` image, `url` (product page link), `price`, `sold_count`, `review_count`, `rating`, and `shop_name`. Paginate with `page`; filter by region. Scrape TikTok Shop Products from a search!",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Term you want to search for (e.g. shoes)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Search region. Non-US regions are unreliable and may return limited or inconsistent results. (e.g. US)",
+          "type": "string",
+          "enum": [
+            "US",
+            "GB",
+            "DE",
+            "FR",
+            "IT",
+            "ID",
+            "MY",
+            "MX",
+            "PH",
+            "SG",
+            "ES",
+            "TH",
+            "VN",
+            "BR",
+            "JP",
+            "IE"
+          ]
+        },
+        "page": {
+          "description": "Page number to retrieve (e.g. 1)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_song",
+    "title": "TikTok - Get Song Details",
+    "description": "Fetches detailed metadata for a specific TikTok sound or song by its clipId. Returns `music_info` with `title`, `author`, `album`, `duration`, `user_count` (number of videos using this sound), `play_url`, cover art, and artist details. Use the `clipId` from a sound URL or from the popular songs endpoint. Scraping details from the song detail",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "description": "TikTok sound clip ID (clipId), not songId. (e.g. 7439295283975702544)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "clipId"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_song_videos",
+    "title": "TikTok - TikToks using Song",
+    "description": "Fetches TikTok videos that use a specific sound or song, identified by its clipId. Returns `aweme_list`, an array of video objects each with `aweme_id`, `desc` (caption), `statistics` (play_count, digg_count/likes, comment_count, share_count), `video` info, and `author` details. Paginate with `cursor` from the previous response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "description": "TikTok sound clip ID: the trailing number in a /music/ URL, such as 7370375686554782506. (e.g. 7439295283975702544)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "The cursor to get the next page of results. (e.g. 12)",
+          "type": "number"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_user_audience",
+    "title": "TikTok - User's Audience Demographics",
+    "description": "Retrieves audience demographic data for a TikTok user, showing where their followers are located by country. Returns `audienceLocations`, an array of objects each containing `country`, `countryCode`, `count`, and `percentage`. Costs 26 credits per request. Get the audience demographics of a TikTok user. Right now you can only get the audience countries. 🚨 Costs 26 credits per request.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle (e.g. shakira)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_user_followers",
+    "title": "TikTok - Followers",
+    "description": "Retrieves the follower list of a TikTok account by handle or user_id — useful for seeing who follows a creator or getting subscriber data. Returns `followers`, an array of user objects each with `nickname`, `unique_id`, `uid`, `follower_count`, `following_count`, and avatar URLs; also returns `total` follower count. Paginate with `min_time` from the previous response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle (e.g. stoolpresidente)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "User id. Use this for faster response times. (e.g. 6659752019493208069)",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "min_time": {
+          "description": "Used to paginate. Get 'min_time' from previous response. (e.g. 1605663376)",
+          "type": "number"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_user_following",
+    "title": "TikTok - Following",
+    "description": "Retrieves the following list — accounts that a TikTok user follows — by their handle. Returns `followings`, an array of user objects each with `nickname`, `unique_id`, `uid`, `follower_count`, `following_count`, `signature`, and avatar URLs; also returns `total` count. Paginate with `min_time` from the previous response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle (e.g. stoolpresidente)",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "min_time": {
+          "description": "Used to paginate. Get 'min_time' from previous response. (e.g. 1605663376)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_user_live",
+    "title": "TikTok - Live",
+    "description": "Checks a TikTok user's live status and retrieves available live room details. First checks the account with the same profile lookup used by /v1/tiktok/profile; this does not add a second API credit charge. Active streams return HTTP 200 with is_live: true; an existing account that is offline or has no current stream returns HTTP 200 with is_live: false. Both successful states cost 1 credit, including offline/no-stream accounts. Unavailable accounts: HTTP 404 when TikTok confirms the account is not found or unavailable. Audience controls: HTTP 403 when TikTok confirms the creator enabled them, with TikTok's login warning. Retrieval failures: HTTP 500 when the live check fails. Errors cost 0 credits (credits_charged: 0); never infer offline from an error. A failed check is not evidence that the account is offline, and having no current stream is not an account-not-found error. Use the top-level `is_live` boolean instead of checking TikTok's numeric status values yourself. Available details include `liveRoomUserInfo` (nickname, avatar, followerCount, roomId) and `liveRoom` (title, startTime, status, `liveRoomStats` with enterCount and userCount, plus `streamData` with playback URLs in multiple qualities). When no room exists, `liveRoom` is omitted rather than filled with invented room data. Ended-room details remain when TikTok supplies them. A real viewer count of zero is not treated as a restriction.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle (e.g. thejustalex)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_user_showcase",
+    "title": "TikTok Shop - User Showcase",
+    "description": "Fetches products featured in a TikTok user's public showcase — the products a creator promotes on their profile. Returns an array of product objects each with title, price, images, and shop details. Use POST request if pagination is cutting off too early. Just send the query params in the body. Gets public user's showcase products",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "The handle of the user (e.g. mrtiktokreviews)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Proxy region. Non-US regions are unreliable and may return limited or inconsistent showcase data. (e.g. US)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "The cursor to the next page of products (e.g. 21)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_video_comment_replies",
+    "title": "TikTok - Comment Replies",
+    "description": "Fetches replies to a specific TikTok comment by its ID. Returns `comments`, an array of comment objects each with `text`, `user` info, and `create_time`. Paginate with `cursor` from the previous response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "comment_id": {
+          "description": "TikTok comment ID. This is the cid from the comments endpoint. (e.g. 7623828115408274207)",
+          "type": "string"
+        },
+        "url": {
+          "description": "TikTok video URL. This is the url from the comments endpoint. (e.g. https://www.tiktok.com/@stoolpresidente/video/7623818255903329566)",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Cursor to get more replies. Get 'cursor' from previous response. (e.g. 3)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "comment_id",
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_video_comments",
+    "title": "TikTok - Comments",
+    "description": "Fetches comments on a TikTok video by URL — useful for reading audience reactions, replies, and engagement. Returns `comments`, an array where each comment includes `text`, `digg_count` (likes), `reply_comment_total`, `create_time`, and a `user` object with the commenter's nickname and unique_id; also returns `total` comment count. Paginate with `cursor` from the previous response. Public photo/slideshow posts are supported as well as videos. Comments use a separate TikTok public web source, so successful single-post metadata retrieval does not guarantee readable comments. An empty terminal page does not by itself prove the post has no comments globally or was deleted. This endpoint does not expose a country-selection parameter. Use the returned cursor and stop when `end_of_pagination=true`. Pages that return comments cost 1 credit; successful empty pages cost 0 credits, including the first page, later pages, and trim=true responses. Replaying a terminal null cursor also costs 0 credits. [Examples and troubleshooting](https://docs.scrapecreators.com/tiktok-post-availability). Scrapes comments from public TikTok videos and photo/slideshow posts. Pages with comments cost 1 credit; empty pages cost 0 credits. An empty page does not prove the post has no comments globally. [Examples and troubleshooting](https://docs.scrapecreators.com/tiktok-post-availability).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "TikTok video URL",
+          "type": "string"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "Cursor to get more comments. Get 'cursor' from previous response. (e.g. 20)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_tiktok_video_transcript",
+    "title": "TikTok - Transcript",
+    "description": "Extracts existing transcripts, captions, or subtitles from a TikTok video by URL. Returns id, url, and transcript (native captions are WEBVTT-formatted; AI fallback returns text). Also includes top-level transcript_with_timestamp: an array of {start: number, end: number, text: string} sentence/phrase segments from native captions or AI, or null when speech or timing is unavailable. Times are seconds relative to the video. AI timings are approximate, not word-perfect. The existing transcript remains the exact raw WEBVTT string for native captions and a plain string for AI fallback. No new parameter is required, and pricing is unchanged. Native transcripts cost 1 credit only when returned, with no fixed length limit; no transcript costs 0 credits. AI fallback is opt-in via use_ai_as_fallback=true and is used only when native captions are unavailable. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. This dedicated transcript route charges the AI rate instead of adding a native-caption fee. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed. Get native captions or an opted-in AI transcript from a TikTok video. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "TikTok video URL (e.g. https://www.tiktok.com/@stoolpresidente/video/7499229683859426602)",
+          "type": "string"
+        },
+        "language": {
+          "description": "Two-letter transcript language code, such as en, es, fr, de, it, ja, ko, or zh. (e.g. en)",
+          "type": "string"
+        },
+        "allow_long_transcription": {
+          "description": "Allow AI transcription over 2 minutes. Paid rates apply to short videos too. Enable transcription separately.",
+          "type": "boolean"
+        },
+        "use_ai_as_fallback": {
+          "description": "Set true to use AI only when native captions are unavailable; defaults to false. Default AI: <=120s, 1 credit. With allow_long_transcription=true, all successful AI costs 10 credits/started minute, including short videos.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_channel",
+    "title": "YouTube - Channel Details",
+    "description": "Retrieves comprehensive YouTube channel profile data including name, avatar images, subscriber count (subscribers), total video and view counts, join date, tags, and linked social accounts like Twitter and Instagram. Accepts a channelId, handle, or full channel URL as input. Returns channel metadata such as country, email, and external store links when available. Contact fields come from the submitted public profile. To request removal of your own information from Scrape Creators results, email support@scrapecreators.com with the profile URL.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "channelId": {
+          "description": "YouTube channel ID. Provide channelId, handle, or url. (e.g. UC-9-kyTW8ZkZNDHQJ6FgpwQ)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "YouTube channel handle. Provide channelId, handle, or url. (e.g. ThePatMcAfeeShow)",
+          "type": "string"
+        },
+        "url": {
+          "description": "YouTube channel URL. Provide channelId, handle, or url. (e.g. https://www.youtube.com/@ThePatMcAfeeShow)",
+          "type": "string"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_channel_community_posts",
+    "title": "YouTube - Channel Community Posts",
+    "description": "Fetches community posts from a YouTube channel's Posts tab, including post ID, URL, content, images, attached video, like count, publish time, channel info, and a continuationToken when YouTube has more results. Pass a handle or channelId for the first page, then pass continuationToken to page through more posts.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "channelId": {
+          "description": "YouTube channel ID (e.g. UCX6OQ3DkcsbYNE6H8uQQuVA)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "YouTube channel handle (e.g. MrBeast)",
+          "type": "string"
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_channel_lives",
+    "title": "YouTube - Channel Lives",
+    "description": "Fetches live streams and past streams from a YouTube channel's Live tab, including title, URL, thumbnail, view count, publish time, duration, and a continuationToken when YouTube has more results. Pass a handle or channelId for the first page, then pass continuationToken to page through more lives.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "channelId": {
+          "description": "YouTube channel ID (e.g. UCWsDFcIhY2DBi3GB5uykGXA)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "YouTube channel handle (e.g. IShowSpeed)",
+          "type": "string"
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_channel_playlists",
+    "title": "YouTube - Channel Playlists",
+    "description": "Fetches playlists from a YouTube channel's Playlists tab, including playlist ID, title, thumbnail, video count, channel info, playlist URL, and a continuationToken when YouTube has more results. Pass a handle or channelId for the first page, then pass continuationToken to page through more playlists.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "channelId": {
+          "description": "YouTube channel ID (e.g. UCxcTeAKWJca6XyJ37_ZoKIQ)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "YouTube channel handle (e.g. ThePatMcAfeeShow)",
+          "type": "string"
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_channel_shorts",
+    "title": "YouTube - Channel Shorts",
+    "description": "Retrieves a paginated list of short-form videos (Shorts) from a YouTube channel, including each short's title, URL, view count (views), likes, comments, description, and publish date. publishDate is a full ISO 8601 timestamp with an offset when YouTube exposes the exact publish time; otherwise it is null. It does not return date-only strings. Supports sorting by newest or popular; use the continuationToken to page through all results. Returns data in the shorts array.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "YouTube channel handle. Provide handle or channelId. (e.g. starterstory)",
+          "type": "string"
+        },
+        "channelId": {
+          "description": "YouTube channel ID. Provide channelId or handle. (e.g. UC-9-kyTW8ZkZNDHQJ6FgpwQ)",
+          "type": "string"
+        },
+        "sort": {
+          "description": "Sort by newest or popular (e.g. newest)",
+          "type": "string",
+          "enum": [
+            "newest",
+            "popular"
+          ]
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_channel_videos",
+    "title": "YouTube - Channel Videos",
+    "description": "Fetches a paginated list of videos uploaded by a YouTube channel, including each video's title, URL, thumbnail, view count (views), publish date, duration, and description. Supports sorting by latest or popular, and use the continuationToken to page through all results. Optionally include extras like like count, comment count, and descriptions for each video.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "channelId": {
+          "description": "YouTube channel ID (e.g. UC-9-kyTW8ZkZNDHQJ6FgpwQ)",
+          "type": "string"
+        },
+        "handle": {
+          "description": "YouTube channel handle (e.g. ThePatMcAfeeShow)",
+          "type": "string"
+        },
+        "sort": {
+          "description": "Sort by latest or popular (e.g. latest)",
+          "type": "string",
+          "enum": [
+            "latest",
+            "popular"
+          ]
+        },
+        "is_paid_promotions": {
+          "description": "Set true to find videos with creator-declared paid promotion. Cannot combine with filter, uploadDate, sortBy, type, duration, or includeExtras.",
+          "type": "string"
+        },
+        "includeExtras": {
+          "description": "Include like/comment counts and descriptions. Increases errors and may be deprecated; use /v1/youtube/video for full details.",
+          "type": "string"
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      }
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_community_post",
+    "title": "YouTube - Community Post Details",
+    "description": "Retrieves the full details of a YouTube community post, including its text content, attached images, like count, publish date, and associated channel info. Also returns a linked video if the post includes one.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "The URL of the YouTube community post to get (e.g. https://www.youtube.com/post/Ugkxvj2KoApYAXoqLWnKVr6zZe5JjeHrQeP8)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_playlist",
+    "title": "YouTube - Playlist",
+    "description": "Retrieves a page of videos in a YouTube playlist, including each video's title, URL, thumbnail, duration, and channel. Accepts the playlist ID found in the 'list' URL parameter. The first page includes title, owner, and totalVideos. Later pages return videos and continuationToken without playlist metadata. Pass the previous response's continuationToken to get the next page. Stop when continuationToken is null. Each page costs 1 credit.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "playlist_id": {
+          "description": "The ID of the YouTube playlist. In the YouTube URL it will be the 'list' parameter. (e.g. PLP32wGpgzmIlInfgKVFfCwVsxgGqZNIiS)",
+          "type": "string"
+        },
+        "continuationToken": {
+          "description": "Token from the previous response to get the next page. Omit for the first page. Stop when the returned continuationToken is null.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "playlist_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_search",
+    "title": "YouTube - Search",
+    "description": "Searches YouTube by keyword query and returns matching videos, channels, playlists, shorts, shelves, and live streams. Each video result includes title, URL, thumbnail, view count (views), publish date, duration, channel info, and badges. Supports filtering by upload date, sorting by relevance or popularity, and paginating with continuationToken. Set is_paid_promotions=true to search YouTube videos with the paid product placement / sponsorship disclosure.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Search query. Use intitle: for stricter title matching, e.g. intitle:\"Foursquare Swarm\". YouTube may broaden quoted queries when no fresh exact matches exist.",
+          "type": "string"
+        },
+        "uploadDate": {
+          "description": "Upload date",
+          "type": "string",
+          "enum": [
+            "today",
+            "this_week",
+            "this_month",
+            "this_year"
+          ]
+        },
+        "sortBy": {
+          "description": "Sort by (e.g. relevance)",
+          "type": "string",
+          "enum": [
+            "relevance",
+            "popular"
+          ]
+        },
+        "type": {
+          "description": "Type of content to search for (e.g. videos)",
+          "type": "string",
+          "enum": [
+            "videos",
+            "shorts",
+            "channels",
+            "playlists"
+          ]
+        },
+        "duration": {
+          "description": "Duration of the video. Only applies to videos (not shorts). (e.g. under_3_min)",
+          "type": "string",
+          "enum": [
+            "under_3_min",
+            "between_3_and_20_min",
+            "over_20_min"
+          ]
+        },
+        "region": {
+          "description": "Two-letter country code for the proxy location. (e.g. US)",
+          "type": "string"
+        },
+        "includeExtras": {
+          "description": "Include like/comment counts and descriptions; slows the response. Use /v1/youtube/video for full details.",
+          "type": "string"
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_search_hashtag",
+    "title": "YouTube - Search by Hashtag",
+    "description": "Searches YouTube for content matching a specific hashtag and returns matching videos with title, URL, thumbnail, view count (views), publish date, duration, and channel info. Supports pagination via continuationToken and filtering to return all content types or only shorts.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "hashtag": {
+          "description": "Hashtag to search for (e.g. funny)",
+          "type": "string"
+        },
+        "type": {
+          "description": "Search for all types of content or only shorts (e.g. all)",
+          "type": "string",
+          "enum": [
+            "all",
+            "shorts"
+          ]
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "hashtag"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_search_typeahead",
+    "title": "YouTube - Search Typeahead",
+    "description": "Returns the live search suggestions YouTube displays while a user types. Each result includes the suggested text and whether it is a normal query or a channel. When YouTube returns a channel suggestion, the response also includes its public channel ID, handle, name, and thumbnail.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Partial or complete YouTube search query (e.g. mr beast)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_shorts_trending",
+    "title": "YouTube - Trending Shorts",
+    "description": "Fetches approximately 48 currently trending YouTube Shorts (viral/popular short-form videos) per call, returning each short's title, URL, thumbnail, view count (views), like count (likes), comment count, publish date, channel info, keywords, and duration. Each subsequent call returns a fresh batch of different trending shorts.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_video",
+    "title": "YouTube - Video/Short Details",
+    "description": "Fetches full details for a YouTube video or short, including title, description, thumbnail, view count (views), like count (likes), comment count, publish date, duration, genre, keywords, chapters, collaborators, and available caption tracks (subtitles/captions). isPaidPromotion is true when YouTube marks the video as including paid promotion and false when it does not. Also returns related recommended videos in watchNextVideos and channel info for the uploader. When YouTube exposes its public Most replayed graph, most_replayed contains normalized graph buckets in markers and YouTube's highlighted ranges in ranges. The field is null when the graph is not available. YouTube says the graph may be unavailable when the channel has active strikes, the content is potentially inappropriate, the video is too new or has too few views, or its systems deem the video ineligible for another reason. YouTube does not publish fixed age or view-count thresholds. Age-restricted videos return 403 with message: \"This video is age restricted\" because Scrape Creators only uses the public logged-out YouTube source. Need to download a YouTube video? We open sourced our [YouTube downloader](https://github.com/ScrapeCreators/youtube-downloader). You can use it and host it wherever you want. We don't offer a hosted YouTube downloading service because it's expensive and compute-intensive to run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "YouTube video or short URL (e.g. https://youtu.be/gTCi7PaOPLY)",
+          "type": "string"
+        },
+        "language": {
+          "description": "Preferred two-letter response language, such as en, es, or fr. Sets Accept-Language; YouTube may ignore it. (e.g. en)",
+          "type": "string"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_video_comment_replies",
+    "title": "YouTube - Comment Replies",
+    "description": "Fetches replies to a specific comment on a YouTube video, including each reply's text content, author details (name, channel ID, avatar, verified/creator status), like count, and publish date. Requires a continuationToken obtained from the 'repliesContinuationToken' field on comments returned by the Comments endpoint. Supports paginating through additional replies with the continuationToken returned in each response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "continuationToken": {
+          "description": "Use repliesContinuationToken from Comments, then continuationToken from each replies response to paginate. (e.g. Eg0SC2RRdzR3OVdnWGNRGAYygwEaUBIa...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "continuationToken"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_video_comments",
+    "title": "YouTube - Comments",
+    "description": "Fetches comments and replies from a YouTube video, including each comment's text content, author details, like count, reply count, and publish date. Supports ordering by top or newest, and paginating with continuationToken. Limited to approximately 1,000 top comments or 7,000 newest comments.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "YouTube video URL (e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
+          "type": "string"
+        },
+        "order": {
+          "description": "Order of comments (e.g. top)",
+          "type": "string",
+          "enum": [
+            "top",
+            "newest"
+          ]
+        },
+        "continuationToken": {
+          "description": "Use continuationToken from the previous response to get the next page. (e.g. 4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_video_sponsors",
+    "title": "YouTube - Video Sponsors",
+    "description": "Experimental endpoint. Checks a YouTube video for the paid-promotion disclosure and infers likely sponsors/promoted brands from the public description, description links, promo-code text, and transcript. YouTube tells us that a video contains paid promotion, but it does not always tell us the sponsor directly, so this endpoint returns suspected sponsors with confidence and evidence. This is inferred, not an official YouTube sponsor field. Feedback welcome: support@scrapecreators.com",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "YouTube video or short URL (e.g. https://www.youtube.com/watch?v=AVO0ifle-OU)",
+          "type": "string"
+        },
+        "language": {
+          "description": "Two-letter language code for transcript lookup, such as en, es, or fr. (e.g. en)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v1_youtube_video_transcript",
+    "title": "YouTube - Transcript",
+    "description": "Retrieves publicly available captions, subtitles, or transcripts from a YouTube video or Short. Returns both a timestamped transcript array with start/end times and a plain-text version in transcript_only_text. Supports specifying a language code. Videos of any length are supported when YouTube exposes public captions. This endpoint does not use AI transcription. A returned transcript costs 1 credit; missing captions cost 0 credits. If no matching caption track is available, the transcript fields return null.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "YouTube video or short URL (e.g. https://www.youtube.com/watch?v=bjVIDXPP7Uk)",
+          "type": "string"
+        },
+        "language": {
+          "description": "Caption language, e.g. en or en-US; original_audio=true overrides it. Omit for automatic selection. No matching requested or identified original-language captions returns null at no charge. (e.g. en)",
+          "type": "string"
+        },
+        "original_audio": {
+          "description": "Set true for original-language captions only, overriding language. Unidentified original audio or missing captions returns null at no charge. A returned transcript costs 1 credit; no extra lookup.",
+          "type": "boolean"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v2_instagram_media_transcript",
+    "title": "Instagram - Transcript",
+    "description": "Generates AI speech-to-text for an Instagram video post or reel. Returns a transcripts array containing each video's id, shortcode, and text; no speech can produce null entries. Each result also includes transcripts[].transcript_with_timestamp: an array of {start: number, end: number, text: string} sentence/phrase segments, or null when speech or timing is unavailable. Times are seconds relative to each individual video, not the combined carousel. AI timings are approximate, not word-perfect. The existing text remains plain text. No new parameter is required, and pricing is unchanged. By default, successful AI transcription of videos up to 120 seconds (two minutes, inclusive) costs a flat 1 credit per request. Over 120 seconds, videos cannot be AI-transcribed by default. Set allow_long_transcription=true to opt into paid AI with no fixed duration cap: ALL successful AI transcriptions in this mode cost 10 credits per started minute, including short videos: 10 * ceil(duration_seconds / 60). For example, 177 seconds costs 30 credits and an opted-in 60 seconds costs 10 credits. Empty AI results and errors cost 0 credits for AI transcription. For carousels, default pricing stays flat 1 credit per request. With allow_long_transcription=true, sum 10 * ceil(duration_seconds / 60) for each successfully transcribed video, rather than rounding the combined duration; images and empty video transcripts have no AI fee. These routes remain synchronous. Allow at least 30 seconds on your client. Paid long transcription can exceed resource limits or timeouts, so successful transcription of long videos is not guaranteed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Instagram post or reel URL",
+          "type": "string"
+        },
+        "allow_long_transcription": {
+          "description": "Allow AI transcription over 2 minutes. Paid rates apply to short videos too. Enable transcription separately.",
+          "type": "boolean"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v2_instagram_post_comments",
+    "title": "Instagram - Comments",
+    "description": "Retrieves comments on a public Instagram post or reel. Each comment includes the comment text, creation timestamp, reply count when Instagram provides it, and commenter details such as username, user ID, verification status, and profile picture URL. `child_comment_count` can be null when Instagram does not expose the count publicly. Set `include_replies=true` to fetch the first page of replies for every returned comment. This adds `replies`, `replies_cursor`, and `has_more_replies` to each comment. Successful pages with `comments: []` cost 0 credits, even with `include_replies=true`. Pages with comments cost 1 credit, or 15 credits with `include_replies=true`, even if no replies are returned. Errors are not charged. This option is much slower than a normal comments request and may time out at 29 seconds. Supports cursor-based pagination to load additional comment pages.\n\nYou should expect ~90% success rate.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "Instagram post or reel URL. (e.g. https://www.instagram.com/reel/DOq6eV6iIgD)",
+          "type": "string"
+        },
+        "include_replies": {
+          "description": "Include replies for each comment. Costs 15 credits if comments are returned, even without replies; empty pages cost 0. Slower and may time out at 29 seconds.",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "Pass the previous response's cursor for more comments. (e.g. eyJjYWNoZWRfY29tbWVud...)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v2_instagram_reels_search",
+    "title": "Instagram - Search Reels",
+    "description": "Use this when you only want Google-indexed Instagram reels matching a keyword or phrase, with optional date filters and pagination. It returns reel media, engagement, owner, location, and audio details. Results are best-effort rather than a complete Instagram-native search. For Instagram-curated topic posts, use /v1/instagram/search/popular. For an exact hashtag across posts and reels, use /v1/instagram/search/hashtag. Pages 1 through 11 are supported; page 12 or greater returns a 400 response.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Keyword to search for. (e.g. dogs)",
+          "type": "string"
+        },
+        "date_posted": {
+          "description": "Google-indexed date window. Hour/day filters are unsupported because indexing is unreliable for those windows. (e.g. last-week)",
+          "type": "string",
+          "enum": [
+            "last-week",
+            "last-month",
+            "last-year"
+          ]
+        },
+        "page": {
+          "description": "Page number, from 1 to 11. Page 12 or greater returns HTTP 400. (e.g. 1)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v2_instagram_user_posts",
+    "title": "Instagram - Posts",
+    "description": "Returns a paginated feed of a user's public Instagram posts, including reels, photos, videos, and carousels. Each item includes media type, shortcode, caption text, like count, comment count, play count, video URLs, image URLs, tagged users, and the published time in `items[].created_at` as an ISO 8601 UTC date. When supplied by Instagram, the media-level `fbid` is also returned. The original Unix timestamp remains available in `items[].taken_at`. Play counts reflect Instagram-only views and exclude cross-posted Facebook views. Supports cursor-based pagination via next_max_id for scrolling through the full timeline.\n\n### Profile access errors\n\nThese confirmed handle-resolution states on /v1/instagram/user/posts and /v2/instagram/user/posts return success=true even with HTTP 403/404. A confirmed state is a completed lookup, not a scraper failure. This approved boolean correction does not change status codes, messages, fields, or zero-credit billing. Actual retrieval failures remain success=false. Preserve each endpoint's response contract; see the [response-contract changelog](/#response-contract-changelog).\n\nA confirmed age gate returns HTTP 403 and zero credits. Unlike /v1/instagram/profile, these routes do not include age_restricted, handle, or userId in this error response:\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 100,\n  \"credits_charged\": 0,\n  \"error\": \"forbidden\",\n  \"errorStatus\": 403,\n  \"message\": \"Profile is age restricted\"\n}\n```\n\nAn explicit restricted-profile error returns HTTP 404 and zero credits, with the exact message Profile is private:\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 100,\n  \"credits_charged\": 0,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Profile is private\"\n}\n```\n\nAn explicitly confirmed unavailable profile returns HTTP 404 and zero credits:\n\n```json\n{\n  \"success\": true,\n  \"credits_remaining\": 100,\n  \"credits_charged\": 0,\n  \"error\": \"not_found\",\n  \"errorStatus\": 404,\n  \"message\": \"Profile is unavailable on Instagram\"\n}\n```\n\nThese are the explicit handle-resolution error branches, not a blanket description of every historical 404 fallback. The v2 route also retains legacy success=true HTTP-404 bodies (Posts not found, Account doesn't exist, or Profile is restricted). They differ in fields and legacy behavior from the explicit confirmed-state responses above; success=true alone does not distinguish them. No age-vs-region reason field is exposed. A generic login prompt does not establish age gating, and unavailability does not prove deletion. /v1/instagram/post and /v1/tiktok/profile have separate error contracts.\n\nPlay counts can sometimes be inaccurate. Access-response examples distinguish confirmed age gates, restrictions, and unavailable profiles; existing legacy responses are retained.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "Instagram handle",
+          "type": "string"
+        },
+        "require_play_counts": {
+          "description": "Set true to require play_count on returned videos (0 is valid). Missing counts return an uncharged error. [Why counts can be missing](https://scrapecreators.com/blog/instagram-play-counts-missing).",
+          "type": "boolean"
+        },
+        "trim": {
+          "description": "Set to true for a trimmed response.",
+          "type": "boolean"
+        },
+        "next_max_id": {
+          "description": "Pass next_max_id from the previous response for the next page.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v2_tiktok_video",
+    "title": "TikTok - Video Info",
+    "description": "Fetches detailed data for a single TikTok video by URL, including its metadata, engagement stats, and optionally its transcript/captions. Returns `aweme_detail` with `desc` (caption), `statistics` (play_count, digg_count/likes, comment_count, share_count, collect_count), `video` URLs, `author` info, and `music` info; also returns `transcript` in WEBVTT format if `get_transcript=true`. For no-watermark video URLs, use `aweme_detail.video.download_no_watermark_addr.url_list[0]` when it exists. If it is missing and `aweme_detail.video.has_watermark` is false, use `aweme_detail.video.play_addr.url_list[0]` instead. If `has_watermark` is true and `download_no_watermark_addr` is missing, TikTok did not return a no-watermark URL for that video. Also accepts photo/slideshow URLs and returns `image_post_info` when available. Availability is source-specific: a TikTok web page can be blocked in your country while this endpoint still retrieves public metadata, and a post can be missing from the profile feed while this endpoint succeeds. A `404 not_found` means the post could not be retrieved through the endpoint's available public sources; it does not by itself prove global deletion. Keep the last known campaign record and retry later with a relevant `region` rather than marking a post deleted from a single failure. [Examples and troubleshooting](https://docs.scrapecreators.com/tiktok-post-availability). Native captions are opt-in via get_transcript=true and are included in the existing base endpoint price. This detail endpoint does not use AI transcription or an AI fallback; missing captions return no transcript. For AI fallback, use /v1/tiktok/video/transcript. Scrapes a public TikTok video or photo/slideshow. Availability can differ from the web page and profile feed; a not-found response alone does not prove deletion. For no-watermark video URLs, use `download_no_watermark_addr` when present, or `play_addr` when `has_watermark` is false. [Availability guide](https://docs.scrapecreators.com/tiktok-post-availability).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "url": {
+          "description": "TikTok video or photo/slideshow URL (e.g. https://www.tiktok.com/@randomspamvideos25/video/7251387037834595630)",
+          "type": "string"
+        },
+        "region": {
+          "description": "Two-letter country code for the primary source; defaults to US. Try the creator's country if unavailable. Not passed to the fallback; does not guarantee browser/proxy location or retrieval. (e.g. US)",
+          "type": "string"
+        },
+        "get_transcript": {
+          "description": "Set get_transcript=true for native captions at no extra cost. Missing captions return no transcript; this route has no AI fallback. For AI fallback, use /v1/tiktok/video/transcript.",
+          "type": "boolean"
+        },
+        "trim": {
+          "description": "Set to true to get a trimmed response",
+          "type": "boolean"
+        },
+        "download_media": {
+          "description": "Set to true to download the video/images and get back permanent Supabase URLs. Costs 10 credits if media is found, 1 credit otherwise.",
+          "type": "boolean"
+        },
+        "cache_max_age": {
+          "description": "Use a cached response this old or newer for 0 credits. If none is available, fetch live at the endpoint’s normal price. (e.g. 7d)",
+          "type": "string",
+          "enum": [
+            "1d",
+            "3d",
+            "7d",
+            "14d",
+            "30d"
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "v3_tiktok_profile_videos",
+    "title": "TikTok - Profile Videos",
+    "description": "Fetches videos posted by a TikTok user, sortable by latest or most popular — use this to get a creator's video feed or TikToks. Returns `aweme_list`, an array of video objects each containing `aweme_id`, `desc` (caption), `statistics` (play_count, digg_count/likes, comment_count, share_count, collect_count/saves), and `video` (download URLs, duration, cover image). Paginate with `max_cursor` from the previous response, keeping the same `region` and `sort_by` throughout a cursor chain. Known limitation: this feed is not an exhaustive inventory of a creator's public posts. TikTok's web page, single-post lookup, comments, and profile feed use different public sources and request contexts; a post may be retrievable through one and unavailable or missing through another. A missing feed item does not prove deletion, and a returned item does not guarantee browser playback in your country. Try the creator's country with a two-letter `region` code, restarting pagination when changing it, but country selection does not guarantee completeness. Repeated requests for the same page can also return different item sets. For campaign tracking, retain submitted post URLs/IDs and refresh them with `/v2/tiktok/video` rather than relying only on feed discovery. Retry a suspect page within a bounded budget and deduplicate by `aweme_id`; do not merge cursors from separate responses. [Examples and troubleshooting](https://docs.scrapecreators.com/tiktok-post-availability). Scrapes posts from a TikTok profile. TikTok can omit individual posts even after full pagination; region selection does not guarantee complete coverage. [Examples and troubleshooting](https://docs.scrapecreators.com/tiktok-post-availability).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "TikTok handle (e.g. stoolpresidente)",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "TikTok user id. Use this for faster responses. (e.g. 6659752019493208069)",
+          "type": "string"
+        },
+        "sort_by": {
+          "description": "What to sort by (e.g. latest)",
+          "type": "string",
+          "enum": [
+            "latest",
+            "popular"
+          ]
+        },
+        "region": {
+          "description": "Two-letter feed country code; defaults to US. Try another relevant country if the feed is empty. Keep it unchanged while paginating; changing region does not guarantee complete coverage. (e.g. US)",
+          "type": "string"
+        },
+        "include_pinned": {
+          "description": "Include pinned posts; defaults to true. false excludes them, even with trim=true. Keep unchanged while paginating. Pages may be short or empty; follow has_more and max_cursor. Successful pages cost 1 credit, even if empty.",
+          "type": "boolean"
+        },
+        "trim": {
+          "description": "Set to true for a trimmed down version of the response",
+          "type": "boolean"
+        },
+        "max_cursor": {
+          "description": "Cursor to get more videos. Get 'max_cursor' from previous response. (e.g. 1734562353000)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false,
+      "destructiveHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  }
+]

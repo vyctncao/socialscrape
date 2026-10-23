@@ -29,7 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 import yt_dlp
 
-from . import fallback, platforms, selftest, transcribe, ytdlp
+from . import account, fallback, platforms, selftest, transcribe, ytdlp
 from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
@@ -72,6 +72,14 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if settings.api_keys and any(hmac.compare_digest(given, k.encode()) for k in settings.api_keys):
             return await call_next(request)
+        if path == "/mcp":
+            origin = settings.public_url or str(request.base_url).rstrip("/")
+            return JSONResponse(
+                {"jsonrpc": "2.0", "error": {"code": -32600, "message": "Authorization required"}, "id": None},
+                status_code=401,
+                headers={"WWW-Authenticate":
+                         f'Bearer resource_metadata="{origin}/.well-known/oauth-protected-resource/mcp"'},
+            )
         if settings.api_keys or portal:
             err = Unauthorized("Missing or invalid x-api-key header")
             return JSONResponse(err.body(), status_code=err.status)
@@ -149,6 +157,7 @@ def create_app() -> FastAPI:
 
     load_platform_modules(app)
     add_unsupported_routes(app)
+    app.include_router(account.router)
     clear_active_portal()
     if settings.portal_path:
         portal = PortalStore(settings.portal_path)
@@ -157,6 +166,9 @@ def create_app() -> FastAPI:
         install_portal(app, portal)
         fallback.install_routes(app, portal)
         selftest.install_routes(app)
+
+    from .mcp import install_mcp
+    install_mcp(app)
 
     @app.api_route("/favicon.svg", methods=["GET", "HEAD"], include_in_schema=False)
     @app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)

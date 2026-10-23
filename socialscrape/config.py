@@ -96,6 +96,8 @@ def _proxy() -> str | None:
 class Settings:
     # Accepted values for the `x-api-key` header (ASCII). Empty means auth is disabled.
     api_keys: frozenset[str]
+    # Public deployment origin used in authentication discovery challenges.
+    public_url: str
     # SQLite file backing `cache_max_age`. Empty string (the variable set but blank) disables caching.
     cache_path: str
     # Threads available for blocking yt-dlp calls (>= 1).
@@ -131,6 +133,7 @@ def get_settings() -> Settings:
         raise ConfigError(f"SOCIALSCRAPE_TRANSCRIBE must be one of {', '.join(TRANSCRIBE_BACKENDS)}, got {backend!r}")
     return Settings(
         api_keys=frozenset(k.strip() for k in keys.split(",") if k.strip()),
+        public_url=(_env("SOCIALSCRAPE_PUBLIC_URL", "") or "").rstrip("/"),
         cache_path=DEFAULT_CACHE_PATH if raw_cache is None else _path(raw_cache.strip()),
         max_workers=int(_number("SOCIALSCRAPE_MAX_WORKERS", "8", int, minimum=1)),
         request_timeout=_number("SOCIALSCRAPE_REQUEST_TIMEOUT", "180", float, minimum=0, inclusive=False),
