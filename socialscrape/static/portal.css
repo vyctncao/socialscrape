@@ -121,7 +121,7 @@ select option{background:var(--overlay);color:var(--text-1)}
 .badge.bad{background:var(--danger-soft);color:var(--danger)}
 .badge.warn{background:var(--warning-soft);color:var(--warning)}
 .badge.required{font-size:10px;padding:1px 5px;color:var(--text-2);background:var(--surface-3)}
-.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-1);scrollbar-width:thin}
+.table-wrap{position:relative;max-width:100%;overflow:auto;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-1);scrollbar-width:thin}
 table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)}
 th{font-size:11px;font-weight:500;color:var(--text-2);background:var(--surface-2)}
