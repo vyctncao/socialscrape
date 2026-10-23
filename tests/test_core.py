@@ -1743,6 +1743,21 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401
 
 
+def test_usage_groups_daily_requests_by_platform(env, tmp_path, monkeypatch):
+    from socialscrape.main import create_app
+
+    portal = tmp_path / "portal.sqlite3"
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="")
+    c = TestClient(create_app(), base_url="https://testserver")
+    c.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                            "setup_token": "setup"})
+    for path in ("/v1/instagram/basic-profile", "/v1/tiktok/profile/region", "/v1/youtube/shorts/trending"):
+        c.get(path)
+    day = c.get("/portal/api/usage").json()["daily"][-1]
+    assert day == {"instagram": 1, "tiktok": 1, "youtube": 1, "other": 0, "total": 3}
+
+
 def test_request_history_caps_large_response_bodies(env, tmp_path, monkeypatch):
     from socialscrape.main import create_app
 
