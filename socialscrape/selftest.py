@@ -182,14 +182,6 @@ def install_routes(app) -> None:
     @router.get("/portal/api/endpoint-tests")
     async def endpoint_tests(request: Request):
         _require(request)
-        fallback_status = fallback.describe(app)
-        rows = tests()
-        for row in rows:
-            row["operational"] = row["implemented"] or bool(
-                fallback_status and "unsupported" in fallback_status["triggers"]
-                and row["platform"] in fallback_status["platforms"]
-            )
-            row["provider"] = "local" if row["implemented"] else "scrapecreators" if row["operational"] else None
-        return {"fallback": fallback_status, "tests": rows}
+        return {"fallback": fallback.describe(app), "tests": tests()}
 
     app.include_router(router)

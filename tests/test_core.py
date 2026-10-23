@@ -23,8 +23,6 @@ from yt_dlp.utils import DownloadError, ExtractorError, clean_html, unescapeHTML
 def test_every_catalog_path_is_routed(client):
     cov = client.get("/meta/coverage").json()
     assert cov["total"] == len(CATALOG) == 66
-    assert cov["operational"] == cov["implemented"]  # no fallback in the default test app
-    assert all(row["operational"] == (row["status"] == "implemented") for row in cov["endpoints"])
     # FastAPI >= 0.143 nests included routers (no flat `.path`), so read the schema instead.
     routed = set(client.app.openapi()["paths"])
     for row in cov["endpoints"]:

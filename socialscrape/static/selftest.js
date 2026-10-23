@@ -1,16 +1,16 @@
 window.EndpointTests = (() => {
   // Results survive a reload in this browser; response bodies stay in memory only.
-  const STORAGE_KEY = 'socialscrape.endpoint-tests.v3';
+  const STORAGE_KEY = 'socialscrape.endpoint-tests.v2';
   const LEGACY_STORAGE_KEY = 'socialscrape.endpoint-tests.v1';
   const SETUP_ERRORS = new Set(['transcription_disabled', 'transcription_unavailable']);
   const OUTCOMES = {
     idle:['Not run', ''], queued:['Queued', ''], running:['Running', ''], passed:['Passed', 'good'], failed:['Failed', 'bad'],
-    setup:['Needs setup', 'warn'], unsupported:['Unavailable', ''], compatibility:['Compatibility', ''], skipped:['Skipped', ''], stopped:['Stopped', '']
+    setup:['Needs setup', 'warn'], unsupported:['Not supported', ''], skipped:['Skipped', ''], stopped:['Stopped', '']
   };
-  const COUNTED = ['passed', 'failed', 'setup', 'unsupported', 'compatibility', 'skipped', 'stopped', 'idle'];
+  const COUNTED = ['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped', 'idle'];
   const RETRYABLE = new Set(['failed', 'stopped', 'skipped']);
   const PLATFORMS = ['instagram', 'tiktok', 'youtube'];
-  const model = {tests:[], fallback:null, filter:'all', allowFallback:true, results:{}, bodies:new Map(), lastRun:null, run:null};
+  const model = {tests:[], fallback:null, filter:'all', allowFallback:false, results:{}, bodies:new Map(), lastRun:null, run:null};
   let announcementTimer = null, announcements = [];
 
   try {
@@ -64,11 +64,7 @@ window.EndpointTests = (() => {
   }
 
   const testFor = path => model.tests.find(test => test.path === path);
-  const resultFor = path => {
-    if (model.results[path]?.outcome in OUTCOMES) return model.results[path];
-    const test = testFor(path);
-    return {outcome:!test?.implemented && test?.operational ? 'compatibility' : 'idle'};
-  };
+  const resultFor = path => model.results[path]?.outcome in OUTCOMES ? model.results[path] : {outcome:'idle'};
   const usable = test => Boolean(test) && resultFor(test.path).outcome === 'passed' && model.bodies.has(test.path);
   const scope = () => model.tests.filter(test => model.filter === 'all' || test.platform === model.filter);
   const pending = path => Boolean(model.run?.pending.has(path));
@@ -259,12 +255,10 @@ window.EndpointTests = (() => {
     return `<div class="test-params">${items.join('') || '<span class="help">No parameters</span>'}${test.note ? `<small>${esc(test.note)}</small>` : ''}</div>`;
   }
   function resultCell(test) {
-    const result = resultFor(test.path), base = OUTCOMES[result.outcome] || OUTCOMES.idle;
-    const [name, tone] = result.outcome === 'passed' && result.via ? ['Passed via fallback', 'good'] : base;
+    const result = resultFor(test.path), [name, tone] = OUTCOMES[result.outcome] || OUTCOMES.idle;
     const spinner = result.outcome === 'running' ? icon('circle-notch') : '';
     const status = result.status && !['passed', 'unsupported'].includes(result.outcome) ? ` · ${result.status}` : '';
-    const defaultMessage = !test.implemented && result.outcome === 'compatibility' ? 'Operational through the configured compatibility provider.' : !test.implemented && result.outcome === 'unsupported' ? 'No operational provider answered this route.' : '';
-    const message = result.message || defaultMessage;
+    const message = result.message || (!test.implemented && ['idle', 'unsupported'].includes(result.outcome) ? 'Not implemented on this server, which answers 501.' : '');
     const time = result.ms === undefined || ['queued', 'running'].includes(result.outcome) ? '' : `<span class="test-time">${number(result.ms)} ms</span>`;
     return `<div class="test-result"><span class="badge ${tone}">${spinner}${name}${status}</span>${time}${result.via ? '<span class="badge">via ScrapeCreators</span>' : ''}${result.code ? `<code>${esc(result.code)}</code>` : ''}${message ? `<small>${esc(message)}</small>` : ''}</div>`;
   }
@@ -290,7 +284,7 @@ window.EndpointTests = (() => {
     const groups = PLATFORMS.map(platform => [platform, model.tests.filter(test => test.platform === platform).sort((a, b) => b.implemented - a.implemented)]).filter(([, tests]) => tests.length);
     const retry = retryLabel(), filters = [['all', 'All', model.tests.length], ...groups.map(([platform, tests]) => [platform, platformName(platform), tests.length])];
     const fallbackNote = model.fallback
-      ? `<label class="test-option" for="test-allow-fallback"><input id="test-allow-fallback" type="checkbox" ${model.allowFallback ? 'checked' : ''} aria-describedby="test-fallback-help"><span><strong>Test operational routes</strong><small id="test-fallback-help">On by default: compatibility-backed routes run exactly as integrations use them and may spend credits. Turn off only to diagnose local implementations in isolation. Applies to the next run.</small></span></label>`
+      ? `<label class="test-option" for="test-allow-fallback"><input id="test-allow-fallback" type="checkbox" ${model.allowFallback ? 'checked' : ''} aria-describedby="test-fallback-help"><span><strong>Allow ScrapeCreators fallback</strong><small id="test-fallback-help">Off: tests check this server alone and spend no credits. On: unsupported and failing endpoints go to ScrapeCreators, as your integrations’ requests do, which can spend credits. Applies to the next run you start.</small></span></label>`
       : '<p class="help">The ScrapeCreators fallback is off, so tests check this server alone.</p>';
     return layout('Playground', playgroundLede, `${pageTabs('tests')}
       <section class="card test-run" aria-label="Test run">

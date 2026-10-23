@@ -84,12 +84,10 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     assert [test["path"] for test in data["tests"]] == list(ENTRIES)
     by_path = {test["path"]: test for test in data["tests"]}
     video = by_path["/v1/youtube/video"]
-    assert video["implemented"] is True and video["operational"] is True and video["provider"] == "local"
-    assert video["reason"] is None and video["platform"] == "youtube"
+    assert video["implemented"] is True and video["reason"] is None and video["platform"] == "youtube"
     assert video["params"] == selftest.PRESETS["/v1/youtube/video"].params and video["expect"]
     trending = by_path["/v1/youtube/shorts/trending"]
-    assert trending["implemented"] is False and trending["operational"] is False
-    assert trending["provider"] is None and "Trending" in trending["reason"]
+    assert trending["implemented"] is False and "Trending" in trending["reason"]
     [chained] = [test for test in data["tests"] if test["path"] == "/v1/youtube/video/comment/replies"]
     assert chained["derive"] == [{"param": "continuationToken", "source": "/v1/youtube/video/comments",
                                   "pick": selftest.PRESETS[chained["path"]].derive["continuationToken"][1]}]
@@ -115,9 +113,6 @@ def test_the_page_learns_what_falls_back(signed_in):
     c = signed_in(SOCIALSCRAPE_SCRAPECREATORS_API_KEY="sc-key", SOCIALSCRAPE_SCRAPECREATORS_URL="http://127.0.0.1:9")
     falls_back = c.get("/portal/api/endpoint-tests").json()["fallback"]
     assert falls_back["provider"] == "scrapecreators" and falls_back["triggers"] == list(fallback.DEFAULT_TRIGGERS)
-    by_path = {test["path"]: test for test in c.get("/portal/api/endpoint-tests").json()["tests"]}
-    assert by_path["/v1/youtube/shorts/trending"]["operational"] is True
-    assert by_path["/v1/youtube/shorts/trending"]["provider"] == "scrapecreators"
     assert sorted(falls_back["platforms"]) == ["instagram", "tiktok", "youtube"]
     # The page's requests skip it unless the member allows it.
     r = c.get("/v1/youtube/shorts/trending", headers={fallback.HEADER: "OFF"})
@@ -143,8 +138,7 @@ def test_endpoint_test_assets_encode_accessible_run_state_and_mobile_rows():
     root = __import__("pathlib").Path(__file__).parents[1]
     script = (root / "socialscrape/static/selftest.js").read_text()
     styles = (root / "socialscrape/static/selftest.css").read_text()
-    assert "socialscrape.endpoint-tests.v3" in script and "lastRun" in script
-    assert "Test operational routes" in script and "Passed via fallback" in script
+    assert "socialscrape.endpoint-tests.v2" in script and "lastRun" in script
     assert 'aria-live="polite" aria-atomic="true"' in script
     assert 'data-label="Endpoint"' in script and 'data-label="Preset parameters"' in script
     assert 'data-label="Result"' in script and 'data-label="Actions"' in script
