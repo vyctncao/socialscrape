@@ -1694,16 +1694,17 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert script.headers["cache-control"] == "public, max-age=31536000, immutable"
     for name in ("initAccountMenus", "initPlatformPicker", "hidePopovers"):
         assert f"function {name}" in script.text
-    assert "AbortController" in script.text and "sessionStorage" in script.text
+    assert "AbortController" in script.text
     assert owner.get(script_url[1], headers={"if-none-match": script.headers["etag"]}).status_code == 304
     login = TestClient(create_app(), base_url="https://testserver").get("/login").text
     assert f'/assets/appearance.js?v={script_url[2]}' in login
     assert f'/assets/portal.css?v={script_url[2]}' in dashboard and "__ASSET_VERSION__" not in dashboard
     assert f'<script src="/assets/preview.js?v={script_url[2]}">' in dashboard  # the playground's response preview
     assert "const ResponsePreview" in owner.get(f"/assets/preview.js?v={script_url[2]}").text
+    # Related views share a title and a tab row: Usage holds history, Settings holds the fallback.
     for route, title in [("", "Overview"), ("playground", "Playground"), ("keys", "API keys"),
-                         ("team", "Team"), ("history", "Request history"), ("usage", "Usage"),
-                         ("docs", "Documentation"), ("settings", "Platform settings")]:
+                         ("team", "Team"), ("history", "Usage"), ("usage", "Usage"),
+                         ("docs", "Documentation"), ("settings", "Settings"), ("fallback", "Settings")]:
         page = owner.get('/app/' + route).text
         initial = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', page, re.S)[1]
         assert f'<h1>{title}</h1>' in initial
@@ -1711,6 +1712,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
         assert 'aria-hidden="true"' in initial and '__INITIAL_LOADING__' not in page
         if route == 'history':
             assert '<th scope="col">Endpoint</th>' in initial and '<tbody aria-hidden="true"><tr>' in initial
+            assert '<a href="/app/history" aria-current="page">Request history</a>' in initial
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 

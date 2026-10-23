@@ -18,20 +18,15 @@
   <a class="skip-link" href="#view">Skip to content</a>
   <div class="app">
     <aside class="sidebar" id="primary-sidebar" aria-label="Main sidebar">
-      __BRAND__
+      <div class="sidebar-head">__BRAND__</div>
       <nav class="nav" id="nav" aria-label="Main navigation">
-        <p class="nav-group">Workspace</p>
         <a data-page="overview" href="/app" aria-label="Overview" title="Overview"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#squares-four"></use></svg><span class="nav-label">Overview</span></a>
         <a data-page="playground" href="/app/playground" aria-label="Playground" title="Playground"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#compass"></use></svg><span class="nav-label">Playground</span></a>
         <a data-page="keys" href="/app/keys" aria-label="API keys" title="API keys"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#shield-check"></use></svg><span class="nav-label">API keys</span></a>
-        <a data-page="team" href="/app/team" aria-label="Team" title="Team"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#users-three"></use></svg><span class="nav-label">Team</span></a>
-        <p class="nav-group">Developers</p>
-        <a data-page="history" href="/app/history" aria-label="Request history" title="Request history"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#clock"></use></svg><span class="nav-label">Request history</span></a>
         <a data-page="usage" href="/app/usage" aria-label="Usage" title="Usage"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#chart-bar"></use></svg><span class="nav-label">Usage</span></a>
         <a data-page="docs" href="/app/docs" aria-label="Documentation" title="Documentation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span class="nav-label">Documentation</span></a>
-        <a data-page="tests" href="/app/tests" aria-label="Endpoint tests" title="Endpoint tests"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#check"></use></svg><span class="nav-label">Endpoint tests</span></a>
-        <a data-page="settings" href="/app/settings" aria-label="Platform settings" title="Platform settings"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#globe"></use></svg><span class="nav-label">Platform settings</span></a>
-        <a data-page="fallback" href="/app/fallback" aria-label="Fallback" title="Fallback"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#arrows-clockwise"></use></svg><span class="nav-label">Fallback</span></a>
+        <a data-page="team" href="/app/team" aria-label="Team" title="Team" data-owner-only><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#users-three"></use></svg><span class="nav-label">Team</span></a>
+        <a data-page="settings" href="/app/settings" aria-label="Settings" title="Settings" class="nav-pinned" data-owner-only><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#gear-six"></use></svg><span class="nav-label">Settings</span></a>
       </nav>
       <div class="account-row"><button type="button" class="account-trigger" data-account-trigger popovertarget="account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="account-menu"></button><div class="account-popup" id="account-menu" popover="auto" role="dialog" aria-labelledby="account-menu-title"></div></div>
     </aside>
@@ -39,15 +34,12 @@
       <header class="topbar">
         <button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="nav-dialog"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#list"></use></svg></button>
         <button type="button" class="icon-button sidebar-toggle" id="sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" aria-controls="primary-sidebar" title="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#sidebar"></use></svg></button>
+        <div class="topbar-brand">__BRAND__</div>
         <div class="spacer"></div>
-        <a class="header-meta hide-mobile" id="top-key" href="/app/keys" aria-busy="true"><span class="skeleton sk-header" aria-hidden="true"></span><span class="sr-only">Loading API key count</span></a>
-        <span class="header-meta hide-mobile" id="top-requests" aria-busy="true"><span class="skeleton sk-header" aria-hidden="true"></span><span class="sr-only">Loading usage count</span></span>
         <button class="icon-button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme"></button>
-        <a class="ghost header-docs" href="/app/docs"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span>API docs</span></a>
         <div class="route-progress" id="route-progress" aria-hidden="true"><span></span></div>
       </header>
       <main class="content" id="view" tabindex="-1" aria-busy="true">__INITIAL_LOADING__</main>
-      <footer class="content-foot"><span>Social Scrape</span><span class="footer-platforms" aria-label="Supported platforms"></span></footer>
     </div>
   </div>
   <dialog class="nav-drawer" id="nav-dialog" aria-label="Navigation"><div class="drawer-head">__BRAND__<button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><button type="button" class="account-trigger" data-account-trigger popovertarget="mobile-account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="mobile-account-menu"></button><div class="account-popup" id="mobile-account-menu" popover="auto" role="dialog" aria-labelledby="mobile-account-menu-title"></div></div></dialog>

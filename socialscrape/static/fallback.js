@@ -14,49 +14,44 @@ window.FallbackPage = (() => {
   function status(data) {
     if (data.active) return ['On', 'good'];
     if (!data.enabled) return ['Paused', 'warn'];
-    if (!data.api_key.configured) return ['Needs an API key', 'bad'];
+    if (!data.api_key.configured) return ['Needs an API key', 'warn'];
     return ['Off', ''];
-  }
-  function memberPage() {
-    return layout('ScrapeCreators fallback', 'Serve a request through ScrapeCreators when this server can’t.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to configure the ScrapeCreators fallback.')}</section>`);
   }
   function ownerPage(data) {
     const [label, badgeClass] = status(data);
     const keyAction = data.api_key.configured ? 'Replace key' : 'Save key';
     const keyNote = data.api_key.source === 'environment'
       ? `The server’s <code>SOCIALSCRAPE_SCRAPECREATORS_API_KEY</code> is in use. A key saved here takes its place.`
-      : data.api_key.updated_at ? `Saved ${esc(fmt(data.api_key.updated_at))}. The key is encrypted and never shown again.` : 'The key is encrypted and never returned after you save it.';
+      : data.api_key.updated_at ? `Saved ${esc(fmt(data.api_key.updated_at))}. Encrypted and never shown again.` : 'Encrypted and never shown again after you save it.';
     const optionsNote = data.options_source === 'dashboard' && data.options_updated_at ? `Saved ${esc(fmt(data.options_updated_at))}.` : 'Using the server’s environment defaults until you save changes here.';
-    return layout('ScrapeCreators fallback', 'Serve a request through ScrapeCreators when this server can’t.', `
-      <div class="fallback-settings">
-        <section class="card fallback-card"><div class="card-head"><div><div class="eyebrow">Credential</div><h2>API key</h2></div><span class="badge ${data.api_key.configured ? 'good' : 'warn'}">${data.api_key.configured ? 'Configured' : 'Not configured'}</span></div>
-          <div class="setting-section"><div class="setting-copy"><h3>ScrapeCreators API key</h3><p class="muted">Used only when an eligible local request fails.</p><div class="inline-note">${icon('shield-check')}<span>${keyNote}</span></div></div>
-            <form id="fallback-key-form" class="stack"><label class="field" for="fallback-key">${data.api_key.configured ? 'Replacement API key' : 'API key'}<input id="fallback-key" name="value" type="password" required maxlength="512" autocomplete="off" spellcheck="false" aria-describedby="fallback-key-help fallback-key-error"><span class="help" id="fallback-key-help">Paste a ScrapeCreators API key. Whitespace is not allowed.</span></label><div class="field-error" id="fallback-key-error" role="alert" hidden></div><div class="fallback-actions"><button class="primary" type="submit">${keyAction}</button>${data.api_key.source === 'dashboard' ? '<button class="danger" type="button" data-remove-fallback-key>Remove key</button>' : ''}</div></form>
-          </div>
+    return layout('Settings', settingsLede, `${pageTabs('fallback')}
+      <div class="settings-stack fallback-settings">
+        <section class="card fallback-card"><div class="settings-card-head"><div><h2>ScrapeCreators API key</h2><p class="help">Used only when an eligible request fails here.</p></div><span class="badge ${data.api_key.configured ? 'good' : 'warn'}">${data.api_key.configured ? 'Configured' : 'Not configured'}</span></div>
+          <form id="fallback-key-form" class="stack fallback-key-form"><label class="field" for="fallback-key">${data.api_key.configured ? 'Replacement API key' : 'API key'}<input id="fallback-key" name="value" type="password" required maxlength="512" autocomplete="off" spellcheck="false" aria-describedby="fallback-key-help fallback-key-error"><span class="help" id="fallback-key-help">Paste the key without spaces. ${keyNote}</span></label><div class="field-error" id="fallback-key-error" role="alert" hidden></div><div class="fallback-actions"><button class="primary" type="submit">${keyAction}</button>${data.api_key.source === 'dashboard' ? '<button class="danger" type="button" data-remove-fallback-key>Remove key</button>' : ''}</div></form>
         </section>
-        <section class="card fallback-card"><div class="card-head"><div><div class="eyebrow">Behavior</div><h2>Fallback options</h2></div><span class="badge ${badgeClass}">${label}</span></div>
+        <section class="card fallback-card"><div class="settings-card-head"><div><h2>When to fall back</h2><p class="help">Requests stay here unless a selected condition occurs on a selected platform.</p></div><span class="badge ${badgeClass}">${label}</span></div>
           <form id="fallback-options-form" class="fallback-form">
-            ${checkRow('enabled', 'enabled', 'Use ScrapeCreators when a request fails', 'Requests stay local unless one of the selected conditions occurs.', data.enabled)}
+            ${checkRow('enabled', 'enabled', 'Use ScrapeCreators when a request fails', 'Turn this off to pause the fallback without losing the choices below.', data.enabled)}
             <fieldset class="fallback-fieldset"><legend>Fall back when</legend><div class="fallback-checks">${triggers.map(([value, name, copy]) => checkRow('triggers', value, name, copy, data.triggers.includes(value))).join('')}</div></fieldset>
             <fieldset class="fallback-fieldset"><legend>Platforms</legend><div class="fallback-platforms">${platforms.map(([value, name]) => checkRow('platforms', value, name, `Allow fallback for ${name} requests.`, data.platforms.includes(value))).join('')}</div></fieldset>
             <p class="help">${optionsNote}</p><div class="field-error" id="fallback-options-error" role="alert" hidden></div><button class="primary fallback-save" type="submit">Save options</button>
           </form>
         </section>
         <div class="inline-note fallback-note">${icon('arrows-clockwise')}<span>Fallback requests spend ScrapeCreators credits; provider-reported errors cost none, while timeout and network outcomes may still have been charged. Successful answers are cached like any other response, so <code>cache_max_age</code> avoids paying twice. Responses served by ScrapeCreators carry <code>x-socialscrape-fallback: scrapecreators</code> and are marked in Request history.</span></div>
-      </div>`, label);
+      </div>`);
   }
   async function renderPage() {
-    if (PORTAL.role !== 'owner') return memberPage();
+    if (PORTAL.role !== 'owner') return ownerOnly('Settings');
     return ownerPage(await api('/portal/api/settings/fallback'));
   }
   async function submit(form, url, body, success) {
     const button = form.querySelector('button[type="submit"]'), error = form.querySelector('.field-error');
-    if (button.disabled) return;
-    const label = button.textContent;
-    button.disabled = true; button.textContent = 'Saving…'; error.hidden = true;
+    const done = pendingButton(button, 'Saving…');
+    if (!done) return;
+    error.hidden = true;
     try { await api(url, {method:'PUT', body}); await render(); toast(success); }
     catch (err) { error.textContent = err.message; error.hidden = false; }
-    finally { button.disabled = false; button.textContent = label; }
+    finally { done(); }
   }
 
   document.addEventListener('submit', event => {

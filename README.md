@@ -38,7 +38,7 @@ generated from the server's OpenAPI schema. Request history keeps every request,
 for 14 days and up to 256 MiB in all (oldest cleared first); the response cache drops entries older than 30 days and
 keeps at most 256 MiB. Both share the database volume with members and keys, so neither can fill it.
 
-**Endpoint tests** (`/app/tests`) checks what works right now: it calls every endpoint with preset parameters (public
+**Endpoint tests** (a Playground tab, `/app/tests`) checks what works right now: it calls every endpoint with preset parameters (public
 content that should stay up, mostly the live test suite's fixtures, kept in `socialscrape/selftest.py`) and marks each
 one passed, failed, needs setup (a feature this server has turned off, such as AI transcription) or not supported. A
 pass needs a `200`, `success: true` and real data in the fields that preset names. The tests are live requests made with
@@ -52,7 +52,7 @@ owner, then remove it; without that code, nobody can claim an empty deployment. 
 `SOCIALSCRAPE_OWNER_EMAIL` and `SOCIALSCRAPE_OWNER_PASSWORD` can bootstrap the first owner non-interactively. Supply
 all three only as deployment secrets and remove them after the first successful startup—never commit them. Existing
 `SOCIALSCRAPE_API_KEYS` remain accepted for backward compatibility. Owners can configure ordered pools of up to five proxies and five authenticated-account cookie files for Instagram,
-TikTok and YouTube in **Platform settings**. Values are encrypted in the portal database with
+TikTok and YouTube under **Settings → Proxies & accounts**. Values are encrypted in the portal database with
 `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY`, never returned after saving, and applied to new requests immediately. On a
 retryable block or network/login failure, the service advances to the next proxy and account without merging cookie
 jars. Use only dedicated throwaway accounts; the dashboard accepts Netscape `cookies.txt` exports and never stores
@@ -101,7 +101,7 @@ Configuration is through environment variables (the `socialscrape` command takes
 
 ## ScrapeCreators fallback
 
-With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fails here can be answered by ScrapeCreators instead: the same path and params are sent to `https://api.scrapecreators.com` with your ScrapeCreators key, and its answer comes back. Owners set the key and choose when it applies on the dashboard's **Fallback** page (`/app/fallback`), or with the `SOCIALSCRAPE_SCRAPECREATORS_*` variables; a saved dashboard value takes the place of its variable, and changes apply to the next request.
+With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fails here can be answered by ScrapeCreators instead: the same path and params are sent to `https://api.scrapecreators.com` with your ScrapeCreators key, and its answer comes back. Owners set the key and choose when it applies under the dashboard's **Settings → Fallback** (`/app/fallback`), or with the `SOCIALSCRAPE_SCRAPECREATORS_*` variables; a saved dashboard value takes the place of its variable, and changes apply to the next request.
 
 - **When.** Each trigger can be turned on or off, and the fallback limited to some platforms:
 

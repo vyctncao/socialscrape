@@ -707,8 +707,8 @@ def install_portal(app, store: PortalStore) -> None:
 <form method="post" action="{action}">{setup_field}
 <label>Email<input name="email" type="email" autocomplete="email" required></label>
 <label>Password<input name="password" type="password"
-autocomplete="{'new-password' if setup else 'current-password'}" minlength="12" required
-aria-describedby="password-hint"></label><p class="help" id="password-hint">Use at least 12 characters.</p>
+autocomplete="{'new-password' if setup else 'current-password'}" required
+{'minlength="12" aria-describedby="password-hint"' if setup else ''}></label>{'<p class="help" id="password-hint">Use at least 12 characters.</p>' if setup else ''}
 <button class="primary" type="submit" {'disabled' if setup and not setup_enabled else ''}>
 {'Create owner account' if setup else 'Sign in'}</button></form>
 <div class="auth-hint">Access is by invitation. Contact your workspace owner to join.</div>''')

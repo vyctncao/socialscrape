@@ -244,7 +244,7 @@ window.EndpointTests = (() => {
     const fallbackNote = model.fallback
       ? `<label class="test-option" for="test-allow-fallback"><input id="test-allow-fallback" type="checkbox" ${model.allowFallback ? 'checked' : ''} aria-describedby="test-fallback-help"><span><strong>Allow ScrapeCreators fallback</strong><small id="test-fallback-help">Off: tests check this server alone and spend no credits. On: unsupported and failing endpoints go to ScrapeCreators, as your integrations’ requests do, which can spend credits. Applies to the next run you start.</small></span></label>`
       : '<p class="help">The ScrapeCreators fallback is off, so tests check this server alone.</p>';
-    return layout('Endpoint tests', 'Run every endpoint with preset parameters to see what’s working right now.', `
+    return layout('Playground', playgroundLede, `${pageTabs('tests')}
       <section class="card test-run" aria-label="Test run">
         <div class="test-run-head"><div class="test-status" id="test-status">${statusPanel()}</div><div class="test-run-actions"><button class="ghost" type="button" id="test-retry" ${retry.hidden ? 'hidden' : ''}>${retry.text}</button><button class="primary" type="button" id="test-run-all">${runLabel()}</button></div></div>
         <div class="test-run-options"><fieldset class="test-filter"><legend class="sr-only">Platform</legend>${filters.map(([value, name, count]) => `<label><input type="radio" name="test-platform" value="${value}" ${model.filter === value ? 'checked' : ''}><span>${name}</span><small>${number(count)}</small></label>`).join('')}</fieldset>${fallbackNote}</div>

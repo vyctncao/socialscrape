@@ -97,7 +97,8 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     version = re.search(r'/assets/selftest\.js\?v=(\w+)"', page)[1]
     assert f"/assets/selftest.css?v={version}" in page and 'href="/app/tests"' in page
     initial = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', page, re.S)[1]
-    assert "<h1>Endpoint tests</h1>" in initial and 'class="skeleton ' in initial
+    assert "<h1>Playground</h1>" in initial and 'class="skeleton ' in initial
+    assert '<a href="/app/tests" aria-current="page">Endpoint tests</a>' in initial  # a Playground tab
     assert "window.EndpointTests" in c.get(f"/assets/selftest.js?v={version}").text
     # What the page reads as "not supported" when the fallback is skipped.
     unsupported = c.get("/v1/youtube/shorts/trending", headers={fallback.HEADER: "off"})

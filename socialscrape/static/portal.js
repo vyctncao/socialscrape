@@ -9,15 +9,11 @@ const platformFromPath = path => String(path).split('/')[2];
 const platformList = () => platforms.map(platform => `<span class="badge platform-badge">${platformLabel(platform)}</span>`).join('');
 const fmt = time => time ? new Date(time * 1000).toLocaleString() : 'Never';
 const number = value => Number(value).toLocaleString();
+const plural = (count, word, many = `${word}s`) => `${number(count)} ${count === 1 ? word : many}`;
 const mask = key => key ? `${key.prefix}••••••••••••` : 'No API key yet';
 const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0, renderedPage:null, overviewParts:{}};
 const {pendingButton, reveal, cancelReveals} = window.PortalLoading;
 const reads = {};
-const cacheKey = name => `socialscrape:${PORTAL.email}:${name}`;
-function cacheRead(name, maxAge = 5 * 60_000) {
-  try { const item=JSON.parse(sessionStorage.getItem(cacheKey(name))); return item && Date.now()-item.at<maxAge ? item.value : null; } catch { return null; }
-}
-function cacheWrite(name, value) { try { sessionStorage.setItem(cacheKey(name), JSON.stringify({at:Date.now(), value})); } catch {} }
 
 async function api(url, options = {}) {
   const headers = {...options.headers, 'x-csrf-token':PORTAL.csrf};
@@ -64,43 +60,24 @@ function showError(error, selector = '#action-error') {
   element.hidden = false;
   element.textContent = error.message || String(error);
 }
-function headerValue(id, value) {
-  const element = document.getElementById(id);
-  element.textContent = value; element.dataset.loaded = 'true';
-  element.setAttribute('aria-busy', 'false'); element.removeAttribute('title');
-}
-function headerFailure(id, label, error) {
-  const element = document.getElementById(id);
-  if (!element.dataset.loaded) element.textContent = `${label} unavailable`;
-  element.setAttribute('aria-busy', 'false'); element.title = error.message;
-}
-function loadKeys({cached = false} = {}) {
-  const apply = data => {
-    state.keys = data.keys;
-    const active = data.keys.filter(key => !key.revoked_at);
-    headerValue('top-key', `${number(active.length)} active ${active.length === 1 ? 'key' : 'keys'}`);
-    return data.keys;
-  };
-  const saved = cached && cacheRead('keys');
-  if (saved) return Promise.resolve(apply(saved));
-  if (!reads.keys) {
-    $('#top-key').setAttribute('aria-busy','true');
-    reads.keys = api('/portal/api/keys').then(data => { cacheWrite('keys', data); return apply(data); }).finally(() => { reads.keys = null; });
-  }
+function loadKeys() {
+  if (!reads.keys) reads.keys = api('/portal/api/keys').then(data => (state.keys = data.keys)).finally(() => { reads.keys = null; });
   return reads.keys;
 }
-function loadUsage({cached = false} = {}) {
-  const apply = data => {
-    headerValue('top-requests', `${number(data.total)} ${data.total === 1 ? 'request' : 'requests'}`);
-    return data;
-  };
-  const saved = cached && cacheRead('usage', 60_000);
-  if (saved) return Promise.resolve(apply(saved));
-  if (!reads.usage) {
-    $('#top-requests').setAttribute('aria-busy','true');
-    reads.usage = api('/portal/api/usage').then(data => { cacheWrite('usage', data); return apply(data); }).finally(() => { reads.usage = null; });
-  }
+function loadUsage() {
+  if (!reads.usage) reads.usage = api('/portal/api/usage').finally(() => { reads.usage = null; });
   return reads.usage;
+}
+// Related views share one sidebar destination; each tab keeps its own URL for Back and sharing.
+const sections = {
+  playground:[['playground', '/app/playground', 'Request builder'], ['tests', '/app/tests', 'Endpoint tests']],
+  usage:[['usage', '/app/usage', 'Analytics'], ['history', '/app/history', 'Request history']],
+  settings:[['settings', '/app/settings', 'Proxies & accounts'], ['fallback', '/app/fallback', 'Fallback']]
+};
+const sectionOf = current => Object.keys(sections).find(name => sections[name].some(([page]) => page === current)) || current;
+function pageTabs(current) {
+  const name = sectionOf(current);
+  return `<nav class="page-tabs" aria-label="${{playground:'Playground', usage:'Usage', settings:'Settings'}[name]} sections">${sections[name].map(([page, href, label]) => `<a href="${href}"${page === current ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`;
 }
 
 async function overview({retryFailedOnly = false} = {}) {
@@ -114,7 +91,7 @@ async function overview({retryFailedOnly = false} = {}) {
     <div class="metrics-grid">
       <section class="card"><div class="card-title">${icon('chart-bar')}Total requests</div>${usage ? `<div class="stat">${number(usage.total)}</div><div class="stat-label">All time · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</div>` : ''}${failure('usage')}</section>
       <section class="card"><div class="card-title">${icon('shield-check')}Active API keys</div>${active ? `<div class="stat">${number(active?.length)}</div><div class="stat-label">${PORTAL.role === 'owner' ? 'Across your workspace' : 'Created by you'}</div>` : ''}${failure('keys')}</section>
-      <section class="card"><div class="card-title">${icon('globe')}Supported endpoints</div>${coverage ? `<div class="stat">${number(coverage.implemented)}<span class="muted small"> / ${number(coverage.total)}</span></div>` : ''}${failure('coverage')}<div class="stat-label platform-logos">${platforms.map(platform => platformLabel(platform)).join('')}</div></section>
+      <section class="card"><div class="card-title">${icon('globe')}Supported endpoints</div>${coverage ? `<div class="stat">${number(coverage.implemented)}<span class="muted small"> / ${number(coverage.total)}</span></div>` : ''}${failure('coverage')}${coverage ? '<div class="stat-label">Across Instagram, TikTok and YouTube</div>' : ''}</section>
     </div>
     <div class="grid">
       <section class="card quick-start"><div class="eyebrow">Start building</div><h2>From endpoint to integration.</h2><p class="muted">Explore social data with a request, then take the code into your app.</p><div class="steps"><div class="step"><span class="step-number">1</span><div><h3>Create an API key</h3><p>Give each integration its own revocable credential.</p></div></div><div class="step"><span class="step-number">2</span><div><h3>Try an endpoint</h3><p>Choose a platform and send a request in the playground.</p></div></div><div class="step"><span class="step-number">3</span><div><h3>Make it yours</h3><p>Copy a cURL, Node.js, or Python snippet into your project.</p></div></div></div><a class="primary" href="/app/playground">Open playground ${icon('arrow-right')}</a></section>
@@ -139,6 +116,10 @@ async function team() {
     ${tableRegion('Workspace members', `<table><thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">API keys</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${data.members.map(member => `<tr><td>${esc(member.email)}</td><td><span class="badge">${member.role === 'owner' ? 'Owner' : 'Member'}</span></td><td>${number(member.key_count)}</td><td>${fmt(member.created_at)}</td><td>${fmt(member.last_login_at)}</td><td>${member.role === 'member' ? `<button class="danger" data-remove="${member.id}" aria-label="Remove ${esc(member.email)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>`)}`);
 }
 
+const settingsLede = 'Choose how requests reach each platform, and what happens when one fails here.';
+function ownerOnly(title) {
+  return layout(title, settingsLede, `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update proxies, accounts and the fallback.')}</section>`);
+}
 function poolLabel(kind, count) {
   if (!count) return kind === 'proxy' ? 'No proxies' : 'No accounts';
   return `${count} ${kind === 'proxy' ? (count === 1 ? 'proxy' : 'proxies') : (count === 1 ? 'account' : 'accounts')}`;
@@ -154,16 +135,17 @@ async function openPlatformManager(platform, kind, trigger = document.activeElem
   openDialog({title:`${name} ${isProxy ? 'proxies' : 'accounts'}`, description:`Ordered ${isProxy ? 'network' : 'authenticated account'} pool · ${items.length} of 5 configured`, body:`${poolList(platform,kind,items)}<div class="manager-add">${form}</div>`, footer:'<button class="ghost" data-dialog-close>Done</button>'});
 }
 async function settingsPage() {
-  if (PORTAL.role !== 'owner') return layout('Platform settings', 'Credentials and network access by provider.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update platform credentials and proxies.')}</section>`);
+  if (PORTAL.role !== 'owner') return ownerOnly('Settings');
   const data = await api('/portal/api/settings/platforms');
-  const cards = ['instagram','tiktok','youtube'].map(platform => { const item=data[platform]; return `<section class="card provider-summary"><div class="provider-summary-head"><div><div class="eyebrow">Provider</div><h2>${platformLabel(platform)}</h2></div><span class="badge ${item.proxy.length || item.cookies.length ? 'good' : ''}">${item.proxy.length || item.cookies.length ? 'Configured' : 'Anonymous'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)} · automatic failover</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Account cookies</strong><small>${poolLabel('cookies',item.cookies.length)} · isolated cookie jars</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage accounts</button></div></section>`; }).join('');
-  return layout('Platform settings', 'Configure network and account access independently for each provider.', `<div class="provider-summary-grid">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Secrets stay encrypted. Open a manager only when you need to test, reorder, add, or remove an entry.</span></div>`);
+  const cards = ['instagram','tiktok','youtube'].map(platform => { const item=data[platform]; return `<section class="card provider-summary"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2><span class="badge ${item.proxy.length || item.cookies.length ? 'good' : ''}">${item.proxy.length || item.cookies.length ? 'Configured' : 'Not configured'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Account cookies</strong><small>${poolLabel('cookies',item.cookies.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage accounts</button></div></section>`; }).join('');
+  return layout('Settings', settingsLede, `${pageTabs('settings')}<div class="provider-summary-grid">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Secrets stay encrypted. Open a manager only when you need to test, reorder, add, or remove an entry.</span></div>`);
 }
 
+const usageLede = 'Traffic, timing and stored responses for your API requests.';
 async function requestHistory() {
   const data = await api('/portal/api/history?limit=200');
-  return layout('Request history', 'Inspect API activity, response status, and timing.', `
-    <div class="table-caption"><span>Latest ${number(data.requests.length)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
+  return layout('Usage', usageLede, `${pageTabs('history')}
+    <div class="table-caption"><span>Latest ${plural(data.requests.length, 'request')} · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
     ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr class="history-row" tabindex="0" data-history-id="${request.id}" aria-label="Open response from ${esc(fmt(request.created_at))}"><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span>${request.fallback ? ' <span class="badge">via ScrapeCreators</span>' : ''}</td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
 }
 
@@ -205,11 +187,11 @@ async function usage() {
   const series = [['instagram','Instagram'],['tiktok','TikTok'],['youtube','YouTube']];
   const legend = `<ul class="chart-legend" aria-label="Platforms">${series.map(([key]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${platformLabel(key)}</li>`).join('')}</ul>`;
   const chart = data.daily.map((day, index) => { const title=`${labels[index]} — Total ${day.total}; Instagram ${day.instagram}; TikTok ${day.tiktok}; YouTube ${day.youtube}`; return `<div class="bar-stack" tabindex="0" role="img" aria-label="${esc(title)}" style="height:${Math.max(1,day.total/max*100)}%" title="${esc(title)}">${series.map(([key]) => day[key] ? `<span class="bar-segment ${key}" style="height:${day[key]/day.total*100}%"></span>` : '').join('')}</div>`; }).join('');
-  return layout('Usage', 'Understand your API traffic over the last 30 days.', `
-    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${number(total)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}</span></div><span class="badge">30 days</span></div>
+  return layout('Usage', usageLede, `${pageTabs('usage')}
+    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${plural(total, 'request')} · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}</span></div></div>
     ${total ? `${legend}<div class="chart" aria-label="Stacked daily requests by platform. Exact counts are in the table below.">${chart}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
     <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts by platform', `<table><thead><tr><th scope="col">Period ending</th><th scope="col">${platformLabel('instagram')}</th><th scope="col">${platformLabel('tiktok')}</th><th scope="col">${platformLabel('youtube')}</th><th scope="col">Total</th></tr></thead><tbody>${data.daily.map((day,index) => `<tr><td>${labels[index]}</td><td>${number(day.instagram)}</td><td>${number(day.tiktok)}</td><td>${number(day.youtube)}</td><td><strong>${number(day.total)}</strong></td></tr>`).join('')}</tbody></table>`)}</details></section>
-    <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code>${esc(route.path)}</code></strong><small>${number(route.count)} requests</small></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
+    <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param route-row"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code>${esc(route.path)}</code></strong><span>${plural(route.count, 'request')}</span></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
 }
 
 async function spec() {
@@ -221,11 +203,12 @@ function endpoints(schema) {
   return Object.entries(schema.paths).filter(([path, item]) => item.get && platforms.includes(platformFromPath(path))).map(([path, item]) => ({path, op:item.get, platform:platformFromPath(path)}));
 }
 function platformName(platform) { return {youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok'}[platform] || platform; }
+const playgroundLede = 'Try one endpoint at a time, or test them all at once.';
 async function playground() {
   const [schema] = await Promise.all([spec(), loadKeys()]);
   const groups = [...new Set(endpoints(schema).map(endpoint => endpoint.platform))];
   const selected = groups.includes(state.platform) ? state.platform : groups[0];
-  return layout('Playground', 'Explore an endpoint. Make a request. Take the code with you.', `
+  return layout('Playground', playgroundLede, `${pageTabs('playground')}
     <div class="playground"><section class="card playground-config"><div class="section-label">Configure request</div><form class="form-stack" id="request-form"><div class="field"><span id="platform-label">Platform</span><input type="hidden" id="pg-platform" value="${selected}"><button type="button" class="platform-trigger" id="platform-trigger" popovertarget="platform-menu" aria-haspopup="listbox" aria-expanded="false" aria-controls="platform-menu" aria-labelledby="platform-label platform-selected"><span id="platform-selected">${platformLabel(selected)}</span>${icon('caret-down')}</button><div id="platform-menu" class="platform-menu" popover="auto" role="listbox" aria-labelledby="platform-label">${groups.map(group => `<button type="button" class="platform-option" role="option" data-platform-choice="${group}" aria-selected="${selected === group}" tabindex="-1">${platformLabel(group)}${icon('check')}</button>`).join('')}</div></div><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Run as<select id="pg-key"><option value="">Workspace session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">Snippets use your integration’s API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
     <div class="request-workbench"><section class="card"><div class="card-head"><div class="request-info"><span id="request-platform" aria-hidden="true"></span><span class="method">GET</span><code id="request-path"></code></div><button class="icon-button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button></div><div class="code-tabs" role="tablist" aria-label="Code language">${[['curl','cURL'],['node','Node.js'],['python','Python']].map(([lang, label]) => `<button id="tab-${lang}" role="tab" aria-controls="snippet" aria-selected="${state.language === lang}" tabindex="${state.language === lang ? 0 : -1}" data-language="${lang}">${label}</button>`).join('')}</div><pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}" style="margin-top:16px"></pre></section>
     <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status" role="status">Ready</span><button class="icon-button" data-copy="response-raw" aria-label="Copy raw JSON response" title="Copy raw JSON" hidden>${icon('copy')}</button></div></div><div id="response"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
@@ -367,7 +350,6 @@ async function runRequest() {
     for (const done of request.releases) done();
     request.releases.clear();
     paintRequest();
-    loadUsage().catch(error => headerFailure('top-requests','Usage',error));
   }
 }
 
@@ -418,7 +400,7 @@ function confirmAction(title, description, confirmLabel, action) {
     const button = event.currentTarget;
     const done = pendingButton(button, confirmLabel.startsWith('Revoke') ? 'Revoking…' : 'Removing…');
     if (!done) return;
-    try { await action(); await render(); closeDialog(); toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.'})[confirmLabel] || 'Change saved.'); }
+    try { await action(); await render(); closeDialog(); toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.', 'Remove account':'Saved account removed.', 'Remove fallback key':'ScrapeCreators API key removed.'})[confirmLabel] || 'Change saved.'); }
     catch (error) { showError(error, '#dialog-error'); }
     finally { done(); }
   });
@@ -459,14 +441,14 @@ async function submitCreation(form) {
 }
 
 async function testPlatformProxy(button) {
-  const label = button.textContent;
-  button.disabled = true; button.textContent = 'Testing…';
+  const done = pendingButton(button, 'Testing…');
+  if (!done) return;
   try {
     const result = await api(`/portal/api/settings/platforms/${button.dataset.platform}/proxy/${button.dataset.entry}/test`, {method:'POST', timeout:25000});
     const detail = result.ok ? `Working · ${result.exit_ip || 'exit IP unavailable'} · ${number(result.latency_ms)} ms` : `${result.blocked ? 'Blocked by provider' : 'Connection failed'}${result.status ? ` · HTTP ${result.status}` : ''} · ${number(result.latency_ms)} ms`;
     toast(detail);
   } catch (error) { toast(error.message); }
-  finally { button.disabled = false; button.textContent = label; }
+  finally { done(); }
 }
 
 async function savePlatformSetting(form) {
@@ -615,6 +597,9 @@ function focusSelector(element) {
   if (form?.dataset.platform) return `form[data-platform="${form.dataset.platform}"][data-kind="${form.dataset.kind}"] ${element.tagName.toLowerCase()}${element.name ? `[name="${CSS.escape(element.name)}"]` : '[type=submit]'}`;
   return null;
 }
+function viewTitle(view) {
+  return view.querySelector('.page-tabs [aria-current=page]')?.textContent || view.querySelector('h1')?.textContent;
+}
 function commitView(html, current, refresh) {
   const view = $('#view'), skeleton = view.querySelector('.page-skeleton'), focus = refresh ? focusSelector(document.activeElement) : null;
   const overlay = skeleton?.cloneNode(true);
@@ -634,14 +619,12 @@ async function render({retryFailedOnly = false} = {}) {
   else view.insertAdjacentHTML('afterbegin', '<div class="refresh-note" data-refresh-note role="status"><span class="busy-spinner" aria-hidden="true"></span>Refreshing… Your current content stays available.</div>');
   view.setAttribute('aria-busy','true');
   $('#route-progress').hidden = false;
-  const loadingName = view.querySelector('h1')?.textContent || 'page';
+  const loadingName = viewTitle(view) || 'page';
   document.title = `${loadingName} · Social Scrape`;
   $('#loading-status').textContent = `Loading ${loadingName.toLowerCase()}…`;
   const slow = setTimeout(() => { if (renderId === state.renderId) { const caption = view.querySelector('.loading-caption, [data-refresh-note]'); if (caption) caption.textContent = 'Still loading. You can keep using the navigation.'; } }, 10000);
-  if (!retryFailedOnly || state.overviewParts.keys?.status !== 'fulfilled') loadKeys().catch(error => headerFailure('top-key','API keys',error));
-  if (!retryFailedOnly || state.overviewParts.usage?.status !== 'fulfilled') loadUsage().catch(error => headerFailure('top-requests','Usage',error));
   document.querySelectorAll('.nav a').forEach(link => {
-    if (link.dataset.page === current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
+    if (link.dataset.page === sectionOf(current)) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
   const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, tests:EndpointTests.render, settings:settingsPage, fallback:FallbackPage.render};
   try {
@@ -650,7 +633,7 @@ async function render({retryFailedOnly = false} = {}) {
     commitView(html, current, refresh);
     if (current === 'playground') { fillEndpoints(); initPlatformPicker(); paintRequest(); }
     if (current === 'docs') { $('#doc-search').value = state.docSearch; filterDocs(state.docSearch); selectDoc(); }
-    const title = view.querySelector('h1')?.textContent || 'Social Scrape';
+    const title = viewTitle(view) || 'Social Scrape';
     document.title = `${title} · Social Scrape`;
     const count = [...(view.querySelector('.table-caption')?.children || [])].map(element => element.textContent.trim()).join('. ');
     $('#loading-status').textContent = `${title} loaded.${count ? ` ${count}.` : ''}${current === 'overview' && Object.values(state.overviewParts).some(part => part.status === 'rejected') ? ' Some information could not load. Use Try again to retry those sections.' : ''}`;
@@ -686,14 +669,12 @@ function startupFailure(error) {
   const view = $('#view');
   view.setAttribute('aria-busy','false'); $('#route-progress').hidden = true;
   view.innerHTML = layout('Could not load this page', 'Your workspace is still here.', `<section class="card"><div class="form-error" role="alert">${esc(error.message || 'The dashboard could not start. Reload to try again.')}</div><a class="ghost" style="margin-top:20px" href="${esc(location.pathname + location.search + location.hash)}">${icon('arrows-clockwise')}Reload page</a></section>`);
-  for (const [id,label] of [['top-key','API keys'],['top-requests','Usage']]) headerFailure(id,label,error);
   $('#loading-status').textContent = 'The dashboard could not start. Reload the page to try again.';
 }
 function startPortal() {
 initAccountMenus();
-$('.content-foot .footer-platforms').innerHTML = platforms.map(platform => `<span role="img" aria-label="${platformName(platform)}">${platformLabel(platform)}</span>`).join('');
+if (PORTAL.role !== 'owner') document.querySelectorAll('#nav [data-owner-only]').forEach(link => link.remove());
 const mobileNav = $('#nav').cloneNode(true); mobileNav.removeAttribute('id'); $('#mobile-nav').append(mobileNav);
-if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"], [data-page="fallback"]').forEach(link => link.remove());
 $('#mobile-menu').addEventListener('click', () => $('#nav-dialog').showModal());
 $('#dialog').addEventListener('close', () => {
   state.historyRequest = null;
@@ -763,8 +744,6 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('popstate', async event => { saveDraft(); await render(); window.scrollTo(0, event.state?.scrollY || 0); });
 window.addEventListener('hashchange', () => { if (page() === 'docs' && $('#doc-main')) selectDoc(); });
-loadKeys({cached:true}).catch(error => headerFailure('top-key','API keys',error));
-loadUsage({cached:true}).catch(error => headerFailure('top-requests','Usage',error));
 render().catch(startupFailure);
 }
 try { startPortal(); } catch (error) { startupFailure(error); }
