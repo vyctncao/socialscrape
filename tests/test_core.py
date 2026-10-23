@@ -1683,7 +1683,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
                                        "setup_token": "one-time-setup-code"}, follow_redirects=False)
     assert setup.status_code == 303
     dashboard = owner.get("/app").text
-    assert "SocialScrape" in dashboard and "Team workspace" in dashboard
+    assert "Social Scrape" in dashboard and "/app/playground" in dashboard
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#171717">
-  <title>SocialScrape · Mimic</title>
+  <title>Social Scrape</title>
   <link rel="icon" href="/assets/brand/logomark.svg" type="image/svg+xml">
   <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/brand/tokens.css">
@@ -14,28 +14,26 @@
 <body>
   <a class="skip-link" href="#view">Skip to content</a>
   <div class="app">
-    <aside class="sidebar" aria-label="Workspace sidebar">
-      <a class="brand" href="/app" aria-label="SocialScrape overview"><span class="brand-mark" aria-hidden="true"></span><span>SocialScrape<small>by Mimic</small></span></a>
-      <div class="workspace-label"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#users-three"></use></svg><span>Private workspace</span><span class="badge">Team</span></div>
+    <aside class="sidebar" id="primary-sidebar" aria-label="Main sidebar">
+      <a class="brand" href="/app" aria-label="Social Scrape overview"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">Social Scrape</span></a>
       <nav class="nav" id="nav" aria-label="Main navigation">
         <p class="nav-group">Workspace</p>
-        <a data-page="overview" href="/app"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#squares-four"></use></svg><span>Overview</span></a>
-        <a data-page="playground" href="/app/playground"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#compass"></use></svg><span>Playground</span></a>
-        <a data-page="keys" href="/app/keys"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#shield-check"></use></svg><span>API keys</span></a>
-        <a data-page="team" href="/app/team"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#users-three"></use></svg><span>Team</span></a>
+        <a data-page="overview" href="/app" aria-label="Overview" title="Overview"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#squares-four"></use></svg><span class="nav-label">Overview</span></a>
+        <a data-page="playground" href="/app/playground" aria-label="Playground" title="Playground"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#compass"></use></svg><span class="nav-label">Playground</span></a>
+        <a data-page="keys" href="/app/keys" aria-label="API keys" title="API keys"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#shield-check"></use></svg><span class="nav-label">API keys</span></a>
+        <a data-page="team" href="/app/team" aria-label="Team" title="Team"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#users-three"></use></svg><span class="nav-label">Team</span></a>
         <p class="nav-group">Developers</p>
-        <a data-page="history" href="/app/history"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#clock"></use></svg><span>Request history</span></a>
-        <a data-page="usage" href="/app/usage"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#chart-bar"></use></svg><span>Usage</span></a>
-        <a data-page="docs" href="/app/docs"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span>Documentation</span></a>
-        <a data-page="settings" href="/app/settings"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#globe"></use></svg><span>Platform settings</span></a>
+        <a data-page="history" href="/app/history" aria-label="Request history" title="Request history"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#clock"></use></svg><span class="nav-label">Request history</span></a>
+        <a data-page="usage" href="/app/usage" aria-label="Usage" title="Usage"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#chart-bar"></use></svg><span class="nav-label">Usage</span></a>
+        <a data-page="docs" href="/app/docs" aria-label="Documentation" title="Documentation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span class="nav-label">Documentation</span></a>
+        <a data-page="settings" href="/app/settings" aria-label="Platform settings" title="Platform settings"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#globe"></use></svg><span class="nav-label">Platform settings</span></a>
       </nav>
-      <div class="sidebar-foot"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#shield-check"></use></svg><div>Built for your team<small>Private, invite-only access.</small></div></div>
-      <div class="account-row"><span class="person-avatar" id="user-initial" aria-hidden="true"></span><div class="account-copy"><strong id="user-role">Workspace member</strong><span>__USER_EMAIL_HTML__</span></div><form action="/logout" method="post"><button class="icon-button" aria-label="Sign out" title="Sign out"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#arrow-right"></use></svg></button></form></div>
+      <div class="account-row"><button type="button" class="account-trigger" data-account-trigger popovertarget="account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="account-menu"></button><div class="account-popup" id="account-menu" popover="auto" role="dialog" aria-labelledby="account-menu-title"></div></div>
     </aside>
     <div class="main">
       <header class="topbar">
         <button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="nav-dialog"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#list"></use></svg></button>
-        <div class="top-workspace"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#shield-check"></use></svg><span>Team workspace</span></div>
+        <button type="button" class="icon-button sidebar-toggle" id="sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" aria-controls="primary-sidebar" title="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#sidebar"></use></svg></button>
         <div class="spacer"></div>
         <a class="header-meta hide-mobile" id="top-key" href="/app/keys">API keys</a>
         <span class="header-meta hide-mobile" id="top-requests">Loading usage…</span>
@@ -43,10 +41,10 @@
         <a class="ghost header-docs" href="/app/docs"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span>API docs</span></a>
       </header>
       <main class="content" id="view" tabindex="-1" aria-busy="true"><div class="loading-state" role="status">Loading workspace…</div></main>
-      <footer class="content-foot"><span>SocialScrape</span><span>YouTube · TikTok · Instagram</span></footer>
+      <footer class="content-foot"><span>Social Scrape</span><span class="footer-platforms" aria-label="Supported platforms"></span></footer>
     </div>
   </div>
-  <dialog class="nav-drawer" id="nav-dialog" aria-label="Workspace navigation"><div class="drawer-head"><a class="brand" href="/app"><span class="brand-mark" aria-hidden="true"></span><span>SocialScrape<small>by Mimic</small></span></a><button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><span>__USER_EMAIL_HTML__</span><form action="/logout" method="post"><button class="ghost">Sign out</button></form></div></dialog>
+  <dialog class="nav-drawer" id="nav-dialog" aria-label="Navigation"><div class="drawer-head"><a class="brand" href="/app"><span class="brand-mark" aria-hidden="true"></span><span>Social Scrape</span></a><button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><button type="button" class="account-trigger" data-account-trigger popovertarget="mobile-account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="mobile-account-menu"></button><div class="account-popup" id="mobile-account-menu" popover="auto" role="dialog" aria-labelledby="mobile-account-menu-title"></div></div></dialog>
   <dialog class="modal" id="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"></dialog>
   <div class="toast-region" id="toasts" role="status" aria-live="polite"></div>
   <script>window.PORTAL=__PORTAL__</script>
