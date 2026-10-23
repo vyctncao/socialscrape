@@ -751,7 +751,9 @@ function focusSelector(element) {
   return null;
 }
 function viewTitle(view) {
-  return view.querySelector('.page-tabs [aria-current=page]')?.textContent || view.querySelector('[data-loading-title]')?.dataset.loadingTitle || view.querySelector('h1')?.textContent;
+  // The fading skeleton stays in the view during the reveal; only live content names the page.
+  const live = selector => [...view.querySelectorAll(selector)].find(element => !element.closest('.loading-overlay'));
+  return live('.page-tabs [aria-current=page]')?.textContent || live('[data-loading-title]')?.dataset.loadingTitle || live('h1')?.textContent;
 }
 function commitView(html, current, refresh) {
   const view = $('#view'), skeleton = view.querySelector('.page-skeleton'), focus = refresh ? focusSelector(document.activeElement) : null;
