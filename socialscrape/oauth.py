@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import html
+import re
 import secrets
 import sqlite3
 import time
@@ -22,6 +23,9 @@ SCOPE = "mcp:tools"
 CODE_SECONDS = 600
 ACCESS_SECONDS = 3600
 REFRESH_SECONDS = 60 * 60 * 24 * 30
+PKCE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}\Z")
+PKCE_VERIFIER = re.compile(r"[A-Za-z0-9._~-]{43,128}\Z")
+TOKEN_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 
 
 def origin_for(request: Request) -> str:
@@ -34,7 +38,7 @@ def resource_for(request: Request) -> str:
 
 def _oauth_error(error: str, description: str, status: int = 400) -> JSONResponse:
     return JSONResponse({"error": error, "error_description": description}, status_code=status,
-                        headers={"Cache-Control": "no-store"})
+                        headers=TOKEN_HEADERS)
 
 
 def _redirect(uri: str, **values: str) -> RedirectResponse:
@@ -129,8 +133,9 @@ def install_oauth(app: FastAPI) -> None:
         if fields["redirect_uri"] not in client["redirect_uris"]:
             return None, _oauth_error("invalid_request", "redirect_uri is not registered")
         checks = ((fields["response_type"] == "code", "response_type must be code"),
-                  (fields["code_challenge_method"] == "S256" and bool(fields["code_challenge"]),
-                   "PKCE with code_challenge_method S256 is required"),
+                  (fields["code_challenge_method"] == "S256" and
+                   bool(PKCE_CHALLENGE.fullmatch(fields["code_challenge"])),
+                   "PKCE S256 code_challenge must be 43 base64url characters"),
                   (fields["scope"] == SCOPE, f"scope must be {SCOPE}"),
                   (fields["resource"] == resource_for(request), "resource does not match this MCP server"))
         for valid, description in checks:
@@ -186,9 +191,11 @@ def install_oauth(app: FastAPI) -> None:
         if resource != resource_for(request):
             return _oauth_error("invalid_target", "resource does not match this MCP server")
         if grant == "authorization_code":
+            verifier = str(form.get("code_verifier", ""))
+            if not PKCE_VERIFIER.fullmatch(verifier):
+                return _oauth_error("invalid_grant", "code_verifier must be 43-128 unreserved characters")
             result = store.oauth_exchange_code(str(form.get("code", "")), str(form.get("client_id", "")),
-                                               str(form.get("redirect_uri", "")), str(form.get("code_verifier", "")),
-                                               resource)
+                                               str(form.get("redirect_uri", "")), verifier, resource)
         elif grant == "refresh_token":
             result = store.oauth_refresh(str(form.get("refresh_token", "")), str(form.get("client_id", "")), resource)
         else:
@@ -197,4 +204,4 @@ def install_oauth(app: FastAPI) -> None:
             return _oauth_error("invalid_grant", "Grant is invalid, expired, already used, or does not match the request")
         access, refresh = result
         return JSONResponse({"access_token": access, "token_type": "Bearer", "expires_in": ACCESS_SECONDS,
-                             "refresh_token": refresh, "scope": SCOPE}, headers={"Cache-Control": "no-store"})
+                             "refresh_token": refresh, "scope": SCOPE}, headers=TOKEN_HEADERS)

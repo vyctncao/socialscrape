@@ -51,6 +51,8 @@ def login(client):
 def approve(client, params, csrf=None):
     page = client.get("/oauth/authorize", params=params)
     assert page.status_code == 200
+    assert page.headers["content-security-policy"] == "frame-ancestors 'none'"
+    assert page.headers["x-frame-options"] == "DENY"
     csrf = csrf if csrf is not None else re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
     response = client.post("/oauth/authorize", data={**params, "csrf": csrf, "decision": "approve"},
                            follow_redirects=False)
@@ -81,12 +83,21 @@ def test_full_oauth_flow_and_refresh(oauth_client):
     assert unauthenticated.status_code == 303
     assert unauthenticated.headers["location"].startswith("/login?next=")
     login(client)
+    session_only = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+    assert session_only.status_code == 401
+    assert "resource_metadata=" in session_only.headers["www-authenticate"]
     code = approve(client, params)
     token_response = exchange(client, client_id, code)
     assert token_response.status_code == 200
     tokens = token_response.json()
     assert tokens["token_type"] == "Bearer" and tokens["scope"] == "mcp:tools"
     assert token_response.headers["cache-control"] == "no-store"
+    assert token_response.headers["pragma"] == "no-cache"
+
+    for scheme in ("Bearer", "bearer", "BEARER"):
+        listed = client.post("/mcp", headers={"Authorization": scheme + " " + tokens["access_token"]},
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+        assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 70
 
     listed = client.post("/mcp", headers={"Authorization": "Bearer " + tokens["access_token"]},
         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
@@ -112,7 +123,26 @@ def test_registration_and_authorization_validation(oauth_client):
     assert client.get("/oauth/authorize", params={**good, "redirect_uri": "https://evil.example/cb"}).status_code == 400
     assert client.get("/oauth/authorize", params={**good, "code_challenge_method": "plain"}).status_code == 400
     assert client.get("/oauth/authorize", params={k: v for k, v in good.items() if k != "code_challenge"}).status_code == 400
+    for challenge in ("a" * 42, "a" * 44, "a" * 42 + "."):
+        response = client.get("/oauth/authorize", params={**good, "code_challenge": challenge})
+        assert response.status_code == 400
+        assert response.headers["pragma"] == "no-cache"
     assert client.post("/oauth/authorize", data={**good, "decision": "approve"}).status_code == 403
+
+
+def test_pkce_verifier_boundaries(oauth_client):
+    client = oauth_client
+    client_id = register(client)
+    login(client)
+    for verifier in ("a" * 43, "b" * 128, "A._~-" * 9):
+        code = approve(client, authorize_params(client_id, verifier=verifier))
+        assert exchange(client, client_id, code, verifier=verifier).status_code == 200
+    for verifier in ("a", "a" * 42, "a" * 129, "a" * 42 + "!"):
+        code = approve(client, authorize_params(client_id))
+        response = exchange(client, client_id, code, verifier=verifier)
+        assert response.status_code == 400
+        assert response.json()["error"] == "invalid_grant"
+        assert response.headers["pragma"] == "no-cache"
 
 
 def test_code_binding_single_use_and_expiry(oauth_client):

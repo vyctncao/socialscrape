@@ -435,7 +435,9 @@ class PortalStore:
 
     def oauth_exchange_code(self, code: str, client_id: str, redirect_uri: str, verifier: str,
                             resource: str) -> tuple[str, str] | None:
-        from .oauth import _challenge
+        from .oauth import PKCE_VERIFIER, _challenge
+        if not PKCE_VERIFIER.fullmatch(verifier):
+            return None
         now = time.time()
         with self._lock:
             row = self._conn.execute("SELECT * FROM oauth_codes WHERE code_hash=?", (self._token_hash(code),)).fetchone()
@@ -773,7 +775,8 @@ content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</ti
 </div><aside class="auth-art" aria-label="Social Scrape artwork">
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
-</aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''))
+</aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''),
+                        headers={"Content-Security-Policy": "frame-ancestors 'none'", "X-Frame-Options": "DENY"})
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:

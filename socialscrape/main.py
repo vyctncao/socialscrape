@@ -59,13 +59,15 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         oauth_route = request.url.path.startswith(OAUTH_PUBLIC_PREFIXES)
         if path in public_paths or portal_route or oauth_route:
             return await call_next(request)
-        bearer = request.headers.get("authorization", "")
-        if path == "/mcp" and bearer.startswith("Bearer ") and request.headers.get("x-api-key"):
+        authorization = request.headers.get("authorization", "")
+        parts = authorization.split(None, 1)
+        bearer_token = parts[1] if len(parts) == 2 and parts[0].casefold() == "bearer" else None
+        if path == "/mcp" and bearer_token is not None and request.headers.get("x-api-key"):
             return JSONResponse({"jsonrpc": "2.0", "error": {"code": -32600,
                                  "message": "Send only one authentication credential"}, "id": None}, status_code=400)
-        if portal and bearer.startswith("Bearer "):
+        if portal and bearer_token is not None:
             origin = settings.public_url or str(request.base_url).rstrip("/")
-            if principal := portal.authenticate_bearer(bearer[7:], origin + "/mcp"):
+            if principal := portal.authenticate_bearer(bearer_token, origin + "/mcp"):
                 request.state.principal = principal
                 return await call_next(request)
             if path == "/mcp":
@@ -76,7 +78,8 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
                 )
             err = Unauthorized("Missing or invalid bearer token")
             return JSONResponse(err.body(), status_code=err.status)
-        if portal and (principal := portal.principal_for_session(request.cookies.get("socialscrape_session"))):
+        if path != "/mcp" and portal and (
+                principal := portal.principal_for_session(request.cookies.get("socialscrape_session"))):
             request.state.principal = principal
             selected = request.headers.get("x-portal-key-id", "")
             if selected.isascii() and selected.isdigit() and portal.key_available_to(principal, int(selected)):
