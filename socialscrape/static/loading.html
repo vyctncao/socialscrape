@@ -1,0 +1,74 @@
+<!-- Inert page shapes shared by the first server response and client navigation. -->
+<template data-loading-page="overview">
+  <div class="page-skeleton" data-loading-page="overview">
+    <div class="page-head"><div><h1>Overview</h1><p class="lede">Your social data workspace. Everything you need to start building.</p></div></div>
+    <div class="metrics-grid" aria-hidden="true">
+      <section class="card skeleton-metric"><i class="skeleton sk-label"></i><i class="skeleton sk-number"></i><i class="skeleton sk-copy"></i></section>
+      <section class="card skeleton-metric"><i class="skeleton sk-label"></i><i class="skeleton sk-number"></i><i class="skeleton sk-copy"></i></section>
+      <section class="card skeleton-metric"><i class="skeleton sk-label"></i><i class="skeleton sk-number"></i><i class="skeleton sk-copy"></i></section>
+    </div>
+    <div class="grid" aria-hidden="true">
+      <section class="card skeleton-guide"><i class="skeleton sk-label"></i><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><div class="skeleton-steps"><div><i class="skeleton sk-avatar"></i><span><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></span></div><div><i class="skeleton sk-avatar"></i><span><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></span></div><div><i class="skeleton sk-avatar"></i><span><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></span></div></div><i class="skeleton sk-button"></i></section>
+      <div class="stack"><section class="card skeleton-panel"><i class="skeleton sk-heading"></i><i class="skeleton sk-field"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-button"></i></section><section class="card skeleton-panel"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-button"></i></section></div>
+    </div>
+    <p class="loading-caption">Loading overview…</p>
+  </div>
+</template>
+<template data-loading-page="keys">
+  <div class="page-skeleton" data-loading-page="keys">
+    <div class="page-head"><div><h1>API keys</h1><p class="lede">Separate credentials for each person, app, and integration.</p></div></div>
+    <section class="card" aria-hidden="true"><div class="skeleton-form-row"><div><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i></div><i class="skeleton sk-button"></i></div><i class="skeleton sk-line"></i></section>
+    <div class="table-caption"><h2>Workspace credentials</h2></div>
+    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="API keys loading"><table><thead><tr><th>Name</th><th>Key</th><th>Owner</th><th>Created</th><th>Last used</th><th>Status / action</th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="5" data-skeleton-columns="6"></tbody></table></div>
+    <p class="loading-caption">Loading API keys…</p>
+  </div>
+</template>
+<template data-loading-page="team">
+  <div class="page-skeleton" data-loading-page="team">
+    <div class="page-head"><div><h1>Team</h1><p class="lede">A private workspace, shared by invitation.</p></div></div>
+    <section class="card skeleton-panel" aria-hidden="true"><i class="skeleton sk-heading"></i><div class="skeleton-form-row"><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div><i class="skeleton sk-copy"></i></section>
+    <div class="table-caption"><h2>Workspace members</h2></div>
+    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="Team members loading"><table><thead><tr><th>Member</th><th>Role</th><th>API keys</th><th>Joined</th><th>Last sign-in</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="4" data-skeleton-columns="6"></tbody></table></div>
+    <p class="loading-caption">Loading team…</p>
+  </div>
+</template>
+<template data-loading-page="history">
+  <div class="page-skeleton" data-loading-page="history">
+    <div class="page-head"><div><h1>Request history</h1><p class="lede">Inspect API activity, response status, and timing.</p></div></div>
+    <div class="table-caption" aria-hidden="true"><i class="skeleton sk-copy"></i><i class="skeleton sk-label"></i></div>
+    <div class="table-wrap skeleton-table" role="region" tabindex="0" aria-label="Request history loading"><table><thead><tr><th>Time</th><th>API key</th><th>Endpoint</th><th>Response</th><th>Duration</th><th>Cache</th></tr></thead><tbody aria-hidden="true" data-skeleton-rows="7" data-skeleton-columns="6"></tbody></table></div>
+    <p class="loading-caption">Loading request history…</p>
+  </div>
+</template>
+<template data-loading-page="usage">
+  <div class="page-skeleton" data-loading-page="usage">
+    <div class="page-head"><div><h1>Usage</h1><p class="lede">Understand your API traffic over the last 30 days.</p></div></div>
+    <section class="card"><div class="card-head"><h2>Request volume</h2><span class="badge">30 days</span></div><div aria-hidden="true"><i class="skeleton sk-copy"></i><i class="skeleton sk-chart"></i><i class="skeleton sk-label"></i></div></section>
+    <section class="card skeleton-panel skeleton-section"><h2>Most used endpoints</h2><div aria-hidden="true"><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></div></section>
+    <p class="loading-caption">Loading usage…</p>
+  </div>
+</template>
+<template data-loading-page="playground">
+  <div class="page-skeleton" data-loading-page="playground">
+    <div class="page-head"><div><h1>Playground</h1><p class="lede">Explore an endpoint. Make a request. Take the code with you.</p></div></div>
+    <div class="playground" aria-hidden="true"><section class="card playground-config skeleton-form"><i class="skeleton sk-label"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-field"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-field"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-field"></i><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-button sk-full"></i></section><div class="stack"><section class="card skeleton-code"><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></section><section class="card skeleton-response"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></section></div></div>
+    <p class="loading-caption">Loading playground…</p>
+  </div>
+</template>
+<template data-loading-page="docs">
+  <div class="page-skeleton" data-loading-page="docs">
+    <div class="docs"><aside class="docs-nav skeleton-form" aria-hidden="true"><i class="skeleton sk-field"></i><i class="skeleton sk-label"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-line"></i></aside><article class="doc-content"><h1>Documentation</h1><div class="skeleton-article" aria-hidden="true"><i class="skeleton sk-copy"></i><div class="card skeleton-code"><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i></div></article></div>
+    <p class="loading-caption">Loading documentation…</p>
+  </div>
+</template>
+<template data-loading-page="settings">
+  <div class="page-skeleton" data-loading-page="settings">
+    <div class="page-head"><div><h1>Platform settings</h1><p class="lede">Configure ordered backup pools independently for Instagram, TikTok, and YouTube.</p></div></div>
+    <div class="platform-settings">
+      <section class="card skeleton-settings"><div class="card-head"><h2 class="platform-heading"><img class="platform-icon" src="/assets/brand/platforms/instagram.svg?v=__ASSET_VERSION__" alt="" width="20" height="20">Instagram</h2></div><div class="skeleton-settings-grid" aria-hidden="true"><div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></div><div><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div></div><div class="skeleton-settings-grid" aria-hidden="true"><div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i><i class="skeleton sk-copy"></i></div><div><i class="skeleton sk-label"></i><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div></div></section>
+      <section class="card skeleton-settings"><div class="card-head"><h2 class="platform-heading"><img class="platform-icon" src="/assets/brand/platforms/tiktok.svg?v=__ASSET_VERSION__" alt="" width="20" height="20">TikTok</h2></div><div class="skeleton-settings-grid" aria-hidden="true"><div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i></div><div><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div></div></section>
+      <section class="card skeleton-settings"><div class="card-head"><h2 class="platform-heading"><img class="platform-icon" src="/assets/brand/platforms/youtube.svg?v=__ASSET_VERSION__" alt="" width="20" height="20">YouTube</h2></div><div class="skeleton-settings-grid" aria-hidden="true"><div><i class="skeleton sk-heading"></i><i class="skeleton sk-line"></i></div><div><i class="skeleton sk-field"></i><i class="skeleton sk-button"></i></div></div></section>
+    </div>
+    <p class="loading-caption">Loading platform settings…</p>
+  </div>
+</template>

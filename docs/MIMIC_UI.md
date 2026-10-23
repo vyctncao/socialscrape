@@ -71,3 +71,45 @@ published code with `stackdome create release --stack socialscrape-app --wait`.
 The Stackfile schema cannot represent `custom_domain`; applying that file would
 clear the saved hostname. Preserve the resource's domain, secret connection,
 and persistent volume when changing its deployment definition.
+
+Loading follows the kit's `ui-motion-loading` and feedback specimens. The first
+server response and client navigation share inert page templates in `loading.html`,
+so all eight destinations reserve their own cards, forms, charts, and table rows.
+Table headings and the workspace shell stay visible. The header counters use
+placeholders until real counts arrive, and only fetching regions are marked busy.
+The templates participate in the UI asset digest and ship in the Python wheel.
+
+Refreshes retain existing content. A partial overview keeps successful sections
+and retries only failed reads; a failed refresh keeps the last loaded rows with
+inline recovery. Read requests time out after 30 seconds rather than leaving an
+indefinite placeholder. Route indicators are indeterminate, and a slow-load label
+describes the actual wait without inventing progress or delaying a response.
+
+Real content is committed and busy state cleared before a short opacity reveal.
+Decorative overlays are inaccessible and pointer-free, with their final opacity
+committed before playback. Reduced motion, including a preference change during
+playback, removes the overlay and exposes usable content immediately.
+
+The shared pending-button helper keeps each action's width and focus, provides a
+spinner and specific label, and guards repeat submissions. Authentication,
+credential creation, settings, ordering, confirmations, and playground requests
+use it. Failures restore the action and preserve entered values. The playground
+keeps the previous response readable while a request runs and retains its actual
+pending/result state across in-app navigation; it never reports client navigation
+as server cancellation.
+
+Browser startup is a required check after portal merges. A syntactically valid
+script can still stop the whole UI if a shared initializer was removed while its
+call remained. Smoke-test both the account menu and platform picker in addition
+to waiting for every page's busy state to settle.
+
+Account-scoped session cache can fill the header while fresh reads run; those
+reads share in-flight promises with the active page. Startup failures expose a
+normal reload link even when script initialization has stopped. Stored response
+dialogs open immediately with a local skeleton, preserve close-button focus,
+offer inline retry, and ignore completions after the dialog closes.
+
+The `/ui-ux-pro-max` review supplements Mimic's visual rules with checks for
+keyboard focus, stable pending controls, explicit recovery, responsive layouts,
+contrast, and reduced motion. Its generated palette and typography do not replace
+Mimic's workspace tokens or original platform artwork.

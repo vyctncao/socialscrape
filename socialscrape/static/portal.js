@@ -10,7 +10,9 @@ const platformList = () => platforms.map(platform => `<span class="badge platfor
 const fmt = time => time ? new Date(time * 1000).toLocaleString() : 'Never';
 const number = value => Number(value).toLocaleString();
 const mask = key => key ? `${key.prefix}••••••••••••` : 'No API key yet';
-const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0};
+const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0, renderedPage:null, overviewParts:{}};
+const {pendingButton, reveal, cancelReveals} = window.PortalLoading;
+const reads = {};
 const cacheKey = name => `socialscrape:${PORTAL.email}:${name}`;
 function cacheRead(name, maxAge = 5 * 60_000) {
   try { const item=JSON.parse(sessionStorage.getItem(cacheKey(name))); return item && Date.now()-item.at<maxAge ? item.value : null; } catch { return null; }
@@ -18,16 +20,18 @@ function cacheRead(name, maxAge = 5 * 60_000) {
 function cacheWrite(name, value) { try { sessionStorage.setItem(cacheKey(name), JSON.stringify({at:Date.now(), value})); } catch {} }
 
 async function api(url, options = {}) {
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), options.timeout || 8000);
   const headers = {...options.headers, 'x-csrf-token':PORTAL.csrf};
   if (options.body && typeof options.body !== 'string') {
     headers['content-type'] = 'application/json';
     options.body = JSON.stringify(options.body);
   }
+  const read = !options.method || options.method === 'GET';
+  const controller = read && !options.signal ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 30000) : null;
   let response;
-  try { response = await fetch(url, {...options, headers, signal:controller.signal}); }
-  catch (error) { throw Error(error.name === 'AbortError' ? 'The dashboard took too long to respond. Try again.' : 'Could not reach the dashboard. Check your connection and retry.'); }
-  finally { clearTimeout(timer); }
+  try { response = await fetch(url, {...options, headers, ...(controller ? {signal:controller.signal} : {})}); }
+  catch (error) { throw Error(controller?.signal.aborted ? 'This page took too long to load. Check your connection, then try again.' : 'Could not reach the dashboard. Check your connection, then try again.'); }
+  finally { clearTimeout(timeout); }
   if (response.status === 401) { location.href = '/login'; throw Error('Sign in to continue.'); }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -60,33 +64,61 @@ function showError(error, selector = '#action-error') {
   element.hidden = false;
   element.textContent = error.message || String(error);
 }
-async function loadKeys({cached = false} = {}) {
-  const data = cached && cacheRead('keys') || await api('/portal/api/keys');
-  cacheWrite('keys', data);
-  state.keys = data.keys;
-  const active = data.keys.filter(key => !key.revoked_at);
-  $('#top-key').textContent = `${number(active.length)} active ${active.length === 1 ? 'key' : 'keys'}`;
-  return data.keys;
+function headerValue(id, value) {
+  const element = document.getElementById(id);
+  element.textContent = value; element.dataset.loaded = 'true';
+  element.setAttribute('aria-busy', 'false'); element.removeAttribute('title');
 }
-async function loadUsage({cached = false} = {}) {
-  const data = cached && cacheRead('usage', 60_000) || await api('/portal/api/usage');
-  cacheWrite('usage', data);
-  $('#top-requests').textContent = `${number(data.total)} ${data.total === 1 ? 'request' : 'requests'}`;
-  return data;
+function headerFailure(id, label, error) {
+  const element = document.getElementById(id);
+  if (!element.dataset.loaded) element.textContent = `${label} unavailable`;
+  element.setAttribute('aria-busy', 'false'); element.title = error.message;
+}
+function loadKeys({cached = false} = {}) {
+  const apply = data => {
+    state.keys = data.keys;
+    const active = data.keys.filter(key => !key.revoked_at);
+    headerValue('top-key', `${number(active.length)} active ${active.length === 1 ? 'key' : 'keys'}`);
+    return data.keys;
+  };
+  const saved = cached && cacheRead('keys');
+  if (saved) return Promise.resolve(apply(saved));
+  if (!reads.keys) {
+    $('#top-key').setAttribute('aria-busy','true');
+    reads.keys = api('/portal/api/keys').then(data => { cacheWrite('keys', data); return apply(data); }).finally(() => { reads.keys = null; });
+  }
+  return reads.keys;
+}
+function loadUsage({cached = false} = {}) {
+  const apply = data => {
+    headerValue('top-requests', `${number(data.total)} ${data.total === 1 ? 'request' : 'requests'}`);
+    return data;
+  };
+  const saved = cached && cacheRead('usage', 60_000);
+  if (saved) return Promise.resolve(apply(saved));
+  if (!reads.usage) {
+    $('#top-requests').setAttribute('aria-busy','true');
+    reads.usage = api('/portal/api/usage').then(data => { cacheWrite('usage', data); return apply(data); }).finally(() => { reads.usage = null; });
+  }
+  return reads.usage;
 }
 
-async function overview() {
-  const [keys, usage, coverage] = await Promise.all([loadKeys(), loadUsage(), api('/meta/coverage')]);
-  const active = keys.filter(key => !key.revoked_at);
+async function overview({retryFailedOnly = false} = {}) {
+  const names = ['keys','usage','coverage'], loaders = [loadKeys,loadUsage,() => api('/meta/coverage')];
+  const results = await Promise.allSettled(names.map((name, index) => retryFailedOnly && state.overviewParts[name]?.status === 'fulfilled' ? state.overviewParts[name].value : loaders[index]()));
+  results.forEach((result, index) => { state.overviewParts[names[index]] = result.status === 'fulfilled' ? result : {...result, value:state.overviewParts[names[index]]?.value}; });
+  const keys = state.overviewParts.keys.value, usage = state.overviewParts.usage.value, coverage = state.overviewParts.coverage.value;
+  const active = keys?.filter(key => !key.revoked_at);
+  const failure = name => state.overviewParts[name].status === 'rejected' ? `<div class="metric-load-error"><p class="help">${state.overviewParts[name].value ? 'Showing the last loaded value. Could not refresh.' : 'Could not load this information.'}</p><button class="text-link" data-retry-overview>Try again</button></div>` : '';
   return layout('Overview', 'Your social data workspace. Everything you need to start building.', `
     <div class="metrics-grid">
-      <section class="card"><div class="card-title">${icon('chart-bar')}Total requests</div><div class="stat">${number(usage.total)}</div><div class="stat-label">All time · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</div></section>
-      <section class="card"><div class="card-title">${icon('shield-check')}Active API keys</div><div class="stat">${number(active.length)}</div><div class="stat-label">${PORTAL.role === 'owner' ? 'Across your workspace' : 'Created by you'}</div></section>
-      <section class="card"><div class="card-title">${icon('globe')}Supported endpoints</div><div class="stat">${number(coverage.implemented)}<span class="muted small"> / ${number(coverage.total)}</span></div><div class="stat-label platform-logos">${platforms.map(platform => platformLabel(platform)).join('')}</div></section>
+      <section class="card"><div class="card-title">${icon('chart-bar')}Total requests</div>${usage ? `<div class="stat">${number(usage.total)}</div><div class="stat-label">All time · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</div>` : ''}${failure('usage')}</section>
+      <section class="card"><div class="card-title">${icon('shield-check')}Active API keys</div>${active ? `<div class="stat">${number(active?.length)}</div><div class="stat-label">${PORTAL.role === 'owner' ? 'Across your workspace' : 'Created by you'}</div>` : ''}${failure('keys')}</section>
+      <section class="card"><div class="card-title">${icon('globe')}Supported endpoints</div>${coverage ? `<div class="stat">${number(coverage.implemented)}<span class="muted small"> / ${number(coverage.total)}</span></div>` : ''}${failure('coverage')}<div class="stat-label platform-logos">${platforms.map(platform => platformLabel(platform)).join('')}</div></section>
     </div>
     <div class="grid">
       <section class="card quick-start"><div class="eyebrow">Start building</div><h2>From endpoint to integration.</h2><p class="muted">Explore social data with a request, then take the code into your app.</p><div class="steps"><div class="step"><span class="step-number">1</span><div><h3>Create an API key</h3><p>Give each integration its own revocable credential.</p></div></div><div class="step"><span class="step-number">2</span><div><h3>Try an endpoint</h3><p>Choose a platform and send a request in the playground.</p></div></div><div class="step"><span class="step-number">3</span><div><h3>Make it yours</h3><p>Copy a cURL, Node.js, or Python snippet into your project.</p></div></div></div><a class="primary" href="/app/playground">Open playground ${icon('arrow-right')}</a></section>
-      <div class="stack"><section class="card"><div class="card-head"><h2>Your API access</h2>${icon('shield-check')}</div><div class="keybox"><code>${esc(mask(active[0]))}</code></div><p class="help">${active.length ? 'Pass your key in the x-api-key header. Full secrets are only shown when you create them.' : 'Create your first API key to connect an integration. You can explore the playground with your workspace session.'}</p><a class="ghost" style="margin-top:20px" href="/app/keys">${active.length ? 'Manage API keys' : 'Create API key'} ${icon('arrow-right')}</a></section><section class="card"><div class="card-head"><h2>One API. Three platforms.</h2>${icon('globe')}</div><p class="help">Read public social data through a consistent API. Endpoint availability depends on each platform.</p><div class="platforms">${platformList()}</div><a class="text-link small" style="display:inline-block;margin-top:20px" href="/app/docs">Explore the documentation</a></section></div>
+      <div class="stack"><section class="card"><div class="card-head"><h2>Your API access</h2>${icon('shield-check')}</div><div class="keybox"><code>${esc(keys ? mask(active?.[0]) : 'Key status unavailable')}</code></div><p class="help">${!keys ? 'Could not load your key status. Open API keys to try again.' : active?.length ? 'Pass your key in the x-api-key header. Full secrets are only shown when you create them.' : 'Create your first API key to connect an integration. You can explore the playground with your workspace session.'}</p><a class="ghost" style="margin-top:20px" href="/app/keys">${!keys ? 'Open API keys' : active?.length ? 'Manage API keys' : 'Create API key'} ${icon('arrow-right')}</a></section><section class="card"><div class="card-head"><h2>One API. Three platforms.</h2>${icon('globe')}</div><p class="help">Read public social data through a consistent API. Endpoint availability depends on each platform.</p><div class="platforms">${platformList()}</div><a class="text-link small" style="display:inline-block;margin-top:20px" href="/app/docs">Explore the documentation</a></section></div>
     </div>`);
 }
 
@@ -129,12 +161,34 @@ async function requestHistory() {
 }
 
 async function showHistoryDetail(id) {
-  const detail = await api(`/portal/api/history/${id}`);
-  let formatted = detail.response || '';
-  try { formatted = JSON.stringify(JSON.parse(formatted), null, 2); } catch {}
-  const route = detail.path + (detail.query ? `?${detail.query}` : '');
-  openDialog({title:`${detail.method} ${detail.path}`, description:`${detail.status} · ${number(detail.duration_ms)} ms · ${detail.cached ? 'Cache hit' : 'Live'}`, body:`<dl class="history-facts"><div><dt>Time</dt><dd>${esc(fmt(detail.created_at))}</dd></div><div><dt>API key</dt><dd>${esc(detail.prefix || 'Workspace session')}</dd></div><div><dt>Request</dt><dd><code>${esc(route)}</code></dd></div></dl>${detail.response_truncated ? '<div class="inline-note">The stored response was capped at 2 MiB.</div>' : ''}<pre class="code history-response" id="history-response" tabindex="0"></pre>`, footer:`<button class="ghost" data-dialog-close>Close</button><button class="primary" data-copy="history-response">${icon('copy')}Copy response</button>`});
-  $('#history-response').textContent = formatted || 'No response body was stored for this request.';
+  if (state.historyRequest?.id === id) return;
+  const request = {id}; state.historyRequest = request;
+  openDialog({title:'Request response', description:'Loading the stored response…', body:`<div class="history-detail-loading"><div class="history-facts" aria-hidden="true">${Array.from({length:3}, () => '<div><div class="skeleton sk-label"></div><div class="skeleton sk-line"></div></div>').join('')}</div><div class="response-skeleton history-response" aria-hidden="true">${'<span class="skeleton sk-line"></span>'.repeat(8)}</div></div>`, footer:'<button class="ghost" data-dialog-close>Close</button>'});
+  const body = $('#dialog .modal-body'); body.setAttribute('aria-busy','true');
+  $('#loading-status').textContent = 'Loading stored response…';
+  try {
+    const detail = await api(`/portal/api/history/${id}`);
+    if (state.historyRequest !== request || !$('#dialog').open) return;
+    let formatted = detail.response || '';
+    try { ResponsePreview.parseLossless(formatted); formatted = ResponsePreview.indent(formatted.trim()); } catch {}
+    const route = detail.path + (detail.query ? `?${detail.query}` : '');
+    const overlay = body.querySelector('.history-detail-loading');
+    const content = document.createElement('div');
+    content.innerHTML = `<dl class="history-facts"><div><dt>Time</dt><dd>${esc(fmt(detail.created_at))}</dd></div><div><dt>API key</dt><dd>${esc(detail.prefix || 'Workspace session')}</dd></div><div><dt>Request</dt><dd><code>${esc(route)}</code></dd></div></dl>${detail.response_truncated ? '<div class="inline-note">The stored response was capped at 2 MiB.</div>' : ''}<pre class="code history-response" id="history-response" tabindex="0"></pre>`;
+    content.querySelector('pre').textContent = formatted || 'No response body was stored for this request.';
+    $('#dialog-title').textContent = `${detail.method} ${detail.path}`;
+    $('#dialog-description').textContent = `${detail.status} · ${number(detail.duration_ms)} ms · ${detail.cached ? 'Cache hit' : 'Live'}`;
+    body.prepend(content); body.setAttribute('aria-busy','false');
+    overlay.classList.add('loading-overlay'); reveal(content, overlay);
+    $('#dialog .modal-foot').insertAdjacentHTML('beforeend', `<button class="primary" data-copy="history-response">${icon('copy')}Copy response</button>`);
+    $('#loading-status').textContent = `Stored response loaded. Status ${detail.status}.`;
+  } catch (error) {
+    if (state.historyRequest !== request || !$('#dialog').open) return;
+    $('#dialog-description').textContent = 'The stored response could not load.';
+    body.querySelector('.history-detail-loading').innerHTML = `<div class="history-response"><div class="form-error" role="alert">${esc(error.message)}</div><button class="ghost" data-history-retry="${esc(id)}">${icon('arrows-clockwise')}Try again</button></div>`;
+    body.setAttribute('aria-busy','false');
+    $('#loading-status').textContent = 'Stored response could not load. Try again when you are ready.';
+  } finally { if (state.historyRequest === request) state.historyRequest = null; }
 }
 
 async function usage() {
@@ -142,33 +196,39 @@ async function usage() {
   const total = data.daily.reduce((sum, day) => sum + day.total, 0), max = Math.max(...data.daily.map(day => day.total), 1);
   const labels = data.daily.map((_, index) => { const date = new Date(); date.setDate(date.getDate() - 29 + index); return date.toLocaleDateString(undefined, {month:'short', day:'numeric'}); });
   const series = [['instagram','Instagram'],['tiktok','TikTok'],['youtube','YouTube']];
-  const legend = `<ul class="chart-legend" aria-label="Platforms">${series.map(([key,label]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${label}</li>`).join('')}</ul>`;
+  const legend = `<ul class="chart-legend" aria-label="Platforms">${series.map(([key]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${platformLabel(key)}</li>`).join('')}</ul>`;
   const chart = data.daily.map((day, index) => { const title=`${labels[index]} — Total ${day.total}; Instagram ${day.instagram}; TikTok ${day.tiktok}; YouTube ${day.youtube}`; return `<div class="bar-stack" tabindex="0" role="img" aria-label="${esc(title)}" style="height:${Math.max(1,day.total/max*100)}%" title="${esc(title)}">${series.map(([key]) => day[key] ? `<span class="bar-segment ${key}" style="height:${day[key]/day.total*100}%"></span>` : '').join('')}</div>`; }).join('');
   return layout('Usage', 'Understand your API traffic over the last 30 days.', `
     <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${number(total)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days</span></div><span class="badge">30 days</span></div>
     ${total ? `${legend}<div class="chart" aria-label="Stacked daily requests by platform. Exact counts are in the table below.">${chart}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
-    <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts by platform', `<table><thead><tr><th scope="col">Period ending</th><th scope="col">Instagram</th><th scope="col">TikTok</th><th scope="col">YouTube</th><th scope="col">Total</th></tr></thead><tbody>${data.daily.map((day,index) => `<tr><td>${labels[index]}</td><td>${number(day.instagram)}</td><td>${number(day.tiktok)}</td><td>${number(day.youtube)}</td><td><strong>${number(day.total)}</strong></td></tr>`).join('')}</tbody></table>`)}</details></section>
+    <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts by platform', `<table><thead><tr><th scope="col">Period ending</th><th scope="col">${platformLabel('instagram')}</th><th scope="col">${platformLabel('tiktok')}</th><th scope="col">${platformLabel('youtube')}</th><th scope="col">Total</th></tr></thead><tbody>${data.daily.map((day,index) => `<tr><td>${labels[index]}</td><td>${number(day.instagram)}</td><td>${number(day.tiktok)}</td><td>${number(day.youtube)}</td><td><strong>${number(day.total)}</strong></td></tr>`).join('')}</tbody></table>`)}</details></section>
     <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code>${esc(route.path)}</code></strong><small>${number(route.count)} requests</small></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
 }
 
 async function spec() {
-  if (!state.spec) state.spec = await api('/openapi.json');
-  return state.spec;
+  if (state.spec) return state.spec;
+  if (!reads.spec) reads.spec = api('/openapi.json').then(schema => (state.spec = schema)).finally(() => { reads.spec = null; });
+  return reads.spec;
 }
 function endpoints(schema) {
   return Object.entries(schema.paths).filter(([path, item]) => item.get && platforms.includes(platformFromPath(path))).map(([path, item]) => ({path, op:item.get, platform:platformFromPath(path)}));
 }
 function platformName(platform) { return {youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok'}[platform] || platform; }
 async function playground() {
-  const schema = await spec(), groups = [...new Set(endpoints(schema).map(endpoint => endpoint.platform))];
+  const [schema] = await Promise.all([spec(), loadKeys()]);
+  const groups = [...new Set(endpoints(schema).map(endpoint => endpoint.platform))];
   const selected = groups.includes(state.platform) ? state.platform : groups[0];
-  await loadKeys();
   return layout('Playground', 'Explore an endpoint. Make a request. Take the code with you.', `
     <div class="playground"><section class="card playground-config"><div class="section-label">Configure request</div><form class="form-stack" id="request-form"><div class="field"><span id="platform-label">Platform</span><input type="hidden" id="pg-platform" value="${selected}"><button type="button" class="platform-trigger" id="platform-trigger" popovertarget="platform-menu" aria-haspopup="listbox" aria-expanded="false" aria-controls="platform-menu" aria-labelledby="platform-label platform-selected"><span id="platform-selected">${platformLabel(selected)}</span>${icon('caret-down')}</button><div id="platform-menu" class="platform-menu" popover="auto" role="listbox" aria-labelledby="platform-label">${groups.map(group => `<button type="button" class="platform-option" role="option" data-platform-choice="${group}" aria-selected="${selected === group}" tabindex="-1">${platformLabel(group)}${icon('check')}</button>`).join('')}</div></div><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Run as<select id="pg-key"><option value="">Workspace session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">Snippets use your integration’s API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
     <div class="request-workbench"><section class="card"><div class="card-head"><div class="request-info"><span id="request-platform" aria-hidden="true"></span><span class="method">GET</span><code id="request-path"></code></div><button class="icon-button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button></div><div class="code-tabs" role="tablist" aria-label="Code language">${[['curl','cURL'],['node','Node.js'],['python','Python']].map(([lang, label]) => `<button id="tab-${lang}" role="tab" aria-controls="snippet" aria-selected="${state.language === lang}" tabindex="${state.language === lang ? 0 : -1}" data-language="${lang}">${label}</button>`).join('')}</div><pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}" style="margin-top:16px"></pre></section>
     <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status" role="status">Ready</span><button class="icon-button" data-copy="response-raw" aria-label="Copy raw JSON response" title="Copy raw JSON" hidden>${icon('copy')}</button></div></div><div id="response"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
 }
 function saveDraft() {
+  const responseView = $('#response [data-response-view][aria-selected=true]')?.dataset.responseView;
+  if (responseView && state.request?.path === state.endpoint) {
+    const response = state.request.pending || state.request.error ? state.request.previous : state.request;
+    if (response) response.view = responseView;
+  }
   if (!state.endpoint || !$('#pg-params')?.children.length) return;
   state.drafts[state.endpoint] = Object.fromEntries([...document.querySelectorAll('[data-param]')].map(input => [input.dataset.param, input.value]));
 }
@@ -203,6 +263,13 @@ function fillParams() {
   $('#endpoint-note').hidden = !unsupported;
   $('#endpoint-note').innerHTML = `${icon('warning-circle')}<span>This endpoint is part of the compatibility API but is not implemented. Running it returns 501. <a href="/app/docs#${encodeURIComponent(state.endpoint)}">View details</a></span>`;
   $('#request-error').hidden = true;
+  if (state.request?.path === state.endpoint) paintRequest();
+  else {
+    $('#response').innerHTML = emptyState('compass', 'Your response starts here', 'Choose an endpoint and run a request to see the result.');
+    $('#response').setAttribute('aria-busy','false');
+    $('#response-status').className = 'badge'; $('#response-status').textContent = 'Ready';
+    $('[data-copy="response-raw"]').hidden = true;
+  }
   updateSnippet();
 }
 function params() {
@@ -227,38 +294,73 @@ function updateSnippet() {
   });
   saveDraft();
 }
-async function runRequest() {
-  const button = $('#run-request'), responseArea = $('#response'), status = $('#response-status');
-  if (button.disabled) return;
-  updateSnippet();
-  button.disabled = true;
-  button.innerHTML = `${icon('circle-notch')}Running request…`;
-  $('#request-error').hidden = true;
-  status.className = 'badge'; status.textContent = 'Running';
-  responseArea.setAttribute('aria-busy', 'true');
-  const copy = $('[data-copy="response-raw"]'); copy.hidden = true;
-  const query = params(), path = $('#pg-endpoint').value, url = path + (query.size ? '?' + query : '');
-  const keyId = $('#pg-key').value;
-  const fields = [...$('#request-form').querySelectorAll('input, select, #platform-trigger')];
-  fields.forEach(field => { field.disabled = true; });
-  const started = performance.now();
-  try {
-    const response = await fetch(url, {headers:{'x-portal-key-id':keyId}});
-    const text = await response.text();
-    if (!responseArea.isConnected) return;
-    ResponsePreview.mount(responseArea, {path, status:response.status, text});
-    status.className = `badge ${response.ok ? 'good' : 'bad'}`;
-    status.textContent = `${response.status} ${response.ok ? 'OK' : 'Error'} · ${number(Math.round(performance.now() - started))} ms`;
+function paintRequest() {
+  const request = state.request, form = $('#request-form');
+  if (!form || !request || $('#pg-endpoint').value !== request.path) return;
+  const area = $('#response'), badge = $('#response-status'), button = $('#run-request'), copy = $('[data-copy="response-raw"]');
+  const mount = response => {
+    area.innerHTML = '<div class="response-content"></div>';
+    const content = area.firstChild;
+    ResponsePreview.mount(content, response);
+    return content;
+  };
+  area.setAttribute('aria-busy', String(request.pending));
+  form.querySelectorAll('input, select, #platform-trigger').forEach(field => { field.disabled = request.pending; });
+  if (request.pending) {
+    const done = pendingButton(button, 'Running request…');
+    if (done) request.releases.add(done);
+    badge.className = 'badge'; badge.textContent = request.slow ? 'Still running' : 'Running';
+    copy.hidden = true;
+    if (request.previous) {
+      if (!area.querySelector('#response-raw')) mount(request.previous);
+      if (!area.querySelector('.previous-response')) area.insertAdjacentHTML('afterbegin', '<p class="previous-response">Showing your previous response while this request runs.</p>');
+    } else if (!area.querySelector('.response-skeleton')) {
+      area.innerHTML = `<div class="response-skeleton" aria-hidden="true">${'<i class="skeleton sk-line"></i>'.repeat(8)}</div>`;
+    }
+    return;
+  }
+  const skeleton = area.querySelector('.response-skeleton')?.cloneNode(true);
+  if (request.text !== undefined || request.previous) {
+    const content = request.error && area.querySelector('#response-raw') ? area.querySelector('.response-content') : mount(request.text !== undefined ? request : request.previous);
+    if (request.error) {
+      if (!area.querySelector('.previous-response')) area.insertAdjacentHTML('afterbegin', '<p class="previous-response"></p>');
+      area.querySelector('.previous-response').textContent = 'Your previous response is shown below.';
+    }
+    if (skeleton && !request.error) { skeleton.classList.add('loading-overlay'); area.append(skeleton); reveal(content, skeleton); }
     copy.hidden = false;
-    loadUsage().catch(() => { $('#top-requests').textContent = 'Usage could not refresh'; });
+  } else { area.innerHTML = emptyState('globe', 'No response received', 'Check your connection and run the request again. Your request fields are preserved.'); copy.hidden = true; }
+  badge.className = `badge ${request.error || !request.ok ? 'bad' : 'good'}`;
+  badge.textContent = request.error ? 'Connection failed' : `${request.status} ${request.ok ? 'OK' : 'Error'} · ${number(request.duration)} ms`;
+  if (request.error) showError(Error(request.error), '#request-error');
+}
+async function runRequest() {
+  if (state.request?.pending) return;
+  updateSnippet();
+  const query = params(), path = $('#pg-endpoint').value, keyId = $('#pg-key').value;
+  const last = state.request?.path === path ? state.request : null;
+  const previous = last?.text !== undefined ? {path:last.path,status:last.status,text:last.text,view:last.view} : last?.previous;
+  const request = {path, pending:true, releases:new Set(), previous, started:performance.now()};
+  state.request = request;
+  $('#request-error').hidden = true;
+  $('#platform-menu')?.hidePopover();
+  paintRequest();
+  $('#loading-status').textContent = 'Request running. Waiting for the API response.';
+  const slow = setTimeout(() => { request.slow = true; paintRequest(); }, 10000);
+  try {
+    const response = await fetch(path + (query.size ? '?' + query : ''), {headers:{'x-portal-key-id':keyId}});
+    request.text = await response.text();
+    request.status = response.status; request.ok = response.ok;
+    request.duration = Math.round(performance.now() - request.started);
+    $('#loading-status').textContent = `Request finished with status ${response.status}.`;
   } catch {
-    if (!responseArea.isConnected) return;
-    status.className = 'badge bad'; status.textContent = 'Connection failed';
-    showError(Error('Could not reach the API. Check your connection, then run the request again.'), '#request-error');
+    request.error = 'Could not read the API response. Check your connection, then run the request again. Your request fields are preserved.';
+    $('#loading-status').textContent = 'The response could not be received. Your request fields are preserved.';
   } finally {
-    fields.forEach(field => { field.disabled = false; });
-    button.disabled = false; button.innerHTML = `${icon('play')}Run request`;
-    responseArea.setAttribute('aria-busy', 'false');
+    clearTimeout(slow); request.pending = false;
+    for (const done of request.releases) done();
+    request.releases.clear();
+    paintRequest();
+    loadUsage().catch(error => headerFailure('top-requests','Usage',error));
   }
 }
 
@@ -294,9 +396,11 @@ let dialogTrigger;
 function closeDialog() { $('#dialog').close(); }
 function openDialog({title, description, body, footer}) {
   const dialog = $('#dialog');
-  dialogTrigger = document.activeElement;
+  const alreadyOpen = dialog.open;
+  if (!alreadyOpen) dialogTrigger = document.activeElement;
   dialog.innerHTML = `<header class="modal-head"><div><h2 id="dialog-title">${esc(title)}</h2><p id="dialog-description">${esc(description)}</p></div><button class="icon-button" data-dialog-close aria-label="Close dialog">${icon('x')}</button></header><div class="modal-body">${body}<div class="field-error" id="dialog-error" role="alert" hidden></div></div><footer class="modal-foot">${footer}</footer>`;
-  dialog.showModal();
+  if (!alreadyOpen) dialog.showModal();
+  else dialog.querySelector('[data-dialog-close]').focus({preventScroll:true});
 }
 function showSecret(title, description, value, isSecret) {
   openDialog({title, description, body:`<label class="field">${isSecret ? 'API key' : 'Invitation link'}<textarea class="secret" id="new-secret" readonly spellcheck="false">${esc(value)}</textarea></label><p class="help" id="copy-feedback" style="margin-top:12px">${isSecret ? 'Keep this key private. It will not be shown again.' : 'Share this link privately with the invited person.'}</p>`, footer:`<button class="ghost" data-dialog-close>Done</button><button class="primary" data-copy="new-secret">${icon('copy')}Copy ${isSecret ? 'API key' : 'link'}</button>`});
@@ -305,10 +409,11 @@ function confirmAction(title, description, confirmLabel, action) {
   openDialog({title, description, body:'<p class="help">This takes effect immediately for the selected account or credential.</p>', footer:`<button class="ghost" data-dialog-close autofocus>Cancel</button><button class="danger" id="confirm-action">${esc(confirmLabel)}</button>`});
   $('#confirm-action').addEventListener('click', async event => {
     const button = event.currentTarget;
-    button.disabled = true; button.textContent = 'Please wait…';
-    try { await action(); closeDialog(); await render(); toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.'})[confirmLabel] || 'Change saved.'); }
+    const done = pendingButton(button, confirmLabel.startsWith('Revoke') ? 'Revoking…' : 'Removing…');
+    if (!done) return;
+    try { await action(); await render(); closeDialog(); toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.'})[confirmLabel] || 'Change saved.'); }
     catch (error) { showError(error, '#dialog-error'); }
-    finally { button.disabled = false; button.textContent = confirmLabel; }
+    finally { done(); }
   });
 }
 async function copyElement(id) {
@@ -329,9 +434,9 @@ async function copyElement(id) {
 }
 async function submitCreation(form) {
   const button = form.querySelector('button[type=submit]');
-  if (button.disabled) return;
-  const label = button.innerHTML;
-  button.disabled = true; button.textContent = 'Creating…'; $('#action-error').hidden = true;
+  const done = pendingButton(button, form.id === 'key-form' ? 'Creating key…' : 'Creating invite…');
+  if (!done) return;
+  $('#action-error').hidden = true;
   try {
     if (form.id === 'key-form') {
       const data = await api('/portal/api/keys', {method:'POST', body:{name:$('#key-name').value.trim()}});
@@ -343,14 +448,15 @@ async function submitCreation(form) {
       form.reset();
     }
   } catch (error) { showError(error); }
-  finally { button.disabled = false; button.innerHTML = label; }
+  finally { done(); }
 }
 
 async function savePlatformSetting(form) {
   const button = form.querySelector('button[type=submit]'), error = form.querySelector('.field-error');
-  if (button.disabled) return;
-  const label = button.textContent, platform = form.dataset.platform, kind = form.dataset.kind;
-  button.disabled = true; button.textContent = 'Saving…'; error.hidden = true;
+  const platform = form.dataset.platform, kind = form.dataset.kind;
+  const done = pendingButton(button, kind === 'proxy' ? 'Saving proxy…' : 'Saving cookies…');
+  if (!done) return;
+  error.hidden = true;
   try {
     let value;
     if (kind === 'cookies') {
@@ -362,7 +468,19 @@ async function savePlatformSetting(form) {
     await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}});
     await render(); toast(`${kind === 'proxy' ? 'Proxy' : 'Cookies'} saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; }
-  finally { button.disabled = false; button.textContent = label; }
+  finally { done(); }
+}
+
+async function movePlatformSetting(button) {
+  const done = pendingButton(button, 'Updating order…', true);
+  if (!done) return;
+  const card = button.closest('section.card');
+  card.querySelector('[data-pool-error]')?.remove();
+  try {
+    await api(`/portal/api/settings/platforms/${button.dataset.platform}/${button.dataset.moveSetting}/${button.dataset.entry}/move`, {method:'POST', body:{direction:button.dataset.direction}});
+    await render(); toast('Order updated.');
+  } catch (error) { const message = document.createElement('div'); message.className = 'field-error'; message.dataset.poolError = ''; message.setAttribute('role','alert'); message.textContent = error.message; card.append(message); }
+  finally { done(); }
 }
 
 function hidePopovers() {
@@ -460,29 +578,79 @@ window.addEventListener('resize', () => {
   });
 });
 
+
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
   return ['playground','keys','team','history','usage','docs','settings'].includes(route) ? route : 'overview';
 }
-async function render() {
+function loadingShape(current) {
+  const template = document.querySelector(`template[data-loading-page="${current}"]`);
+  return template.innerHTML;
+}
+function focusSelector(element) {
+  if (!element || !$('#view').contains(element)) return null;
+  if (element.id) return `#${CSS.escape(element.id)}`;
+  if (element.dataset.entry) return `[data-entry="${CSS.escape(element.dataset.entry)}"][data-direction="${CSS.escape(element.dataset.direction || '')}"]`;
+  const form = element.closest('form');
+  if (form?.id) return `#${CSS.escape(form.id)} ${element.tagName.toLowerCase()}${element.name ? `[name="${CSS.escape(element.name)}"]` : '[type=submit]'}`;
+  if (form?.dataset.platform) return `form[data-platform="${form.dataset.platform}"][data-kind="${form.dataset.kind}"] ${element.tagName.toLowerCase()}${element.name ? `[name="${CSS.escape(element.name)}"]` : '[type=submit]'}`;
+  return null;
+}
+function commitView(html, current, refresh) {
+  const view = $('#view'), skeleton = view.querySelector('.page-skeleton'), focus = refresh ? focusSelector(document.activeElement) : null;
+  const overlay = skeleton?.cloneNode(true);
+  view.innerHTML = `<div class="view-frame"><div class="view-content">${html}</div></div>`;
+  view.setAttribute('aria-busy', 'false');
+  const content = view.querySelector('.view-content');
+  if (overlay) { overlay.classList.add('loading-overlay'); overlay.querySelector('.loading-caption')?.remove(); view.firstChild.append(overlay); reveal(content, overlay); }
+  state.renderedPage = current;
+  if (focus) (view.querySelector(focus) || view).focus({preventScroll:true});
+}
+async function render({retryFailedOnly = false} = {}) {
   const renderId = ++state.renderId, current = page(), view = $('#view');
+  const refresh = state.renderedPage === current && !!view.querySelector('.view-content');
+  cancelReveals();
+  view.querySelector('[data-refresh-note]')?.remove();
+  if (!refresh) { state.renderedPage = null; view.innerHTML = loadingShape(current); }
+  else view.insertAdjacentHTML('afterbegin', '<div class="refresh-note" data-refresh-note role="status"><span class="busy-spinner" aria-hidden="true"></span>Refreshing… Your current content stays available.</div>');
   view.setAttribute('aria-busy','true');
+  $('#route-progress').hidden = false;
+  const loadingName = view.querySelector('h1')?.textContent || 'page';
+  document.title = `${loadingName} · Social Scrape`;
+  $('#loading-status').textContent = `Loading ${loadingName.toLowerCase()}…`;
+  const slow = setTimeout(() => { if (renderId === state.renderId) { const caption = view.querySelector('.loading-caption, [data-refresh-note]'); if (caption) caption.textContent = 'Still loading. You can keep using the navigation.'; } }, 10000);
+  if (!retryFailedOnly || state.overviewParts.keys?.status !== 'fulfilled') loadKeys().catch(error => headerFailure('top-key','API keys',error));
+  if (!retryFailedOnly || state.overviewParts.usage?.status !== 'fulfilled') loadUsage().catch(error => headerFailure('top-requests','Usage',error));
   document.querySelectorAll('.nav a').forEach(link => {
     if (link.dataset.page === current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
   const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage};
   try {
-    const html = await views[current]();
+    const html = await views[current]({retryFailedOnly});
     if (renderId !== state.renderId) return;
-    view.innerHTML = html;
-    if (current === 'playground') { fillEndpoints(); initPlatformPicker(); }
+    commitView(html, current, refresh);
+    if (current === 'playground') { fillEndpoints(); initPlatformPicker(); paintRequest(); }
     if (current === 'docs') { $('#doc-search').value = state.docSearch; filterDocs(state.docSearch); selectDoc(); }
     const title = view.querySelector('h1')?.textContent || 'Social Scrape';
     document.title = `${title} · Social Scrape`;
+    const count = [...(view.querySelector('.table-caption')?.children || [])].map(element => element.textContent.trim()).join('. ');
+    $('#loading-status').textContent = `${title} loaded.${count ? ` ${count}.` : ''}${current === 'overview' && Object.values(state.overviewParts).some(part => part.status === 'rejected') ? ' Some information could not load. Use Try again to retry those sections.' : ''}`;
   } catch (error) {
     if (renderId !== state.renderId) return;
-    view.innerHTML = layout('Could not load this page', 'Your workspace is still here. Try loading the page again.', `<section class="card"><div class="form-error" role="alert">${esc(error.message)}</div><button class="ghost" id="retry-page" style="margin-top:20px">${icon('arrows-clockwise')}Try again</button></section>`);
-  } finally { if (renderId === state.renderId) view.setAttribute('aria-busy','false'); }
+    if (refresh) {
+      const note = view.querySelector('[data-refresh-note]');
+      note.setAttribute('role','alert');
+      note.innerHTML = `<span>Could not refresh. Your last loaded content is still available. ${esc(error.message)}</span><button class="text-link" id="retry-page">Try again</button>`;
+    } else {
+      const heading = view.querySelector('.page-head')?.outerHTML || `<div class="page-head"><h1>${esc(loadingName)}</h1></div>`;
+      commitView(`${heading}<section class="card"><div class="form-error" role="alert">${esc(error.message)}</div><button class="ghost" id="retry-page" style="margin-top:20px">${icon('arrows-clockwise')}Try again</button></section>`, current, false);
+      state.renderedPage = null;
+    }
+    $('#loading-status').textContent = `${loadingName} could not ${refresh ? 'refresh' : 'load'}. Try again when you are ready.`;
+  } finally {
+    clearTimeout(slow);
+    if (renderId === state.renderId) { view.setAttribute('aria-busy','false'); $('#route-progress').hidden = true; }
+  }
 }
 async function go(path) {
   saveDraft();
@@ -495,12 +663,22 @@ async function go(path) {
   $('#view').focus({preventScroll:true}); window.scrollTo(0,0);
 }
 
+function startupFailure(error) {
+  const view = $('#view');
+  view.setAttribute('aria-busy','false'); $('#route-progress').hidden = true;
+  view.innerHTML = layout('Could not load this page', 'Your workspace is still here.', `<section class="card"><div class="form-error" role="alert">${esc(error.message || 'The dashboard could not start. Reload to try again.')}</div><a class="ghost" style="margin-top:20px" href="${esc(location.pathname + location.search + location.hash)}">${icon('arrows-clockwise')}Reload page</a></section>`);
+  for (const [id,label] of [['top-key','API keys'],['top-requests','Usage']]) headerFailure(id,label,error);
+  $('#loading-status').textContent = 'The dashboard could not start. Reload the page to try again.';
+}
+function startPortal() {
 initAccountMenus();
 $('.content-foot .footer-platforms').innerHTML = platforms.map(platform => `<span role="img" aria-label="${platformName(platform)}">${platformLabel(platform)}</span>`).join('');
 const mobileNav = $('#nav').cloneNode(true); mobileNav.removeAttribute('id'); $('#mobile-nav').append(mobileNav);
 if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"]').forEach(link => link.remove());
 $('#mobile-menu').addEventListener('click', () => $('#nav-dialog').showModal());
 $('#dialog').addEventListener('close', () => {
+  state.historyRequest = null;
+  cancelReveals();
   $('#dialog').replaceChildren();
   const fallback = $('#view').querySelector('input, button, a') || $('#view');
   (dialogTrigger?.isConnected && dialogTrigger !== document.body ? dialogTrigger : fallback).focus({preventScroll:true});
@@ -517,17 +695,20 @@ document.addEventListener('click', event => {
   if (language) { state.language = language.dataset.language; updateSnippet(); }
   const copy = event.target.closest('[data-copy]'); if (copy) copyElement(copy.dataset.copy);
   if (event.target.closest('[data-dialog-close]')) closeDialog();
+  const historyRetry = event.target.closest('[data-history-retry]');
+  if (historyRetry) { showHistoryDetail(historyRetry.dataset.historyRetry); return; }
   const historyRow = event.target.closest('[data-history-id]');
-  if (historyRow) { dialogTrigger = historyRow; showHistoryDetail(historyRow.dataset.historyId).catch(error => toast(error.message)); return; }
+  if (historyRow) { showHistoryDetail(historyRow.dataset.historyId); return; }
   const revoke = event.target.closest('[data-revoke]');
   if (revoke) { const key = state.keys.find(item => String(item.id) === revoke.dataset.revoke); confirmAction('Revoke this API key?', `“${key?.name || 'This key'}” will stop working. Integrations using it will lose access.`, 'Revoke key', () => api(`/portal/api/keys/${revoke.dataset.revoke}`, {method:'DELETE'})); }
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
   const moveSetting = event.target.closest('[data-move-setting]');
-  if (moveSetting) { api(`/portal/api/settings/platforms/${moveSetting.dataset.platform}/${moveSetting.dataset.moveSetting}/${moveSetting.dataset.entry}/move`, {method:'POST', body:{direction:moveSetting.dataset.direction}}).then(render).catch(error => toast(error.message)); }
+  if (moveSetting) movePlatformSetting(moveSetting);
   const removeSetting = event.target.closest('[data-remove-setting]');
-  if (removeSetting) { const kind=removeSetting.dataset.removeSetting, platform=removeSetting.dataset.platform, entry=removeSetting.dataset.entry; confirmAction(`Remove this ${platformLabel(platform)} ${kind === 'proxy' ? 'proxy' : 'cookie account'}?`, 'The remaining entries keep their current order.', `Remove ${kind === 'proxy' ? 'proxy' : 'account'}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}/${entry}`, {method:'DELETE'})); }
+  if (removeSetting) { const kind=removeSetting.dataset.removeSetting, platform=removeSetting.dataset.platform, entry=removeSetting.dataset.entry; confirmAction(`Remove this ${platformName(platform)} ${kind === 'proxy' ? 'proxy' : 'cookie account'}?`, 'The remaining entries keep their current order.', `Remove ${kind === 'proxy' ? 'proxy' : 'account'}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}/${entry}`, {method:'DELETE'})); }
   if (event.target.closest('#retry-page')) render();
+  if (event.target.closest('[data-retry-overview]')) render({retryFailedOnly:true});
 });
 document.addEventListener('submit', event => {
   if (['key-form','invite-form','request-form'].includes(event.target.id) || event.target.matches('.platform-setting-form')) {
@@ -549,7 +730,7 @@ document.addEventListener('change', event => {
 });
 document.addEventListener('keydown', event => {
   const historyRow = event.target.closest('[data-history-id]');
-  if (historyRow && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dialogTrigger = historyRow; showHistoryDetail(historyRow.dataset.historyId).catch(error => toast(error.message)); return; }
+  if (historyRow && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); showHistoryDetail(historyRow.dataset.historyId); return; }
   if (!event.target.matches('[data-language]') || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
   event.preventDefault();
   const tabs = [...document.querySelectorAll('[data-language]')];
@@ -559,7 +740,8 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('popstate', async event => { saveDraft(); await render(); window.scrollTo(0, event.state?.scrollY || 0); });
 window.addEventListener('hashchange', () => { if (page() === 'docs' && $('#doc-main')) selectDoc(); });
-const startup = Promise.race([render(), new Promise((_, reject) => setTimeout(() => reject(Error('Dashboard startup timed out.')), 10_000))]);
-startup.catch(error => { const view=$('#view'); view.setAttribute('aria-busy','false'); view.innerHTML=layout('Could not load this page','Your workspace is still here.',`<section class="card"><div class="form-error" role="alert">${esc(error.message)}</div><button class="ghost" id="retry-page">${icon('arrows-clockwise')}Try again</button></section>`); });
-loadUsage({cached:true}).then(() => loadUsage().catch(()=>{})).catch(() => { $('#top-requests').textContent = 'Usage unavailable'; });
-loadKeys({cached:true}).then(() => loadKeys().catch(()=>{})).catch(() => { $('#top-key').textContent = 'View API keys'; });
+loadKeys({cached:true}).catch(error => headerFailure('top-key','API keys',error));
+loadUsage({cached:true}).catch(error => headerFailure('top-requests','Usage',error));
+render().catch(startupFailure);
+}
+try { startPortal(); } catch (error) { startupFailure(error); }

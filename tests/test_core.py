@@ -1701,6 +1701,16 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert f'/assets/portal.css?v={script_url[2]}' in dashboard and "__ASSET_VERSION__" not in dashboard
     assert f'<script src="/assets/preview.js?v={script_url[2]}">' in dashboard  # the playground's response preview
     assert "const ResponsePreview" in owner.get(f"/assets/preview.js?v={script_url[2]}").text
+    for route, title in [("", "Overview"), ("playground", "Playground"), ("keys", "API keys"),
+                         ("team", "Team"), ("history", "Request history"), ("usage", "Usage"),
+                         ("docs", "Documentation"), ("settings", "Platform settings")]:
+        page = owner.get('/app/' + route).text
+        initial = re.search(r'<main[^>]*id="view"[^>]*>(.*?)</main>', page, re.S)[1]
+        assert f'<h1>{title}</h1>' in initial
+        assert 'class="skeleton ' in initial and 'Loading workspace' not in initial
+        assert 'aria-hidden="true"' in initial and '__INITIAL_LOADING__' not in page
+        if route == 'history':
+            assert '<th scope="col">Endpoint</th>' in initial and '<tbody aria-hidden="true"><tr>' in initial
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
     assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
 

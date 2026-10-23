@@ -35,18 +35,21 @@
         <button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="nav-dialog"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#list"></use></svg></button>
         <button type="button" class="icon-button sidebar-toggle" id="sidebar-toggle" data-sidebar-toggle aria-label="Collapse sidebar" aria-expanded="true" aria-controls="primary-sidebar" title="Collapse sidebar"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#sidebar"></use></svg></button>
         <div class="spacer"></div>
-        <a class="header-meta hide-mobile" id="top-key" href="/app/keys">API keys</a>
-        <span class="header-meta hide-mobile" id="top-requests">Loading usage…</span>
+        <a class="header-meta hide-mobile" id="top-key" href="/app/keys" aria-busy="true"><span class="skeleton sk-header" aria-hidden="true"></span><span class="sr-only">Loading API key count</span></a>
+        <span class="header-meta hide-mobile" id="top-requests" aria-busy="true"><span class="skeleton sk-header" aria-hidden="true"></span><span class="sr-only">Loading usage count</span></span>
         <button class="icon-button" data-theme-toggle aria-label="Switch to light theme" title="Switch theme"></button>
         <a class="ghost header-docs" href="/app/docs"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span>API docs</span></a>
+        <div class="route-progress" id="route-progress" aria-hidden="true"><span></span></div>
       </header>
-      <main class="content" id="view" tabindex="-1" aria-busy="true"><div class="loading-state" role="status">Loading workspace…</div></main>
+      <main class="content" id="view" tabindex="-1" aria-busy="true">__INITIAL_LOADING__</main>
       <footer class="content-foot"><span>Social Scrape</span><span class="footer-platforms" aria-label="Supported platforms"></span></footer>
     </div>
   </div>
   <dialog class="nav-drawer" id="nav-dialog" aria-label="Navigation"><div class="drawer-head"><a class="brand" href="/app"><span class="brand-mark" aria-hidden="true"></span><span>Social Scrape</span></a><button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><button type="button" class="account-trigger" data-account-trigger popovertarget="mobile-account-menu" aria-label="Open account menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="mobile-account-menu"></button><div class="account-popup" id="mobile-account-menu" popover="auto" role="dialog" aria-labelledby="mobile-account-menu-title"></div></div></dialog>
   <dialog class="modal" id="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"></dialog>
   <div class="toast-region" id="toasts" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true">Loading page…</div>
+  __LOADING_TEMPLATES__
   <script>window.PORTAL=__PORTAL__</script>
   <script src="/assets/preview.js"></script>
   <script src="/assets/portal.js"></script>

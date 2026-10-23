@@ -7,6 +7,7 @@ import hmac
 import html
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -470,7 +471,7 @@ class PortalStore:
 def _portal_asset_version() -> str:
     assets = Path(__file__).with_name("static")
     digest = hashlib.sha256()
-    for name in ("portal.html", "portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
+    for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
                  "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg"):
         digest.update(name.encode())
         digest.update((assets / name).read_bytes())
@@ -485,6 +486,18 @@ def _versioned_page(page: str) -> str:
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")
     return page
+
+
+@cache
+def _loading_templates() -> tuple[str, dict[str, str]]:
+    markup = Path(__file__).with_name("static").joinpath("loading.html").read_text()
+    def rows(match: re.Match) -> str:
+        cells = '<td><i class="skeleton sk-line"></i></td>' * int(match[2])
+        return '<tbody aria-hidden="true">' + ('<tr>' + cells + '</tr>') * int(match[1]) + '</tbody>'
+    markup = re.sub(r'<tbody aria-hidden="true" data-skeleton-rows="(\d+)" data-skeleton-columns="(\d+)"></tbody>', rows, markup)
+    markup = markup.replace('<th>', '<th scope="col">')
+    pages = dict(re.findall(r'<template data-loading-page="([a-z]+)">(.*?)</template>', markup, re.S))
+    return markup, pages
 
 
 def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
@@ -504,7 +517,7 @@ content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</ti
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
 <span class="auth-art-label"><img src="/assets/brand/logomark-chalk.svg" alt="">MIMIC</span>
-</aside></div></body></html>'''))
+</aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''))
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
@@ -668,6 +681,10 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         if not principal:
             return RedirectResponse("/login", 303)
         page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(principal.email))
+        templates, skeletons = _loading_templates()
+        route = rest.split('/')[0] or 'overview'
+        page = page.replace("__INITIAL_LOADING__", skeletons.get(route, skeletons['overview']))
+        page = page.replace("__LOADING_TEMPLATES__", templates)
         portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf})
         return HTMLResponse(_versioned_page(page.replace("__PORTAL__", portal_data)))
 

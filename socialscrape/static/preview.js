@@ -791,7 +791,7 @@ const ResponsePreview = (() => {
     root.querySelector('#response-raw').hidden = next !== 'raw';
   }
   // Fills the response area: Preview and Raw JSON tabs for a JSON object, the raw text alone otherwise.
-  function mount(root, {path, status, text: raw}) {
+  function mount(root, {path, status, text: raw, view = 'preview'}) {
     let body;
     try { body = parseLossless(raw); } catch { body = undefined; }
     const html = body === undefined ? null : build(path, status, body, {lazy:true});
@@ -806,7 +806,7 @@ const ResponsePreview = (() => {
     root.querySelector('[data-all-fields]')?.addEventListener('toggle', event => {
       if (event.target.open && !event.target.querySelector('.fact-list')) event.target.insertAdjacentHTML('beforeend', fieldList(fieldRows(body)));
     });
-    select(root, 'preview', false);
+    select(root, view === 'raw' ? 'raw' : 'preview', false);
   }
 
   if (typeof document !== 'undefined') {
