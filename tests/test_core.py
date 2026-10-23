@@ -1857,7 +1857,13 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
 
     anonymous = TestClient(create_app(), base_url="https://testserver", raise_server_exceptions=False)
     assert anonymous.get("/app", follow_redirects=False).headers["location"] == "/login"
-    assert anonymous.get("/openapi.json").status_code == 401
+    assert anonymous.get("/openapi.json").status_code == 200  # the API reference is public
+    public_docs = anonymous.get("/app/docs")
+    assert public_docs.status_code == 200 and '"public": true' in public_docs.text and "owner@example.com" not in public_docs.text
+    assert anonymous.get("/docs", follow_redirects=False).headers["location"] == "/app/docs"
+    for private in ("/app/playground", "/app/keys", "/app/settings", "/app/docsx"):
+        assert anonymous.get(private, follow_redirects=False).headers["location"] == "/login"
+    assert anonymous.get("/portal/api/keys").status_code == 401
     assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401
 
 

@@ -39,8 +39,10 @@ from .registry import IMPLEMENTED, add_unsupported_routes, coverage, mark_unsupp
 
 log = logging.getLogger("socialscrape")
 
-PUBLIC_PATHS = {"/health", "/redoc", "/meta/coverage", "/favicon.svg", "/favicon.ico"}
-LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs", "/openapi.json"}
+# The API reference is public with or without the portal: /openapi.json feeds /redoc and the dashboard's docs page,
+# which signed-out visitors can read too (portal.py). It lists the API endpoints only, never the portal's own.
+PUBLIC_PATHS = {"/health", "/redoc", "/openapi.json", "/meta/coverage", "/favicon.svg", "/favicon.ico"}
+LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs"}
 PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/assets/", "/app", "/docs")
 
 

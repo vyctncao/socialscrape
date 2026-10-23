@@ -779,21 +779,25 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
 
     @router.get("/docs")
     async def docs(request: Request):
-        return RedirectResponse("/app/docs" if _session(request) else "/login", 303)
+        return RedirectResponse("/app/docs", 303)
 
     @router.get("/app")
     @router.get("/app/{rest:path}")
     async def dashboard(request: Request, rest: str = ""):
         principal = _session(request)
-        if not principal:
+        # The documentation is public: a signed-out visitor gets the same page with only the docs and a sign-in link.
+        public_docs = principal is None and rest.split("/")[0] == "docs"
+        if not principal and not public_docs:
             return RedirectResponse("/login", 303)
-        page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(principal.email))
+        email = principal.email if principal else ""
+        page = (assets / "portal.html").read_text().replace("__USER_EMAIL_HTML__", html.escape(email))
         templates, skeletons = _loading_templates()
         route = rest.split('/')[0] or 'overview'
-        loading_route = f"{route}member" if principal.role == "member" and route in ("team", "settings", "fallback") else route
+        loading_route = f"{route}member" if principal and principal.role == "member" and route in ("team", "settings", "fallback") else route
         page = page.replace("__INITIAL_LOADING__", skeletons.get(loading_route, skeletons['overview']))
         page = page.replace("__LOADING_TEMPLATES__", templates)
-        portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf})
+        portal_data = json.dumps({"email": principal.email, "role": principal.role, "csrf": principal.csrf} if principal
+                                 else {"email": "", "role": "public", "csrf": "", "public": True})
         return HTMLResponse(_versioned_page(page.replace("__PORTAL__", portal_data)))
 
     @router.get("/portal/api/me")
