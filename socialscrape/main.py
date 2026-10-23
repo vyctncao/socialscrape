@@ -12,6 +12,7 @@ import os
 import pkgutil
 import signal
 import socket
+import sqlite3
 import sys
 import threading
 import time
@@ -85,11 +86,15 @@ class UsageMiddleware(BaseHTTPMiddleware):
         if portal and request.url.path.startswith("/v"):
             chunks = [chunk async for chunk in response.body_iterator]  # type: ignore[attr-defined]
             payload = b"".join(chunk if isinstance(chunk, bytes) else chunk.encode() for chunk in chunks)
-            portal.record_request(getattr(request.state, "principal", None),
-                                  getattr(request.state, "api_key_id", None), request.method,
-                                  request.url.path, request.url.query, response.status_code,
-                                  round((perf_counter() - started) * 1000), response.headers.get("x-cache") == "hit",
-                                  payload, response.headers.get(fallback.HEADER) == fallback.PROVIDER)
+            try:
+                portal.record_request(getattr(request.state, "principal", None),
+                                      getattr(request.state, "api_key_id", None), request.method,
+                                      request.url.path, request.url.query, response.status_code,
+                                      round((perf_counter() - started) * 1000),
+                                      response.headers.get("x-cache") == "hit", payload,
+                                      response.headers.get(fallback.HEADER) == fallback.PROVIDER)
+            except sqlite3.Error as exc:  # a full disk or a locked database loses the history row, not the response
+                log.warning("request history write failed: %s", exc)
             headers = {key: value for key, value in response.headers.items() if key.lower() != "content-length"}
             return Response(payload, status_code=response.status_code, headers=headers,
                             media_type=response.media_type, background=response.background)

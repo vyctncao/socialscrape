@@ -175,7 +175,7 @@ async function showHistoryDetail(id) {
     const overlay = body.querySelector('.history-detail-loading');
     const content = document.createElement('div');
     content.innerHTML = `<dl class="history-facts"><div><dt>Time</dt><dd>${esc(fmt(detail.created_at))}</dd></div><div><dt>API key</dt><dd>${esc(detail.prefix || 'Workspace session')}</dd></div><div><dt>Request</dt><dd><code>${esc(route)}</code></dd></div></dl>${detail.response_truncated ? '<div class="inline-note">The stored response was capped at 2 MiB.</div>' : ''}<pre class="code history-response" id="history-response" tabindex="0"></pre>`;
-    content.querySelector('pre').textContent = formatted || 'No response body was stored for this request.';
+    content.querySelector('pre').textContent = formatted || (detail.response_pruned ? 'This response was cleared to save space. Responses are kept for 14 days; the request details above stay.' : 'No response body was stored for this request.');
     $('#dialog-title').textContent = `${detail.method} ${detail.path}`;
     $('#dialog-description').textContent = `${detail.status} · ${number(detail.duration_ms)} ms · ${detail.cached ? 'Cache hit' : 'Live'}`;
     body.prepend(content); body.setAttribute('aria-busy','false');

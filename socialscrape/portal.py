@@ -28,6 +28,11 @@ from .config import ConfigError, validate_proxy
 
 SESSION_COOKIE = "socialscrape_session"
 SESSION_SECONDS = 60 * 60 * 24 * 30
+# Request history keeps every request's details, but its response bodies only this long and up to this much in all,
+# oldest first, so they can't fill the volume the members, keys and settings live on. Checked every PRUNE_SECONDS.
+HISTORY_BODY_SECONDS = 60 * 60 * 24 * 14
+HISTORY_BODY_BYTES = 256 * 1024 * 1024
+PRUNE_SECONDS = 600
 PBKDF2_ROUNDS = 600_000
 BRAND_ASSETS = ("brand/favicon.svg", "brand/favicon.ico", "brand/favicon.png",
                 "brand/logomark.svg", "brand/logomark-chalk.svg", "brand/logomark.png", "brand/logomark-chalk.png",
@@ -113,7 +118,8 @@ class PortalStore:
                 cached INTEGER NOT NULL DEFAULT 0,
                 response_body BLOB,
                 response_truncated INTEGER NOT NULL DEFAULT 0,
-                fallback INTEGER NOT NULL DEFAULT 0
+                fallback INTEGER NOT NULL DEFAULT 0,
+                response_pruned INTEGER NOT NULL DEFAULT 0
             );
             CREATE UNIQUE INDEX IF NOT EXISTS one_owner ON members(role) WHERE role='owner';
             CREATE INDEX IF NOT EXISTS requests_created_at ON requests(created_at DESC);
@@ -126,7 +132,10 @@ class PortalStore:
             self._conn.execute("ALTER TABLE requests ADD COLUMN response_truncated INTEGER NOT NULL DEFAULT 0")
         if "fallback" not in columns:  # served by ScrapeCreators (fallback.py)
             self._conn.execute("ALTER TABLE requests ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0")
+        if "response_pruned" not in columns:  # the body was cleared by prune_history()
+            self._conn.execute("ALTER TABLE requests ADD COLUMN response_pruned INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
+        self._pruned_at = 0.0
 
     @staticmethod
     def _token_hash(token: str) -> str:
@@ -431,6 +440,36 @@ class PortalStore:
                  duration_ms, int(cached), stored_body, int(truncated), int(fallback)),
             )
             self._conn.commit()
+            if time.time() - self._pruned_at >= PRUNE_SECONDS:
+                self.prune_history()
+
+    def prune_history(self, now: float | None = None, keep_seconds: float = HISTORY_BODY_SECONDS,
+                      max_bytes: int = HISTORY_BODY_BYTES) -> int:
+        """Clear stored response bodies older than keep_seconds, then the oldest until the rest fit in max_bytes.
+        The requests themselves stay. Returns how many bodies were cleared. SQLite reuses the freed pages, so the
+        file stops growing without a VACUUM."""
+        now = time.time() if now is None else now
+        with self._lock:
+            self._pruned_at = now
+            cleared = self._conn.execute(
+                "UPDATE requests SET response_body=NULL, response_pruned=1 "
+                "WHERE response_body IS NOT NULL AND created_at < ?", (now - keep_seconds,)
+            ).rowcount
+            kept, cutoff = 0, None
+            for request_id, size in self._conn.execute(
+                "SELECT id, LENGTH(response_body) FROM requests WHERE response_body IS NOT NULL ORDER BY id DESC"
+            ):
+                kept += size or 0
+                if kept > max_bytes:
+                    cutoff = request_id
+                    break
+            if cutoff is not None:
+                cleared += self._conn.execute(
+                    "UPDATE requests SET response_body=NULL, response_pruned=1 "
+                    "WHERE response_body IS NOT NULL AND id <= ?", (cutoff,)
+                ).rowcount
+            self._conn.commit()
+        return cleared
 
     def history(self, principal: Principal, limit: int = 100) -> list[dict[str, Any]]:
         where, args = ("", ()) if principal.role == "owner" else ("WHERE r.member_id=?", (principal.id,))
@@ -449,7 +488,7 @@ class PortalStore:
         with self._lock:
             row = self._conn.execute(
                 "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
-                "r.response_body,r.response_truncated,k.prefix,m.email FROM requests r "
+                "r.response_body,r.response_truncated,r.response_pruned,k.prefix,m.email FROM requests r "
                 "LEFT JOIN api_keys k ON k.id=r.api_key_id LEFT JOIN members m ON m.id=r.member_id "
                 f"WHERE {where}", args
             ).fetchone()
