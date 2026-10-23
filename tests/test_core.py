@@ -1691,6 +1691,10 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert script_url  # New markup must use a new browser cache key after UI changes.
     script = owner.get(script_url[1])
     assert script.status_code == 200 and "javascript" in script.headers["content-type"]
+    assert script.headers["cache-control"] == "public, max-age=31536000, immutable"
+    for name in ("initAccountMenus", "initPlatformPicker", "hidePopovers"):
+        assert f"function {name}" in script.text
+    assert "AbortController" in script.text and "sessionStorage" in script.text
     assert owner.get(script_url[1], headers={"if-none-match": script.headers["etag"]}).status_code == 304
     login = TestClient(create_app(), base_url="https://testserver").get("/login").text
     assert f'/assets/appearance.js?v={script_url[2]}' in login

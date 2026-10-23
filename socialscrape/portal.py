@@ -37,6 +37,15 @@ class Principal:
     csrf: str = ""
 
 
+class PortalStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        versioned = b"v=" in scope.get("query_string", b"")
+        response.headers["cache-control"] = ("public, max-age=31536000, immutable" if versioned
+                                             else "public, max-age=3600")
+        return response
+
+
 class PortalStore:
     def __init__(self, path: str):
         self.path = path
@@ -554,7 +563,7 @@ def install_portal(app, store: PortalStore) -> None:
     _active_store = store
     app.state.portal = store
     assets = Path(__file__).with_name("static")
-    app.mount("/assets", StaticFiles(directory=assets), name="assets")
+    app.mount("/assets", PortalStaticFiles(directory=assets), name="assets")
     router = APIRouter(include_in_schema=False)
 
     @router.get("/")
