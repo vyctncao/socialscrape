@@ -244,3 +244,10 @@ details>summary{display:flex;gap:var(--space-2);align-items:center;min-height:40
 .setting-copy .inline-note{margin-top:var(--space-3)}
 .settings-note{max-width:920px;margin-top:var(--space-6)}
 @media(max-width:760px){.setting-section{grid-template-columns:1fr;gap:var(--space-4)}}
+.credential-pool{list-style:none;padding:0;margin:var(--space-4) 0 0;display:grid;gap:var(--space-2)}
+.credential-pool li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-3);border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-1)}
+.credential-pool li>div{display:grid;gap:2px;min-width:0}
+.credential-pool li span{font-size:var(--fs-xs);color:var(--text-2)}
+.empty.compact{padding:var(--space-4);margin-top:var(--space-3);font-size:var(--fs-xs)}
+.pool-actions{display:flex;align-items:center;gap:var(--space-2)}
+.pool-actions .ghost{min-width:40px;padding:0 var(--space-2)}

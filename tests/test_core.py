@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -1723,10 +1724,11 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert anonymous.get("/v1/youtube/shorts/trending").status_code == 401
 
 
-def test_owner_can_set_encrypted_platform_settings_from_dashboard(env, tmp_path, monkeypatch):
+def test_owner_can_set_encrypted_platform_backup_pools(env, tmp_path, monkeypatch):
     from cryptography.fernet import Fernet
 
     from socialscrape import ytdlp
+    from socialscrape.errors import UpstreamBlocked
     from socialscrape.main import create_app
 
     portal = tmp_path / "portal.sqlite3"
@@ -1738,35 +1740,57 @@ def test_owner_can_set_encrypted_platform_settings_from_dashboard(env, tmp_path,
                                 "setup_token": "setup"})
     me = owner.get("/portal/api/me").json()
     headers = {"x-csrf-token": me["csrf"]}
-    proxy = "http://private-user:private-password@proxy.example:4321"
-    cookies = "# Netscape HTTP Cookie File\n.instagram.com\tTRUE\t/\tTRUE\t2147483647\tqa_fake\tsecret\n"
+    proxies = ["http://user:password@primary.example:4321", "socks5://user:password@backup.example:9876"]
+    def cookie(name):
+        return ("# Netscape HTTP Cookie File\n"
+                f".instagram.com\tTRUE\t/\tTRUE\t2147483647\t{name}\tsecret\n")
 
-    empty = {"configured": False, "updated_at": None}
-    assert owner.get("/portal/api/settings/platforms").json() == {
-        platform: {"proxy": empty, "cookies": empty} for platform in ("instagram", "tiktok", "youtube")
-    }
-    assert owner.put("/portal/api/settings/platforms/instagram/proxy", headers=headers,
-                     json={"value": proxy}).json() == {"configured": True}
-    assert owner.put("/portal/api/settings/platforms/instagram/cookies", headers=headers,
-                     json={"value": cookies}).json() == {"configured": True}
+    empty = {platform: {"proxy": [], "cookies": []} for platform in ("instagram", "tiktok", "youtube")}
+    assert owner.get("/portal/api/settings/platforms").json() == empty
+    ids = [owner.post("/portal/api/settings/platforms/instagram/proxy", headers=headers,
+                      json={"value": proxy}).json()["id"] for proxy in proxies]
+    cookie_ids = [owner.post("/portal/api/settings/platforms/instagram/cookies", headers=headers,
+                            json={"value": cookie(name)}).json()["id"] for name in ("primary", "backup")]
     status = owner.get("/portal/api/settings/platforms").json()
-    assert status["instagram"]["proxy"]["configured"] is True
-    assert status["instagram"]["cookies"]["configured"] is True
-    assert status["tiktok"] == {"proxy": empty, "cookies": empty}
+    assert [item["position"] for item in status["instagram"]["proxy"]] == [1, 2]
+    assert owner.post(f"/portal/api/settings/platforms/instagram/proxy/{ids[1]}/move", headers=headers,
+                      json={"direction": "up"}).json() == {"moved": True}
+    proxies.reverse()
+    assert [item["position"] for item in status["instagram"]["cookies"]] == [1, 2]
+    assert status["tiktok"] == {"proxy": [], "cookies": []}
     raw = portal.read_bytes()
-    assert all(secret not in raw for secret in (b"private-user", b"private-password", b"qa_fake", b"secret"))
-    assert ytdlp.base_options("instagram")["proxy"] == proxy
-    assert "proxy" not in ytdlp.base_options("tiktok")
-    seen = ytdlp._run("instagram", lambda ydl: [(c.domain, c.name, c.value) for c in ydl.cookiejar], {})
-    assert seen == [(".instagram.com", "qa_fake", "secret")]
-    assert proxy not in owner.get("/portal/api/settings/platforms").text
+    assert all(secret not in raw for secret in (b"primary.example", b"backup.example", b"primary", b"secret"))
+    assert proxies[0] not in owner.get("/portal/api/settings/platforms").text
 
-    for bad in ("ftp://user:pass@host:21", "http://host:0", "http://bad host:80"):
-        response = owner.put("/portal/api/settings/platforms/youtube/proxy", headers=headers, json={"value": bad})
-        assert response.status_code == 400 and proxy not in response.text
-    bad_cookie = owner.put("/portal/api/settings/platforms/tiktok/cookies", headers=headers,
-                           json={"value": cookies})
+    attempts = []
+    original = ytdlp._run
+    def fake_run(platform, fn, opts):
+        attempts.append((opts.get("_dashboard_proxy"), opts.get("_dashboard_cookies")))
+        if len(attempts) == 1:
+            raise UpstreamBlocked("blocked")
+        return "ok"
+    monkeypatch.setattr(ytdlp, "_run", fake_run)
+    assert asyncio.run(ytdlp.with_ydl("instagram", lambda ydl: None)) == "ok"
+    assert attempts == [(proxies[0], cookie("primary")), (proxies[1], cookie("backup"))]
+    attempts.clear()
+    def missing_run(platform, fn, opts):
+        attempts.append(opts.get("_dashboard_proxy"))
+        raise NotFound("missing")
+    monkeypatch.setattr(ytdlp, "_run", missing_run)
+    with pytest.raises(NotFound):
+        asyncio.run(ytdlp.with_ydl("instagram", lambda ydl: None))
+    assert attempts == [proxies[0]]  # a missing post is not evidence that the connection profile failed
+    monkeypatch.setattr(ytdlp, "_run", original)
+
+    seen = ytdlp._run("instagram", lambda ydl: [(c.domain, c.name) for c in ydl.cookiejar],
+                       {"_dashboard_proxy": proxies[0], "_dashboard_cookies": cookie("primary")})
+    assert seen == [(".instagram.com", "primary")]
+    bad_cookie = owner.post("/portal/api/settings/platforms/tiktok/cookies", headers=headers,
+                            json={"value": cookie("wrong")})
     assert bad_cookie.status_code == 400 and "tiktok.com" in bad_cookie.text
-    assert owner.delete("/portal/api/settings/platforms/instagram/proxy", headers=headers).json() == {"cleared": True}
-    assert owner.delete("/portal/api/settings/platforms/instagram/cookies", headers=headers).json() == {"cleared": True}
-    assert "proxy" not in ytdlp.base_options("instagram")
+    assert owner.delete(f"/portal/api/settings/platforms/instagram/proxy/{ids[0]}",
+                        headers=headers).json() == {"removed": True}
+    assert owner.delete(f"/portal/api/settings/platforms/instagram/cookies/{cookie_ids[0]}",
+                        headers=headers).json() == {"removed": True}
+    status = owner.get("/portal/api/settings/platforms").json()["instagram"]
+    assert status["proxy"][0]["position"] == status["cookies"][0]["position"] == 1

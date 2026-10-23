@@ -94,15 +94,14 @@ async function settingsPage() {
   if (PORTAL.role !== 'owner') return layout('Platform settings', 'Credentials and network access by provider.', `<section class="card">${emptyState('shield-check', 'Managed by your workspace owner', 'Ask your owner to update platform credentials and proxies.')}</section>`);
   const data = await api('/portal/api/settings/platforms');
   const names = {instagram:'Instagram', tiktok:'TikTok', youtube:'YouTube'};
+  const list = (platform, kind, items) => items.length ? `<ol class="credential-pool">${items.map(item => `<li><div><strong>${item.position === 1 ? 'Primary' : `Backup ${item.position - 1}`}</strong><span>${kind === 'proxy' ? 'Proxy credentials saved privately' : 'Account cookies saved privately'} · ${esc(fmt(item.updated_at))}</span></div><div class="pool-actions">${item.position > 1 ? `<button class="ghost" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${kind} up">↑</button>` : ''}${item.position < items.length ? `<button class="ghost" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${kind} down">↓</button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}">Remove</button></div></li>`).join('')}</ol>` : `<div class="empty compact">No ${kind === 'proxy' ? 'proxies' : 'cookie accounts'} configured.</div>`;
   const cards = Object.entries(names).map(([platform, name]) => {
-    const item = data[platform], proxy = item.proxy, cookies = item.cookies;
-    return `<section class="card platform-card"><div class="card-head"><div><div class="eyebrow">Provider</div><h2>${name}</h2></div><span class="badge ${proxy.configured || cookies.configured ? 'good' : ''}">${proxy.configured || cookies.configured ? 'Configured' : 'Anonymous'}</span></div>
-      <div class="setting-section"><div class="setting-copy"><h3>Residential proxy</h3><p class="muted">Used only for ${name} requests. Helpful when the provider blocks the server IP.</p>${proxy.configured ? `<div class="inline-note">${icon('shield-check')}<span>Saved privately · updated ${esc(fmt(proxy.updated_at))}</span></div>` : ''}</div>
-      <form class="platform-setting-form stack" data-platform="${platform}" data-kind="proxy"><label class="field">${proxy.configured ? 'Replace proxy URL' : 'Proxy URL'}<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port"><span class="help">HTTP, HTTPS, SOCKS4, SOCKS4A, SOCKS5, and SOCKS5H are supported.</span></label><div class="field-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${proxy.configured ? 'Replace proxy' : 'Save proxy'}</button>${proxy.configured ? `<button class="danger" type="button" data-clear-setting="proxy" data-platform="${platform}">Remove proxy</button>` : ''}</div></form></div>
-      <div class="setting-section"><div class="setting-copy"><h3>Authenticated account cookies</h3><p class="muted">Optional. Export a Netscape <code>cookies.txt</code> from a dedicated throwaway ${name} account. Never upload your personal account cookies.</p>${cookies.configured ? `<div class="inline-note">${icon('shield-check')}<span>Cookies saved privately · updated ${esc(fmt(cookies.updated_at))}</span></div>` : ''}</div>
-      <form class="platform-setting-form stack" data-platform="${platform}" data-kind="cookies"><label class="field">${cookies.configured ? 'Replace cookies.txt' : 'Cookies.txt file'}<input name="file" type="file" required accept=".txt,text/plain"><span class="help">Maximum 2 MiB. The file must contain ${platform === 'youtube' ? 'youtube.com' : platform + '.com'} cookies.</span></label><div class="field-error" role="alert" hidden></div><div class="row"><button class="primary" type="submit">${cookies.configured ? 'Replace cookies' : 'Save cookies'}</button>${cookies.configured ? `<button class="danger" type="button" data-clear-setting="cookies" data-platform="${platform}">Remove cookies</button>` : ''}</div></form></div></section>`;
+    const item = data[platform], proxies = item.proxy, cookies = item.cookies;
+    return `<section class="card platform-card"><div class="card-head"><div><div class="eyebrow">Provider</div><h2>${name}</h2></div><span class="badge ${proxies.length || cookies.length ? 'good' : ''}">${proxies.length || cookies.length ? `${proxies.length} prox${proxies.length === 1 ? 'y' : 'ies'} · ${cookies.length} account${cookies.length === 1 ? '' : 's'}` : 'Anonymous'}</span></div>
+      <div class="setting-section"><div class="setting-copy"><h3>Proxy pool</h3><p class="muted">Tried in order only for retryable network, block, login-wall, or rejected-session failures.</p>${list(platform,'proxy',proxies)}</div><form class="platform-setting-form stack" data-platform="${platform}" data-kind="proxy"><label class="field">Add ${proxies.length ? `Backup ${proxies.length}` : 'primary'} proxy<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port"><span class="help">Up to five. Values are encrypted and never shown again.</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add proxy</button></form></div>
+      <div class="setting-section"><div class="setting-copy"><h3>Account cookie pool</h3><p class="muted">Each retry uses one complete cookie jar; cookies from different accounts are never merged.</p>${list(platform,'cookies',cookies)}</div><form class="platform-setting-form stack" data-platform="${platform}" data-kind="cookies"><label class="field">Add ${cookies.length ? `Backup ${cookies.length}` : 'primary'} account cookies<input name="file" type="file" required accept=".txt,text/plain"><span class="help">Dedicated throwaway account, Netscape cookies.txt, maximum 2 MiB. Up to five.</span></label><div class="field-error" role="alert" hidden></div><button class="primary" type="submit">Add account cookies</button></form></div></section>`;
   }).join('');
-  return layout('Platform settings', 'Configure network access and authenticated accounts separately for each provider.', `<div class="platform-settings">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Proxy URLs and cookie files are encrypted at rest and never returned to the browser. New requests use changes immediately; requests already in flight keep their original settings.</span></div>`);
+  return layout('Platform settings', 'Configure ordered backup pools independently for Instagram, TikTok, and YouTube.', `<div class="platform-settings">${cards}</div><div class="inline-note settings-note">${icon('shield-check')}<span>Attempt 1 uses both primaries. Later attempts advance to the next configured proxy and cookie account, reusing the last entry on the shorter list. Bad input and missing content are never retried.</span></div>`);
 }
 
 async function requestHistory() {
@@ -137,7 +136,7 @@ async function playground() {
   return layout('Playground', 'Explore an endpoint. Make a request. Take the code with you.', `
     <div class="playground"><section class="card playground-config"><div class="section-label">Configure request</div><form class="form-stack" id="request-form"><label class="field">Platform<select id="pg-platform">${groups.map(group => `<option value="${esc(group)}" ${state.platform === group ? 'selected' : ''}>${platformName(group)}</option>`).join('')}</select></label><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Run as<select id="pg-key"><option value="">Workspace session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">Snippets use your integration’s API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
     <div class="request-workbench"><section class="card"><div class="card-head"><div class="request-info"><span class="method">GET</span><code id="request-path"></code></div><button class="icon-button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button></div><div class="code-tabs" role="tablist" aria-label="Code language">${[['curl','cURL'],['node','Node.js'],['python','Python']].map(([lang, label]) => `<button id="tab-${lang}" role="tab" aria-controls="snippet" aria-selected="${state.language === lang}" tabindex="${state.language === lang ? 0 : -1}" data-language="${lang}">${label}</button>`).join('')}</div><pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}" style="margin-top:16px"></pre></section>
-    <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status">Ready</span><button class="icon-button" data-copy="response" aria-label="Copy response" title="Copy response" hidden>${icon('copy')}</button></div></div><div id="response" aria-live="polite"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
+    <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status" role="status">Ready</span><button class="icon-button" data-copy="response-raw" aria-label="Copy raw JSON response" title="Copy raw JSON" hidden>${icon('copy')}</button></div></div><div id="response"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
 }
 function saveDraft() {
   if (!state.endpoint || !$('#pg-params')?.children.length) return;
@@ -206,8 +205,8 @@ async function runRequest() {
   $('#request-error').hidden = true;
   status.className = 'badge'; status.textContent = 'Running';
   responseArea.setAttribute('aria-busy', 'true');
-  const copy = $('[data-copy="response"]'); copy.hidden = true;
-  const query = params(), url = $('#pg-endpoint').value + (query.size ? '?' + query : '');
+  const copy = $('[data-copy="response-raw"]'); copy.hidden = true;
+  const query = params(), path = $('#pg-endpoint').value, url = path + (query.size ? '?' + query : '');
   const keyId = $('#pg-key').value;
   const fields = [...$('#request-form').querySelectorAll('input, select')];
   fields.forEach(field => { field.disabled = true; });
@@ -216,10 +215,7 @@ async function runRequest() {
     const response = await fetch(url, {headers:{'x-portal-key-id':keyId}});
     const text = await response.text();
     if (!responseArea.isConnected) return;
-    let content = text;
-    try { content = JSON.stringify(JSON.parse(text), null, 2); } catch {}
-    responseArea.innerHTML = '<pre class="code" tabindex="0" aria-label="API response"></pre>';
-    responseArea.firstChild.textContent = content;
+    ResponsePreview.mount(responseArea, {path, status:response.status, text});
     status.className = `badge ${response.ok ? 'good' : 'bad'}`;
     status.textContent = `${response.status} ${response.ok ? 'OK' : 'Error'} · ${number(Math.round(performance.now() - started))} ms`;
     copy.hidden = false;
@@ -293,6 +289,7 @@ async function copyElement(id) {
     if (id === 'new-secret') {
       element.focus(); element.select(); $('#copy-feedback').textContent = 'Copy is unavailable. Select and copy the text above manually.';
     } else {
+      if (element.hidden) document.querySelector(`[role=tab][aria-controls="${id}"]`)?.click();  // e.g. Raw JSON behind Preview
       const range = document.createRange(); range.selectNodeContents(element);
       window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
       toast('Select and copy the highlighted text manually.');
@@ -331,7 +328,7 @@ async function savePlatformSetting(form) {
       if (file.size > 2 * 1024 * 1024) throw Error('The cookies.txt file must be no larger than 2 MiB.');
       value = await file.text();
     } else value = form.elements.value.value.trim();
-    await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'PUT', body:{value}});
+    await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}});
     await render(); toast(`${kind === 'proxy' ? 'Proxy' : 'Cookies'} saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; }
   finally { button.disabled = false; button.textContent = label; }
@@ -398,8 +395,10 @@ document.addEventListener('click', event => {
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
   if (event.target.closest('#retry-page')) render();
-  const clearSetting = event.target.closest('[data-clear-setting]');
-  if (clearSetting) { const kind=clearSetting.dataset.clearSetting, platform=clearSetting.dataset.platform; confirmAction(`Remove ${platformName(platform)} ${kind}?`, `New ${platformName(platform)} requests will stop using this saved ${kind}.`, `Remove ${kind}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'DELETE'})); }
+  const moveSetting = event.target.closest('[data-move-setting]');
+  if (moveSetting) { api(`/portal/api/settings/platforms/${moveSetting.dataset.platform}/${moveSetting.dataset.moveSetting}/${moveSetting.dataset.entry}/move`, {method:'POST', body:{direction:moveSetting.dataset.direction}}).then(render).catch(error => toast(error.message)); }
+  const removeSetting = event.target.closest('[data-remove-setting]');
+  if (removeSetting) { const kind=removeSetting.dataset.removeSetting, platform=removeSetting.dataset.platform, entry=removeSetting.dataset.entry; confirmAction(`Remove this ${platformName(platform)} ${kind === 'proxy' ? 'proxy' : 'cookie account'}?`, 'The remaining entries keep their current order.', `Remove ${kind === 'proxy' ? 'proxy' : 'account'}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}/${entry}`, {method:'DELETE'})); }
 });
 document.addEventListener('submit', event => {
   if (['key-form','invite-form','request-form'].includes(event.target.id) || event.target.matches('.platform-setting-form')) {

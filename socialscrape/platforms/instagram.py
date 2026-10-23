@@ -273,8 +273,10 @@ class SessionRejected(Misconfigured):
     code = "cookies_rejected"
 
     def __init__(self) -> None:
-        source = ("SOCIALSCRAPE_COOKIES_INSTAGRAM" if get_settings().cookie_file(PLATFORM)
-                  else "SOCIALSCRAPE_COOKIES_FROM_BROWSER")
+        from ..portal import active_platform_pool
+        _, dashboard_cookies = active_platform_pool(PLATFORM)
+        source = ("Platform settings" if dashboard_cookies else "SOCIALSCRAPE_COOKIES_INSTAGRAM"
+                  if get_settings().cookie_file(PLATFORM) else "SOCIALSCRAPE_COOKIES_FROM_BROWSER")
         super().__init__(f"Instagram rejected the server's session cookies ({source}): it sent the logged-in "
                          "request to its login page, so the session has expired or was logged out. Replace them "
                          "with a fresh session's cookies")

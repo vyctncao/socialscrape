@@ -157,40 +157,80 @@ class PortalStore:
             self._conn.commit()
         return cur.rowcount == 1
 
+    def _pool(self, platform: str, kind: str) -> list[dict[str, Any]]:
+        row = self._setting(f"{platform}.{kind}.pool")
+        if row:
+            try:
+                pool = json.loads(row[0])
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                raise ConfigError(f"The saved {platform} {kind} pool cannot be read") from None
+            if isinstance(pool, list):
+                return pool
+        # Migrate the first single-value implementation without revealing or losing it.
+        legacy = self._setting(f"{platform}.{kind}")
+        if not legacy:
+            return []
+        legacy_id = "legacy-" + hashlib.sha256(legacy[0]).hexdigest()[:12]
+        return [{"id": legacy_id, "value": legacy[0].decode(), "updated_at": legacy[1]}]
+
+    def _save_pool(self, owner: Principal, platform: str, kind: str, pool: list[dict[str, Any]]) -> None:
+        self._set_setting(owner, f"{platform}.{kind}.pool", json.dumps(pool, separators=(",", ":")))
+        self._clear_setting(owner, f"{platform}.{kind}")
+
     def platform_status(self, owner: Principal) -> dict[str, Any]:
         if owner.role != "owner":
             raise PermissionError
         return {platform: {
-            "proxy": _status(self._setting(f"{platform}.proxy")),
-            "cookies": _status(self._setting(f"{platform}.cookies")),
+            kind: [{"id": item["id"], "position": index + 1, "updated_at": item["updated_at"]}
+                   for index, item in enumerate(self._pool(platform, kind))]
+            for kind in ("proxy", "cookies")
         } for platform in ("instagram", "tiktok", "youtube")}
 
-    def platform_proxy(self, platform: str) -> str | None:
-        row = self._setting(f"{platform}.proxy")
-        return row[0].decode() if row else None
+    def platform_pool(self, platform: str) -> tuple[list[str], list[str]]:
+        return ([item["value"] for item in self._pool(platform, "proxy")],
+                [item["value"] for item in self._pool(platform, "cookies")])
 
-    def platform_cookies(self, platform: str) -> str | None:
-        row = self._setting(f"{platform}.cookies")
-        return row[0].decode() if row else None
-
-    def set_platform_proxy(self, owner: Principal, platform: str, value: str) -> None:
+    def add_platform_setting(self, owner: Principal, platform: str, kind: str, value: str) -> str:
         if owner.role != "owner":
             raise PermissionError
-        proxy = validate_proxy(value, name=f"{platform.title()} proxy")
-        if not proxy:
-            raise ValueError("Enter a proxy URL")
-        self._set_setting(owner, f"{platform}.proxy", proxy)
+        pool = self._pool(platform, kind)
+        if len(pool) >= 5:
+            raise ValueError(f"{platform.title()} already has the maximum of 5 {kind} entries")
+        if kind == "proxy":
+            value = validate_proxy(value, name=f"{platform.title()} proxy") or ""
+            if not value:
+                raise ValueError("Enter a proxy URL")
+        else:
+            _validate_cookies(platform, value)
+        entry_id = secrets.token_urlsafe(9)
+        pool.append({"id": entry_id, "value": value, "updated_at": time.time()})
+        self._save_pool(owner, platform, kind, pool)
+        return entry_id
 
-    def set_platform_cookies(self, owner: Principal, platform: str, value: str) -> None:
+    def remove_platform_setting(self, owner: Principal, platform: str, kind: str, entry_id: str) -> bool:
         if owner.role != "owner":
             raise PermissionError
-        _validate_cookies(platform, value)
-        self._set_setting(owner, f"{platform}.cookies", value)
+        pool = self._pool(platform, kind)
+        kept = [item for item in pool if item["id"] != entry_id]
+        if len(kept) == len(pool):
+            return False
+        self._save_pool(owner, platform, kind, kept)
+        return True
 
-    def clear_platform_setting(self, owner: Principal, platform: str, kind: str) -> bool:
+    def move_platform_setting(self, owner: Principal, platform: str, kind: str, entry_id: str,
+                              direction: str) -> bool:
         if owner.role != "owner":
             raise PermissionError
-        return self._clear_setting(owner, f"{platform}.{kind}")
+        if direction not in ("up", "down"):
+            raise ValueError("Direction must be up or down")
+        pool = self._pool(platform, kind)
+        index = next((i for i, item in enumerate(pool) if item["id"] == entry_id), None)
+        target = index + (-1 if direction == "up" else 1) if index is not None else -1
+        if index is None or not 0 <= target < len(pool):
+            return False
+        pool[index], pool[target] = pool[target], pool[index]
+        self._save_pool(owner, platform, kind, pool)
+        return True
 
     def has_members(self) -> bool:
         with self._lock:
@@ -452,10 +492,8 @@ def _owner(request: Request) -> Principal:
     return principal
 
 
-def active_platform_settings(platform: str) -> tuple[str | None, str | None]:
-    if not _active_store:
-        return None, None
-    return _active_store.platform_proxy(platform), _active_store.platform_cookies(platform)
+def active_platform_pool(platform: str) -> tuple[list[str], list[str]]:
+    return _active_store.platform_pool(platform) if _active_store else ([], [])
 
 
 def clear_active_portal() -> None:
@@ -615,27 +653,36 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
     async def platform_status(request: Request):
         return store.platform_status(_owner(request))
 
-    @router.put("/portal/api/settings/platforms/{platform}/{kind}")
-    async def set_platform_setting(request: Request, platform: str, kind: str):
+    @router.post("/portal/api/settings/platforms/{platform}/{kind}")
+    async def add_platform_setting(request: Request, platform: str, kind: str):
         p = _owner(request)
         _csrf(request, p)
         _check_platform_setting(platform, kind)
         data = await request.json()
         try:
-            if kind == "proxy":
-                store.set_platform_proxy(p, platform, str(data.get("value", "")))
-            else:
-                store.set_platform_cookies(p, platform, str(data.get("value", "")))
+            entry_id = store.add_platform_setting(p, platform, kind, str(data.get("value", "")))
         except (ConfigError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from None
-        return {"configured": True}
+        return {"id": entry_id}
 
-    @router.delete("/portal/api/settings/platforms/{platform}/{kind}")
-    async def clear_platform_setting(request: Request, platform: str, kind: str):
+    @router.delete("/portal/api/settings/platforms/{platform}/{kind}/{entry_id}")
+    async def remove_platform_setting(request: Request, platform: str, kind: str, entry_id: str):
         p = _owner(request)
         _csrf(request, p)
         _check_platform_setting(platform, kind)
-        return {"cleared": store.clear_platform_setting(p, platform, kind)}
+        return {"removed": store.remove_platform_setting(p, platform, kind, entry_id)}
+
+    @router.post("/portal/api/settings/platforms/{platform}/{kind}/{entry_id}/move")
+    async def move_platform_setting(request: Request, platform: str, kind: str, entry_id: str):
+        p = _owner(request)
+        _csrf(request, p)
+        _check_platform_setting(platform, kind)
+        data = await request.json()
+        try:
+            moved = store.move_platform_setting(p, platform, kind, entry_id, str(data.get("direction", "")))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"moved": moved}
 
     @router.get("/portal/api/history")
     async def history(request: Request, limit: int = 100):
