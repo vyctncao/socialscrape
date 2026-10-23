@@ -1,9 +1,12 @@
 import asyncio
+import base64
 import json
 import logging
 import os
 import sqlite3
+import subprocess
 import time
+import urllib.parse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -2038,15 +2041,30 @@ def test_agent_integrations_portal_contract():
     assert 'npx skills add vyctncao/social-media-research-skills' in script
     assert 'npm install -g @socialscrape/cli' in script
     assert "'x-api-key':'YOUR_API_KEY'" in script
-    assert "btoa(JSON.stringify({url:mcpUrl}))" in script
-    assert 'cursor://anysphere.cursor-deeplink/mcp/install?name=socialscrape&config=' in script
-    assert "JSON.stringify({name:'socialscrape',type:'http',url:mcpUrl})" in script
-    assert 'vscode:mcp/install?' in script
+    node_script = f'''const fs=require('fs'), vm=require('vm');
+const source=fs.readFileSync({json.dumps(str(static / 'portal.js'))}, 'utf8');
+const start=source.indexOf('function agentInstallUrls');
+const end=source.indexOf('\\nfunction agents()', start);
+const context={{btoa:value => Buffer.from(value).toString('base64'), encodeURIComponent, JSON}};
+vm.createContext(context);
+vm.runInContext(source.slice(start, end), context);
+console.log(JSON.stringify(context.agentInstallUrls('http://127.0.0.1:8784')));'''
+    install_urls = json.loads(subprocess.run(
+        ['node', '-e', node_script], check=True, capture_output=True, text=True
+    ).stdout)
+    cursor_query = urllib.parse.parse_qs(urllib.parse.urlsplit(install_urls['cursor']).query)
+    assert cursor_query['name'] == ['socialscrape']
+    cursor_payload = json.loads(base64.b64decode(cursor_query['config'][0]))
+    assert cursor_payload == {'name': 'socialscrape', 'url': 'http://127.0.0.1:8784/mcp'}
+    vscode_payload = json.loads(urllib.parse.unquote(install_urls['vscode'].split('?', 1)[1]))
+    assert vscode_payload == {'name': 'socialscrape', 'url': 'http://127.0.0.1:8784/mcp'}
     assert 'Install in Cursor' in script and 'Install in VS Code' in script
     assert 'Claude.ai or Claude Desktop' in script
     assert '<strong>Settings</strong>' in script and '<strong>Connectors</strong>' in script
     assert '<strong>Add custom connector</strong>' in script and '<strong>URL</strong>' in script
-    assert 'claude mcp add --transport http socialscrape ${mcpUrl} --header "x-api-key: YOUR_API_KEY"' in script
+    assert 'claude mcp add --transport http socialscrape ${mcpUrl}`' in script
+    assert 'Run <code>/mcp</code> in Claude Code.' in script
+    assert 'Select <strong>Authenticate</strong>.' in script
     assert 'API keys are shown only once when created.' in script
     assert 'href="/app/keys">create an API key' in script
     assert '.agent-cards{' in css and '@media(max-width:760px)' in css
