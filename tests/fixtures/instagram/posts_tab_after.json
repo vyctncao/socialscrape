@@ -1,0 +1,75 @@
+{
+ "data": {
+  "xig_user_by_username": {
+   "pk": "21393171",
+   "polaris_ordered_timeline_connection": {
+    "edges": [
+     {
+      "node": {
+       "__typename": "XIGPolarisVideoMedia",
+       "__isXIGPolarisMedia": "XIGPolarisVideoMedia",
+       "pk": "4001394732348410902",
+       "code": "DeHz08LvwwW",
+       "accessibility_caption": "Video by Jane Williamson on October 05, 2026. May be a meme of one or more people and text.",
+       "caption": {
+        "text": "The brain rot is real. Happy birthday Dad! #67🤷‍♀️\n\n#siblings #brother #sister #family"
+       },
+       "seo_canonical_url": null,
+       "display_uri": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-15/835748606_18624144238017172_4321164332566117996_n.jpg?stp=dst-jpg_e35_s640x640_tt6&_nc_cat=111&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0xJUFMuYmVzdF9pbWFnZV91cmxnZW4uQzMifQ%3D%3D&_nc_ohc=z4Ki59BQjOEQ7kNvwECIRHa&_nc_oc=Adrj0Q9FfVFddrzMhUw-E4naioQ0nLkesNG2lvWR03Ta8m9U9uF-IER-R3Y24stEIvw&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=16kEZH5krjXhSJy_urZZgw&_nc_ss=7b689&oh=00_AQOGgIMWKTgzKNf7LCDnqDxUes1aaeOllNMQh0CNC-wY4g&oe=6AE1F101",
+       "like_and_view_counts_disabled": false,
+       "like_count": 12464,
+       "media_type": 2,
+       "product_type": "clips",
+       "user": {
+        "pk": "21393171",
+        "username": "jane",
+        "id": "17841400515130334"
+       },
+       "play_count": 663958,
+       "id": "POLARIS_4001394732348410902"
+      },
+      "cursor": "AQHTKZPOoxMLOUaukOMhsVY2tfyrFW1zKGj4b5d6XQ_bDXBXekr5qIyhkFVJDsiUjlb8OhTTcnU3l4IUFTx93GLXYw"
+     },
+     {
+      "node": {
+       "__typename": "XIGPolarisCarouselMedia",
+       "__isXIGPolarisMedia": "XIGPolarisCarouselMedia",
+       "pk": "3989883363188197245",
+       "code": "Dde6ceOEsd9",
+       "accessibility_caption": "Photo by Jane Williamson on September 19, 2026.",
+       "caption": {
+        "text": "Kinda chic to dream big with your husband 🥹 our caffeinated hot chocolate @drinksteamy is launching in a MAJOR RETAILER next month!!!🥹☕️"
+       },
+       "seo_canonical_url": null,
+       "display_uri": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-15/796270156_18618800542017172_3661660099802971886_n.jpg?stp=dst-jpg_e35_s640x640_tt6&_nc_cat=107&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_ohc=3xZiDa5kO2AQ7kNvwHtc94P&_nc_oc=Adp0qFsT1xmOeBGu0JD7ZyCyJ7RE28snwiL2hZXSNA-HhhJKUHlI-GLOjyk5WqKNYnk&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=16kEZH5krjXhSJy_urZZgw&_nc_ss=7b689&oh=00_AQM8idglnCZyWT4SyQ9MjJbN9oep9gFULz5Mmxw7dQFiiA&oe=6AE20108",
+       "like_and_view_counts_disabled": false,
+       "like_count": 52116,
+       "media_type": 8,
+       "product_type": "carousel_container",
+       "user": {
+        "pk": "21393171",
+        "username": "jane",
+        "id": "17841400515130334"
+       },
+       "carousel_media_count": 8,
+       "id": "POLARIS_3989883363188197245"
+      },
+      "cursor": "AQHTKCmbuJCoXF9QukddaYqLq_IH7Z3i56FpdwtpvXngPdkc7O00-PQBR-W3q6s-R5vHvi80jnQKGaVG0q1y_oPqJw"
+     }
+    ],
+    "page_info": {
+     "end_cursor": "AQHTWDgrqlbBf7TGUluhzMd1dV65_Ze_yby4Egq4uxTQ_Y73PCTySryDOI7mfeBlNU_6kIpdWnW15z2X9Am95AM_Dg",
+     "has_next_page": true
+    }
+   },
+   "id": "17841400515130334"
+  }
+ },
+ "extensions": {
+  "server_metadata": {
+   "request_start_time_ms": 1792816218277,
+   "time_at_flush_ms": 1792816218592
+  },
+  "is_final": true
+ }
+}

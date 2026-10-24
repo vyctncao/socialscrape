@@ -2174,7 +2174,11 @@ def test_stratton_method_and_legacy_route_compatibility(client, monkeypatch):
 
     aliases = {
         "/v1/instagram/story-highlights?handle=nasa": "/v1/instagram/user/highlights?handle=nasa",
-        "/v1/instagram/highlights/details?highlight_id=123": "/v1/instagram/user/highlight/detail?highlight_id=123",
+        # the canonical route's param is id: Stratton's highlight_id is renamed (it was passed on, then a 400)
+        "/v1/instagram/highlights/details?highlight_id=123": "/v1/instagram/user/highlight/detail?id=123",
+        "/v1/instagram/highlight/details?highlight_id=123&x=1": "/v1/instagram/user/highlight/detail?id=123&x=1",
+        "/v1/instagram/highlight/details?id=1&highlight_id=2":
+            "/v1/instagram/user/highlight/detail?id=1&highlight_id=2",  # id given: nothing renamed
         "/v1/tiktok/followers?handle=nasa": "/v1/tiktok/user/followers?handle=nasa",
         "/v1/tiktok/profile/following?handle=nasa": "/v1/tiktok/user/following?handle=nasa",
         "/v1/tiktok/profile/audience-demographics?handle=nasa": "/v1/tiktok/user/audience?handle=nasa",

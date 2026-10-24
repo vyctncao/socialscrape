@@ -238,9 +238,12 @@ def test_user_posts_conforms_and_ids(client):
         assert item["url"] == f"{IG}/p/{item['code']}/" and item["media_type"] in (1, 2, 8)
     assert body["user"]["pk"] == JANE_PK and body["user"]["username"] == JANE
     assert any(i["user"]["pk"] == JANE_PK for i in items)
-    for item in items:
-        if "like_count" in item:
-            assert item["product_type"] == "clips" and item["comment_count"] >= 0
+    for item in items:  # likes (and plays, on videos) from the tab; date, caption ids and comments from the post query
+        if "play_count" in item:
+            assert item["media_type"] == 2 and item["play_count"] == item["ig_play_count"]
+        if "taken_at" in item:
+            assert item["comment_count"] >= 0 and item["created_at"].endswith("Z")
+    assert any("taken_at" in i and "like_count" in i for i in items)
 
 
 @pytest.mark.live
@@ -259,9 +262,17 @@ def test_user_posts_counts_match_ytdlp(client):
     assert item["comment_count"] == pytest.approx(info["comment_count"], rel=0.05, abs=5)
 
 
-def test_user_posts_pagination_is_501(client):
-    for value in ("QVFE", "AQHTAKFzp1SVWlXrj2CA"):
-        err(client, POSTS, 501, "pagination_unavailable", handle=JANE, next_max_id=value)
+@pytest.mark.live
+def test_user_posts_pagination(client):
+    first = ok(client, POSTS, handle=JANE)
+    assert first["more_available"] is True and first["next_max_id"]
+    assert any(isinstance(i.get("taken_at"), int) for i in first["items"])
+    time.sleep(_SPACING)
+    second = ok(client, POSTS, handle=JANE, next_max_id=first["next_max_id"])
+    assert second["items"] and not {i["code"] for i in first["items"]} & {i["code"] for i in second["items"]}
+    assert_conforms(second, POSTS, min_coverage=0.2)
+    time.sleep(_SPACING)
+    err(client, POSTS, 400, "bad_cursor", handle=JANE, next_max_id="QVFE")
 
 
 @pytest.mark.live
@@ -297,7 +308,6 @@ def test_reels_handle_wins_over_user_id_and_empty_max_id(client):
 
 
 def test_reels_unsupported_params(client):
-    err(client, REELS, 501, "pagination_unavailable", handle=JANE, max_id="QVFE")
     err(client, REELS, 501, "not_supported", user_id=JANE_PK)
     assert "user_id" in err(client, REELS, 400, user_id="", handle="")["message"]
 
@@ -334,7 +344,8 @@ def test_highlights_user_id(client):
 @pytest.mark.live
 def test_highlight_detail_conforms_and_matches_ytdlp(client):
     body = ok(client, DETAIL, id=HIGHLIGHT)
-    assert_conforms(body, DETAIL, min_coverage=0.6)
+    # the logged-out page's reel has the web client's fields, fewer than the app API's ScrapeCreators shows
+    assert_conforms(body, DETAIL, min_coverage=0.35)
     assert body["id"] == f"highlight:{HIGHLIGHT}" and body["user"]["pk"] == JANE_PK
     items = body["items"]
     assert body["media_count"] == len(items) and len({i["pk"] for i in items}) == len(items)

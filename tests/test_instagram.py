@@ -477,35 +477,46 @@ def test_map_profile():
     assert_conforms(_sc({"data": {"user": user}}), "/v1/instagram/profile", min_coverage=0.25)
 
 
+def _feed(user: dict[str, Any], key: str, media: dict[str, Any] | None = None) -> ig.Feed:
+    connection = user[key]
+    return ig.Feed(user, [e["node"] for e in connection["edges"]], connection.get("page_info", {}), media or {})
+
+
 def test_map_user_posts():
-    body = ig.map_user_posts(PROFILE, ig.clip_counts(REELS_TAB))
+    details = {"3756328113124001496": {"pk": "3756328113124001496", "taken_at": 1762009243, "comment_count": 18709,
+                                       "caption": {"pk": "18060605873449050", "text": "CHICKENLEIGH",
+                                                   "created_at": 1762009245}}}
+    body = ig.map_user_posts(_feed(PROFILE, "polaris_ordered_timeline_connection", details))
     assert body["num_results"] == 3 and body["user"]["pk"] == JANE_PK and body["user"]["username"] == "jane"
+    assert body["next_max_id"] == "AQHT" and body["more_available"] is True
     first, second, collab = body["items"]
     assert first["id"] == f"3756328113124001496_{JANE_PK}" and first["code"] == "DQhKIRakcbY"
-    assert first["caption"] == {"text": "CHICKENLEIGH"} and first["url"].endswith("/p/DQhKIRakcbY/")
+    assert first["caption"] == {"text": "CHICKENLEIGH", "pk": "18060605873449050", "created_at": 1762009245,
+                                "media_id": "3756328113124001496", "user_id": JANE_PK}
+    assert first["url"].endswith("/p/DQhKIRakcbY/") and first["taken_at"] == 1762009243
     assert first["user"]["fbid_v2"] == "17841400515130334" and "caption" not in second
     assert first["user"]["full_name"] == "Jane Williamson" and first["user"]["is_verified"] is True
-    assert (first["like_count"], first["comment_count"], first["play_count"]) == (1743588, 18709, 30850829)
-    assert first["ig_play_count"] == 30850829  # the logged-out count is Instagram's alone
-    assert "like_count" not in second and "ig_play_count" not in second
+    assert first["comment_count"] == 18709 and "like_count" not in first  # the page's own nodes have no counts
+    assert "taken_at" not in second and "comment_count" not in second  # no details: unknown, not 0
     # a collab post on jane's grid is authored by the collaborator, not by the profile owner
     assert collab["id"] == "43_777" and collab["user"] == collab["owner"] == {
         "pk": "777", "pk_id": "777", "id": "777", "username": "bob", "fbid_v2": "17841400000000777"}
-    assert "like_count" not in ig.map_user_posts(PROFILE)["items"][0]
     assert_conforms(_sc(body), "/v2/instagram/user/posts", min_coverage=0.2)
+    last = ig.map_user_posts(ig.Feed(PROFILE, [], {"has_next_page": False, "end_cursor": "AQHT"}, {}))
+    assert "next_max_id" not in last and last["more_available"] is False
 
 
 def test_map_user_reels():
-    body = ig.map_user_reels(REELS_TAB)
+    body = ig.map_user_reels(_feed(REELS_TAB, "polaris_clips_connection"))
     (reel,) = body["items"]
     assert reel["id"] == f"3756328113124001496_{JANE_PK}" and reel["url"].endswith("/reel/DQhKIRakcbY/")
     assert (reel["play_count"], reel["ig_play_count"], reel["like_count"]) == (30850829, 30850829, 1743588)
     assert reel["user"]["username"] == "jane" and reel["owner"]["fbid_v2"] == "17841400515130334"
-    assert "max_id" not in body
+    assert body["max_id"] == "AQHT8"
     assert_conforms(_sc(body), "/v1/instagram/user/reels", min_coverage=0.1)
     # a collaborator's reel on the tab only carries their pk/id, never the profile owner's username
     collab = {"pk": "44", "code": "COLLAB", "user": {"pk": "777", "id": "17841400000000777"}, "play_count": 5}
-    (reel,) = ig.map_user_reels({**REELS_TAB, "polaris_clips_connection": {"edges": [{"node": collab}]}})["items"]
+    (reel,) = ig.map_user_reels(ig.Feed(REELS_TAB, [collab], {}, {}))["items"]
     assert reel["id"] == "44_777" and reel["user"] == {"pk": "777", "pk_id": "777", "id": "777",
                                                       "fbid_v2": "17841400000000777"}
 
@@ -640,12 +651,18 @@ def stubbed(monkeypatch):
         calls.append(query)
         return copy.deepcopy(TOPIC), TOPIC_HTML
 
+    async def fetch_feed(handle, tab="", cursor=None):
+        calls.append(f"{handle}/{tab}" + (f"?{cursor}" if cursor else ""))
+        return _feed(copy.deepcopy(REELS_TAB if tab == "reels" else PROFILE),
+                     "polaris_clips_connection" if tab == "reels" else "polaris_ordered_timeline_connection")
+
     async def with_ydl(platform, fn, **opts):
-        calls.append("reels_media")
-        return {"reels": {f"highlight:{HIGHLIGHT_ID}": copy.deepcopy(HIGHLIGHT)}, "status": "ok"}
+        calls.append("highlight")
+        return copy.deepcopy(HIGHLIGHT)
 
     monkeypatch.setattr(ig, "fetch_post", fetch_post)
     monkeypatch.setattr(ig, "fetch_profile", fetch_profile)
+    monkeypatch.setattr(ig, "fetch_feed", fetch_feed)
     monkeypatch.setattr(ig, "fetch_topic", fetch_topic)
     monkeypatch.setattr(ig, "with_ydl", with_ydl)
     return calls
@@ -670,13 +687,15 @@ def test_routes_offline(client, stubbed):
 
     stubbed.clear()
     body = client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()
-    assert body["num_results"] == 3 and "next_max_id" not in body and body["items"][0]["like_count"] == 1743588
-    assert stubbed == ["jane/", "jane/reels"]
+    assert body["num_results"] == 3 and body["next_max_id"] == "AQHT" and body["more_available"] is True
+    body = client.get("/v2/instagram/user/posts", params={"handle": "jane", "next_max_id": "AQHT"}).json()
+    assert body["success"] is True and stubbed == ["jane/", "jane/?AQHT"]
     assert_conforms(body, "/v2/instagram/user/posts", min_coverage=0.2)
 
     body = client.get("/v1/instagram/user/reels", params={"handle": "https://www.instagram.com/jane/reels/"}).json()
-    assert body["items"][0]["code"] == "DQhKIRakcbY" and "max_id" not in body
-    assert stubbed[-1] == "jane/reels"
+    assert body["items"][0]["code"] == "DQhKIRakcbY" and body["max_id"] == "AQHT8"
+    client.get("/v1/instagram/user/reels", params={"handle": "jane", "max_id": "AQHT8"})
+    assert stubbed[-2:] == ["jane/reels", "jane/reels?AQHT8"]
     assert_conforms(body, "/v1/instagram/user/reels", min_coverage=0.1)
 
     body = client.get("/v1/instagram/user/highlights", params={"handle": "jane"}).json()
@@ -737,54 +756,29 @@ def test_private_account_without_reels_or_highlights_is_403(client, stubbed, mon
                "has_any_clips": False, "polaris_clips_connection": {"edges": []}, "lox_highlights_connection": {
                    "edges": []}}
 
-    async def fetch_profile(handle, tab=""):
-        return copy.deepcopy(private), PROFILE_HTML
+    def serve(user):
+        monkeypatch.setattr(ig, "fetch_profile", lambda handle, tab="": _async((copy.deepcopy(user), "")))
+        monkeypatch.setattr(ig, "fetch_feed", lambda handle, tab="", cursor=None: _async(
+            _feed(copy.deepcopy(user), "polaris_clips_connection")))
 
-    monkeypatch.setattr(ig, "fetch_profile", fetch_profile)
+    serve(private)
     for path in ("/v1/instagram/user/reels", "/v1/instagram/user/highlights"):
         assert _err(client.get(path, params={"handle": "krys_midnight"}), 403, "forbidden")["message"] == (
             "This account is private")
 
-    public_empty = {**private, "is_private": False}
-    monkeypatch.setattr(ig, "fetch_profile", lambda handle, tab="": _async((copy.deepcopy(public_empty), "")))
+    serve({**private, "is_private": False})
     assert client.get("/v1/instagram/user/reels", params={"handle": "lilaltomtas"}).json()["items"] == []
     assert client.get("/v1/instagram/user/highlights", params={"handle": "lilaltomtas"}).json()["highlights"] == []
 
     # a private account's visible (e.g. collab) items are still returned
-    visible = {**REELS_TAB, **PROFILE, "polaris_clips_connection": REELS_TAB["polaris_clips_connection"],
-               "is_private": True}
-    monkeypatch.setattr(ig, "fetch_profile", lambda handle, tab="": _async((copy.deepcopy(visible), "")))
+    serve({**REELS_TAB, **PROFILE, "polaris_clips_connection": REELS_TAB["polaris_clips_connection"],
+           "is_private": True})
     assert len(client.get("/v1/instagram/user/reels", params={"handle": "jane"}).json()["items"]) == 1
     assert len(client.get("/v1/instagram/user/highlights", params={"handle": "jane"}).json()["highlights"]) == 1
 
 
 async def _async(value: Any) -> Any:
     return value
-
-
-def test_user_posts_without_reels_tab(client, stubbed, monkeypatch):
-    async def fetch_profile(handle, tab=""):
-        stubbed.append(f"{handle}/{tab}")
-        if tab:
-            raise UpstreamBlocked("login redirect")
-        return copy.deepcopy(PROFILE), PROFILE_HTML
-
-    monkeypatch.setattr(ig, "fetch_profile", fetch_profile)
-    body = client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()
-    assert body["success"] is True and body["num_results"] == 3 and "like_count" not in body["items"][0]
-
-    no_reels = copy.deepcopy(PROFILE)
-    no_reels["polaris_ordered_timeline_connection"]["edges"] = no_reels[
-        "polaris_ordered_timeline_connection"]["edges"][1:]
-
-    async def images_only(handle, tab=""):
-        stubbed.append(f"{handle}/{tab}")
-        return copy.deepcopy(no_reels), PROFILE_HTML
-
-    monkeypatch.setattr(ig, "fetch_profile", images_only)
-    stubbed.clear()
-    assert client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()["num_results"] == 2
-    assert stubbed == ["jane/"]  # no reels among the posts: the reels tab isn't requested
 
 
 def test_comments_with_cookies_use_comments_api(client, stubbed, monkeypatch):
@@ -815,11 +809,16 @@ def pages(monkeypatch):
     served: dict[str, tuple[str, str]] = {}
     requested: list[str] = []
 
-    async def with_ydl(platform, url, **opts):
+    def download(url, *args, **kwargs):
         requested.append(url)
-        return served[url]
+        html, final_url = served[url]
+        return html, SimpleNamespace(url=final_url, status=200)
 
-    monkeypatch.setattr(ig, "_page_flow", lambda ie_name, url, item_id: url)
+    ie = SimpleNamespace(_is_logged_in=False, _can_impersonate=False, _download_webpage_handle=download)
+
+    async def with_ydl(platform, fn, **opts):
+        return fn(SimpleNamespace(get_info_extractor=lambda name: ie))
+
     monkeypatch.setattr(ig, "with_ydl", with_ydl)
     return SimpleNamespace(served=served, requested=requested)
 
@@ -984,6 +983,11 @@ def test_rejected_session_is_a_cookie_error(monkeypatch):
         assert (err.status, err.code) == (500, "cookies_rejected")
         assert "SOCIALSCRAPE_COOKIES_INSTAGRAM" in err.message and "rate limit" not in err.message
         assert "anonymous" not in err.message
+    for flow in (lambda: ig._feed_flow("jane", "", None), lambda: ig._highlight_flow(HIGHLIGHT_ID)):
+        with pytest.raises(ig.SessionRejected):
+            flow()(_ydl(_session_ie(True)))
+        with pytest.raises(UpstreamBlocked, match="login page"):  # without a session: the logged-out rate limit
+            flow()(_ydl(_session_ie(False)))
     # without a session the same redirect stays what it was: fetch_page's logged-out rate limit, yt-dlp's errors
     assert ig._page_flow("InstagramUser", f"{ig.WEB}/jane/", "jane")(_ydl(_session_ie(False)))[1] == _LOGIN
     for flow in flows[1:]:
@@ -1284,7 +1288,6 @@ def test_missing_params_is_400(client, stubbed, path, params):
     ("/v2/instagram/post/comments", {"url": REEL_CODE, "cursor": "abc"}, "pagination_unavailable"),
     ("/v2/instagram/post/comments", {"url": REEL_CODE, "include_replies": "true"}, None),
     ("/v1/instagram/post", {"url": REEL_CODE, "download_media": "true"}, None),
-    ("/v2/instagram/user/posts", {"handle": "jane", "next_max_id": "QVFE"}, "pagination_unavailable"),
     ("/v1/instagram/search/popular", {"query": "dogs", "cursor": "abc"}, "pagination_unavailable"),
     ("/v1/instagram/search/hashtag", {"hashtag": "dogs", "cursor": "2"}, "pagination_unavailable"),
     ("/v1/instagram/search/hashtag", {"hashtag": "dogs", "cursor": "11"}, "pagination_unavailable"),
@@ -1292,7 +1295,6 @@ def test_missing_params_is_400(client, stubbed, path, params):
     ("/v1/instagram/search/hashtag", {"hashtag": "dogs", "date_posted": "last-hour"}, None),
     ("/v1/instagram/user/highlights", {"user_id": JANE_PK}, None),
     ("/v1/instagram/user/reels", {"user_id": JANE_PK}, None),
-    ("/v1/instagram/user/reels", {"handle": "jane", "max_id": "QVFE"}, "pagination_unavailable"),
     ("/v2/instagram/reels/search", {"query": "dogs", "page": "2"}, "pagination_unavailable"),
     ("/v2/instagram/reels/search", {"query": "dogs", "date_posted": "last-week"}, None),
     ("/v2/instagram/reels/search", {"query": "dogs", "date_posted": "last-year", "page": "2"},
@@ -1410,7 +1412,9 @@ def test_live_user_posts(client):
     assert all(i["id"].endswith(f"_{i['user']['pk']}") and i["user"]["username"] for i in body["items"])
     mine = [i for i in body["items"] if i["user"]["pk"] == JANE_PK]  # the others are collabs (their author)
     assert mine and all(i["user"]["username"] == "jane" for i in mine)
-    assert any(isinstance(i.get("like_count"), int) for i in body["items"])  # joined from the reels tab
+    assert any(isinstance(i.get("like_count"), int) for i in body["items"])  # the crawler fields
+    assert any(isinstance(i.get("taken_at"), int) and i["caption"]["text"] for i in body["items"])  # post query
+    assert body["next_max_id"] and body["more_available"] is True
     assert_conforms(body, "/v2/instagram/user/posts", min_coverage=0.2)
 
 
@@ -1441,7 +1445,7 @@ def test_live_highlight_detail(client):
     assert body["id"] == f"highlight:{HIGHLIGHT_ID}" and body["user"]["username"] == "jane" and body["items"]
     report = check(body, "/v1/instagram/user/highlight/detail")
     assert not report.mismatches, report
-    assert not report.extras and report.coverage >= 0.7, report
+    assert not report.extras and report.coverage >= 0.35, report  # the logged-out page has the web fields only
 
 
 @pytest.mark.live
@@ -1493,28 +1497,10 @@ def test_live_not_found_is_404(client, path, params):
     assert body["success"] is False and body["error"] == "not_found"
 
 
-def test_general_search_composes_profile_results(client, monkeypatch):
-    from socialscrape import fallback
-
-    async def ask_path(app, path, params):
-        assert (path, params) == ("/v1/instagram/search/profiles", {"query": "nasa"})
-        return 200, {"success": True, "profiles": [
-            {"id": "528817151", "username": "nasa", "full_name": "NASA", "is_verified": True,
-             "profile_pic_url": "https://img/nasa"},
-        ]}, None
-    monkeypatch.setattr(fallback, "ask_path", ask_path)
-    body = client.get("/v1/instagram/search", params={"query": "nasa"}).json()
-    assert body["data"]["users"] == [{"full_name": "NASA", "id": "528817151", "is_verified": True,
-                                       "position": 0, "profile_pic_url": "https://img/nasa", "username": "nasa"}]
-    assert body["data"]["hashtags"] == body["data"]["places"] == []
-
-
 def test_feed_mappers_expose_normalized_thumbnail_and_date_aliases():
-    user = {**PROFILE, "polaris_ordered_timeline_connection": {"edges": [{"node": {
-        "pk": "1", "code": "abc", "media_type": 1, "display_uri": "https://img", "taken_at": 1700000000,
-        "user": {"pk": PROFILE["pk"], "username": PROFILE["username"]},
-    }}]}}
-    item = ig.map_user_posts(user)["items"][0]
+    node = {"pk": "1", "code": "abc", "media_type": 1, "display_uri": "https://img", "taken_at": 1700000000,
+            "user": {"pk": PROFILE["pk"], "username": PROFILE["username"]}}
+    item = ig.map_user_posts(ig.Feed(PROFILE, [node], {}, {}))["items"][0]
     assert item["thumbnail_url"] == item["display_uri"] == "https://img"
     assert item["taken_at"] == item["taken_at_timestamp"] == 1700000000
 

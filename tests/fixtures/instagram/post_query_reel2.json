@@ -1,0 +1,85 @@
+{
+ "data": {
+  "xig_polaris_media": {
+   "__typename": "XIGPolarisVideoMedia",
+   "pk": "4013734517356337091",
+   "code": "Dezpkchv5fD",
+   "if_not_gated_logged_out": {
+    "__typename": "XIGPolarisVideoMedia",
+    "user": {
+     "username": "jane",
+     "id": "17841400515130334",
+     "pk": "21393171",
+     "profile_pic_url": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-19/858159145_18629205538017172_2441018152328237746_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_cat=1&ccb=7-5&_nc_sid=f7ccc5&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDgwLkMzIn0%3D&_nc_ohc=_rnZZXBAarQQ7kNvwG_2Ml8&_nc_oc=Ado3_WTimpwR_QolgYQoOt0W6zBliuv4UyeLKNfyEtB9W-NSekXM2rgiwC5zf0oGWGk&_nc_zt=24&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&oh=00_AQPBXYF5PdTJq9XwoqOeu-gLfTBoguEjGahoHeLGVppJTQ&oe=6AE21878",
+     "is_unpublished": false,
+     "full_name": "Jane Williamson",
+     "is_verified": true,
+     "is_private": false,
+     "__typename": "User",
+     "profile_image_uri": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-19/858159145_18629205538017172_2441018152328237746_n.jpg?stp=cp0_dst-jpg_s34x34_tt6&_nc_cat=1&ccb=7-5&_nc_sid=bf7eb4&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDgwLkMzIn0%3D&_nc_ohc=_rnZZXBAarQQ7kNvwG_2Ml8&_nc_oc=Ado3_WTimpwR_QolgYQoOt0W6zBliuv4UyeLKNfyEtB9W-NSekXM2rgiwC5zf0oGWGk&_nc_zt=24&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&oh=00_AQMIPo8SycunvRmFntfs7S99rNcR8k9EhPqD68pst6zkig&oe=6AE21878"
+    },
+    "__isXIGPolarisMedia": "XIGPolarisVideoMedia",
+    "pk": "4013734517356337091",
+    "code": "Dezpkchv5fD",
+    "taken_at": 1792694492,
+    "media_type": 2,
+    "product_type": "clips",
+    "coauthor_producers": [],
+    "location": null,
+    "clips_metadata": {
+     "original_sound_info": {}
+    },
+    "like_count": 60553,
+    "like_and_view_counts_disabled": false,
+    "comment_count": 429,
+    "commenting_disabled_for_viewer": null,
+    "caption": {
+     "pk": "17926022499204299",
+     "has_translation": null,
+     "text": "Never change❤️\n\nIb @ariannafreedman \n\n#tacobell #pilates #sourdough #momhumor #momlife",
+     "created_at": 1792694465
+    },
+    "caption_is_edited": false,
+    "original_height": 1280,
+    "original_width": 720,
+    "id": "POLARIS_4013734517356337091",
+    "display_uri": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-15/858893642_18630100066017172_380235136006572857_n.jpg?stp=dst-jpg_e35_s640x640_tt6&_nc_cat=106&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0xJUFMuYmVzdF9pbWFnZV91cmxnZW4uQzMifQ%3D%3D&_nc_ohc=UbsHAYem-twQ7kNvwEFS8Ei&_nc_oc=AdqNkuCoV5uI7ZfpoFMdsKrvfyta0jjOQjhbxclXcfkn8Tjjqj1IvrcWrn6LYZH7E3k&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&oh=00_AQPxwjOamcdDefxx1dJn9UETPSKtBfgXSsjk6oKxgU5--A&oe=6AE1F914",
+    "image_versions2": {
+     "additional_candidates": {
+      "first_frame": {
+       "url": "https://scontent-lax3-2.cdninstagram.com/v/t51.71878-15/862215707_1420073100338433_2707036659131816698_n.jpg?stp=dst-jpg_e15_tt6&_nc_cat=1&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkNMSVBTLnhwaWRzLjY0MC5zZHIudmlkZW9fYWRkaXRpb25hbF9jb3Zlcl9mcmFtZS5DMyJ9&_nc_ohc=YjALMF7t7AMQ7kNvwHGVI0J&_nc_oc=AdqwpXV5r1PjklXCgNFqFoSphOkq3RleTWCbN8WAHwpg_GM7KxvDEJiFMtt0zSQ0ugY&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&oh=00_AQPl53Efhharu_0YixmvTczLj0J5HcZEvV7bXc3yFS5yJw&oe=6AE211DB"
+      }
+     },
+     "candidates": [
+      {
+       "url": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-15/858893642_18630100066017172_380235136006572857_n.jpg?stp=dst-jpg_e15_tt6&_nc_cat=106&ig_cache_key=NDAxMzczNDUxNzM1NjMzNzA5MTE4NjMwMTAwMDYzMDE3MTcy.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkNMSVBTLnhwaWRzLjcyMC5zZHIudmlkZW9fZGVmYXVsdF9jb3Zlcl9mcmFtZS5DMyJ9&_nc_ohc=UbsHAYem-twQ7kNvwEFS8Ei&_nc_oc=AdqNkuCoV5uI7ZfpoFMdsKrvfyta0jjOQjhbxclXcfkn8Tjjqj1IvrcWrn6LYZH7E3k&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&oh=00_AQN-58r3_esQMrIj37iAay4O5wzRwxWlm-5YMOnVX1G0ag&oe=6AE1F914",
+       "height": 1280,
+       "width": 720
+      },
+      {
+       "url": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-15/858893642_18630100066017172_380235136006572857_n.jpg?stp=dst-jpg_e15_p640x640_tt6&_nc_cat=106&ig_cache_key=NDAxMzczNDUxNzM1NjMzNzA5MTE4NjMwMTAwMDYzMDE3MTcy.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkNMSVBTLnhwaWRzLjcyMC5zZHIudmlkZW9fZGVmYXVsdF9jb3Zlcl9mcmFtZS5DMyJ9&_nc_ohc=UbsHAYem-twQ7kNvwEFS8Ei&_nc_oc=AdqNkuCoV5uI7ZfpoFMdsKrvfyta0jjOQjhbxclXcfkn8Tjjqj1IvrcWrn6LYZH7E3k&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&oh=00_AQNjY1iXr_LwC0W2JAZp9HtvWR9Cx0b3sWIkbDEllligXA&oe=6AE1F914",
+       "height": 1138,
+       "width": 640
+      }
+     ]
+    },
+    "has_audio": true,
+    "is_dash_eligible": 1,
+    "number_of_qualities": 8,
+    "video_versions": [
+     {
+      "type": 101,
+      "url": "https://scontent-lax3-1.cdninstagram.com/o1/v/t2/f2/m86/AQPtnsUQO4VAWJmisqZzhXt80ERyx1Os91p448_qLxsaNQoPGXheystOq_2KXtBHfPIyGMINsEdAkXjI3L1JoGh6WRNflQxcpkTSAbc.mp4?_nc_cat=108&_nc_sid=5e9851&_nc_ht=scontent-lax3-1.cdninstagram.com&_nc_ohc=zT0c6Xl6HHoQ7kNvwFaUNrY&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uQ0xJUFMuQzMuNzIwLmRhc2hfYmFzZWxpbmVfMV92MSIsInhwdl9hc3NldF9pZCI6MjIxMzA5OTYwOTU4MzE2MSwiYXNzZXRfYWdlX2RheXMiOjEsInZpX3VzZWNhc2VfaWQiOjEwMDk5LCJkdXJhdGlvbl9zIjo4LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=68bcb95dc130d03b&_nc_vs=HBksFQIYUmlnX3hwdl9yZWVsc19wZXJtYW5lbnRfc3JfcHJvZC82RTM3NENEOTlBQkU0OUJFODM4ODlFNkM3ODEzNkI1N192aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYUWlnX3hwdl9wbGFjZW1lbnRfcGVybWFuZW50X3YyLzg4MEFERTcyNjNGODRGNzBCQzgzRjdDQjcxRjg4QjRFX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACbyuKeBrbPuBxUCKAJDMywXQCC7ZFocrAgYEmRhc2hfYmFzZWxpbmVfMV92MREAdf4HZeadAQA&_nc_gid=lfpLF1ukVa1plGwwCJ3A2Q&_nc_ss=7b689&_nc_zt=28&oh=00_AQO35tl0wiNoNbcHBAqr7-QIMUO3kzZHxoGcFcyf-5WZbg&oe=6ADE0979"
+     }
+    ],
+    "accessibility_caption": "Video by Jane Williamson on October 22, 2026. May be a meme of one or more people, makeup and text.",
+    "usertags": {
+     "in": []
+    },
+    "video_dash_manifest": "<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"urn:mpeg:dash:schema:mpd:2011 DASH-MPD.xsd\" profiles=\"urn:mpeg:dash:profile:isoff-on-demand:2011\" minBufferTime=\"PT2S\" type=\"static\" mediaPresentationDuration=\"PT8.380953S\" FBManifestTimestamp=\"1792817213\" FBManifestIdentifier=\"Fvrg4a0NGBJyMmV2ZXZwOS1yMWdlbjJ2cDkZluzw6LSws+4HsJ+kmtez7gfakrud17PuB4SG0qDXs+4Hrvnoo9ez7gfY7P+m17PuB4LglqrXs+4HrNOtrdez7gfWxsSw17PuByIYGGRhc2hfbG5faGVhYWNfdmJyM19hdWRpbyIsGRgFbGlnaHQAFgIUABIUAEgOTk9UX0NMQVNTSUZJRUQA\"></MPD>"
+   },
+   "gating_ruling": null,
+   "id": "POLARIS_4013734517356337091"
+  }
+ }
+}

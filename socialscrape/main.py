@@ -16,6 +16,7 @@ import sqlite3
 import sys
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from time import perf_counter
 from urllib.parse import urlencode
@@ -204,10 +205,20 @@ def create_app() -> FastAPI:
         "/v1/tiktok/profile/audience-demographics": "/v1/tiktok/user/audience",
         "/v1/tiktok/user/audience-demographics": "/v1/tiktok/user/audience",
     }
+    # Params an alias's callers name differently: ScrapeCreators clients send highlight_id to the highlight aliases.
+    renamed = {"/v1/instagram/highlights/details": {"highlight_id": "id"},
+               "/v1/instagram/highlight/details": {"highlight_id": "id"}}
+
+    def redirect_to(canonical: str, names: dict[str, str]) -> Callable[[Request], Awaitable[RedirectResponse]]:
+        async def legacy_alias(request: Request):
+            params = request.query_params
+            rename = {old: new for old, new in names.items() if old in params and new not in params}
+            query = urlencode([(rename.get(k, k), v) for k, v in params.multi_items()]) if rename else request.url.query
+            return RedirectResponse(canonical + (f"?{query}" if query else ""), status_code=307)
+        return legacy_alias
+
     for alias, canonical in aliases.items():
-        async def legacy_alias(request: Request, _canonical: str = canonical):
-            query = f"?{request.url.query}" if request.url.query else ""
-            return RedirectResponse(_canonical + query, status_code=307)
+        legacy_alias = redirect_to(canonical, renamed.get(alias, {}))
         legacy_alias.__name__ = "alias_" + alias.strip("/").replace("/", "_").replace("-", "_")
         app.add_api_route(alias, legacy_alias, methods=["GET"], include_in_schema=False)
     app.include_router(account.router)

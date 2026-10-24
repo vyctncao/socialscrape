@@ -4,18 +4,23 @@ Posts: InstagramIE runs unchanged (session setup, get_ruling check, the logged-o
 `PolarisLoggedOutDesktopWWWPostRootContentQuery` GraphQL call, /p/ page fallback)
 while the raw media it parses is recorded, so fields yt-dlp drops (owner, caption
 ids, tagged users, the first comments) are still available.
-Profiles, tags and highlights: the pages/API InstagramUserIE (profile page, plus
+Profiles, tags and highlights: the pages InstagramUserIE (profile page, plus
 its /reels/ tab), InstagramTagIE (/explore/tags/ -> /popular/) and InstagramStoryIE
-download, fetched through those extractor instances and read from the Relay data
-Instagram embeds for logged-out visitors.
+(/stories/highlights/<id>/) download, fetched through those extractor instances and
+read from the Relay data Instagram embeds for logged-out visitors.
+Posts and reels listings go on past their first page the way the logged-out web
+client scrolls (the tab's own GraphQL query with `after`), and each item is
+completed by InstagramIE's logged-out post query (date, caption, comment count).
 """
 
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 import logging
 import re
+import time
 import unicodedata
 import urllib.parse
 from collections.abc import Callable
@@ -26,7 +31,7 @@ from fastapi import APIRouter, Query, Request
 from yt_dlp.extractor.instagram import InstagramBaseIE, InstagramIE, InstagramStoryIE, _id_to_pk
 from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
-from yt_dlp.utils import ExtractorError, parse_duration, str_or_none, traverse_obj, unescapeHTML
+from yt_dlp.utils import ExtractorError, parse_duration, str_or_none, traverse_obj, unescapeHTML, urlencode_postdata
 
 from .. import transcribe
 from ..config import get_settings
@@ -46,7 +51,7 @@ from ..errors import (
 from ..registry import sc_get
 from ..util import compact, iso_utc, parse_count, truthy
 from ..ytdlp import with_ydl
-from ._instagram_shapes import HIGHLIGHT_REEL, prune
+from ._instagram_shapes import HIGHLIGHT_REEL, IMAGE_VERSIONS, VIDEO_VERSION, prune
 
 router = APIRouter()
 log = logging.getLogger("socialscrape.instagram")
@@ -356,9 +361,9 @@ def _page_flow(ie_name: str, url: str, item_id: str) -> Callable[[yt_dlp.Youtube
     return go
 
 
-async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[str, list[dict[str, Any]]]:
-    """Download a logged-out page the way `ie_name` does -> (html, relay results)."""
-    html, final_url = await with_ydl(PLATFORM, _page_flow(ie_name, url, item_id))
+def _check_page(html: str, final_url: str, what: str) -> list[dict[str, Any]]:
+    """The relay results of a logged-out page, unless it isn't one: NotFound for an address that left Instagram or
+    its error page, UpstreamBlocked for the login page Instagram sends rate-limited anonymous visitors to."""
     if urllib.parse.urlparse(final_url).netloc.lower() not in _INSTAGRAM_HOSTS:
         # Reserved names such as /developer/ redirect off Instagram (developers.facebook.com).
         raise NotFound(f"{what} not found")
@@ -367,7 +372,13 @@ async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[s
     page = _PAGE_ID.search(html)
     if page and page.group(1) == "httpErrorPage":
         raise NotFound(f"{what} not found")
-    return html, page_relay(html)
+    return page_relay(html)
+
+
+async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[str, list[dict[str, Any]]]:
+    """Download a logged-out page the way `ie_name` does -> (html, relay results)."""
+    html, final_url = await with_ydl(PLATFORM, _page_flow(ie_name, url, item_id))
+    return html, _check_page(html, final_url, what)
 
 
 def profile_restriction(html: str) -> str | None:
@@ -396,16 +407,22 @@ def missing_profile_error(html: str) -> ApiError:
     return UpstreamError("Instagram returned the profile page without profile data", code="no_profile_data")
 
 
+def _profile_user(html: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+    """A profile page's xig_user_by_username: its root query (bio, counts, highlights) merged with the tab's (posts
+    timeline or reels clips)."""
+    user: dict[str, Any] = {}
+    for part in traverse_obj(results, (..., "data", "xig_user_by_username", {dict})):
+        user.update(part)
+    if not user.get("pk"):
+        raise missing_profile_error(html)
+    return user
+
+
 async def fetch_profile(handle: str, tab: str = "") -> tuple[dict[str, Any], str]:
     """Profile page InstagramUserIE downloads (or its /reels/ tab) -> (merged xig_user_by_username, html)."""
     url = f"{WEB}/{handle}/{tab + '/' if tab else ''}"
     html, results = await fetch_page("InstagramUser", url, handle, "Profile")
-    user: dict[str, Any] = {}
-    for part in traverse_obj(results, (..., "data", "xig_user_by_username", {dict})):
-        user.update(part)  # root query (bio, counts, highlights) + the tab's query (timeline or clips)
-    if not user.get("pk"):
-        raise missing_profile_error(html)
-    return user, html
+    return _profile_user(html, results), html
 
 
 async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
@@ -455,6 +472,222 @@ def _reels_media_flow(highlight_id: str) -> Callable[[yt_dlp.YoutubeDL], Any]:
         return _api_json(
             ydl, ie, f"{ie._API_BASE_URL}/feed/reels_media/?reel_ids=highlight:{highlight_id}", highlight_id,
             "Downloading highlight", impersonate=ie._can_impersonate and ie._is_web_app)
+
+    return go
+
+
+# --- the logged-out web client's own GraphQL calls ----------------------------------------
+# A profile page names the Relay queries it preloads (its posts or reels tab) with their ids in expectedPreloaders,
+# and scrolling the tab repeats that query with the connection's end_cursor as `after`: anonymous pagination. The
+# ids below were the pages' in 2026-10, for a page that doesn't name one; the post query's is InstagramIE's.
+_TAB_QUERY = {"": "PolarisLoggedOutDesktopWWWProfilePostsTabContentQuery",
+              "reels": "PolarisLoggedOutDesktopWWWProfileReelsTabContentQuery"}
+_TAB_DOC_ID = {"": "29483846714553007", "reels": "27838951732404191"}
+_TAB_CONNECTION = {"": "polaris_ordered_timeline_connection", "reels": "polaris_clips_connection"}
+_POST_QUERY, _POST_DOC_ID = "PolarisLoggedOutDesktopWWWPostRootContentQuery", "27130156389949648"
+# A Relay provider of the posts-tab query: true selects the fields Instagram serves search crawlers, among them
+# each post's like_count and play_count (the reels tab has those without it)
+_CRAWLER = "__relay_internal__pv__PolarisSEOIsCrawlerrelayprovider"
+_PRELOADER = re.compile(r'"queryID":"(\d+)","variables":(\{[^{}]*\}),"queryName":"(\w+)"')
+_LSD = re.compile(r'\["LSD",\[\],\{"token":"([^"]+)"')
+_GRAPHQL_URL = f"{WEB}/api/graphql"
+_RETRY_DELAY = 2.0  # seconds before the one retry of an empty or non-JSON GraphQL answer
+# Post queries (one request each) a listing page makes for its items' dates, captions and comment counts. They stop
+# after this many seconds so the page still answers within the minute API clients usually wait.
+_DETAILS_BUDGET = 40.0
+
+
+class _NoJson(UpstreamBlocked):
+    """An empty body or a web page where Instagram's API answers JSON: how it turns away anonymous calls it is
+    throttling (also transiently). Retried once; a 503 like any block, so with_ydl tries the next proxy."""
+
+
+def api_answer(status: int, body: str, final_url: str, *, logged_in: bool = False) -> dict[str, Any]:
+    """The JSON object an Instagram API call (/api/graphql, /api/v1) answered, else the ApiError the answer means.
+
+    Calls Instagram refuses anonymously come back as a redirect to the login page, an empty body, a web page (its
+    httpErrorPage) instead of JSON, or 401 {"require_login": true, "message": "Please wait a few minutes before you
+    try again."}: blocks (503, retryable), not the "Failed to parse JSON" 500 yt-dlp reports."""
+    if InstagramBaseIE._is_login_redirect(final_url):
+        raise SessionRejected() if logged_in else UpstreamBlocked(_LOGIN_WALL)
+    if status == 429:
+        raise UpstreamBlocked("Instagram rate-limited the request (HTTP 429); try again later")
+    try:
+        data = json.loads(body)
+    except (ValueError, RecursionError):  # not JSON, or nested deeper than Python reads it
+        data = None
+    if not isinstance(data, dict):
+        if status >= 500:
+            raise UpstreamError(f"Instagram answered HTTP {status}")
+        if not body.strip():
+            raise _NoJson("Instagram returned an empty response; try again later")
+        raise _NoJson("Instagram answered its API with a web page instead of JSON, as it does for anonymous "
+                      "requests it is throttling; try again later")
+    message = data.get("message") if isinstance(data.get("message"), str) else None
+    if data.get("require_login") is True or status in (401, 403):
+        raise UpstreamBlocked(f"Instagram refused the anonymous request: {message or f'HTTP {status}'}")
+    if status >= 400 or data.get("status") == "fail":
+        raise UpstreamError(f"Instagram answered HTTP {status}: {message or 'error'}")
+    return data
+
+
+def _graphql_failure(data: dict[str, Any], what: str) -> ApiError:
+    """The error a GraphQL answer without the expected data stands for (an unknown query id is our bug, or a
+    query Instagram retired)."""
+    message = traverse_obj(data, ("errors", ..., "message", {str}, any)) or "no data"
+    if "was not found" in message:
+        return UpstreamError(f"Instagram no longer serves the {what} query: {message}", code="query_unavailable")
+    return UpstreamError(f"Instagram returned no {what}: {message}")
+
+
+class WebSession:
+    """The /api/graphql calls Instagram's logged-out web client makes from a page, with what that page set up: the
+    LSD token in its HTML, the csrftoken cookie and the ids of the Relay queries it preloads."""
+
+    def __init__(self, ie: Any, html: str, referer: str) -> None:
+        self.ie, self.referer = ie, referer
+        m = _LSD.search(html)
+        self.lsd = m.group(1) if m else None
+        self.preloaded: dict[str, tuple[str, dict[str, Any]]] = {}
+        for doc_id, variables, name in _PRELOADER.findall(html):
+            try:
+                self.preloaded[name] = (doc_id, json.loads(variables))
+            except ValueError:
+                continue
+
+    def query(self, name: str, doc_id: str, variables: dict[str, Any], *, retries: int = 1) -> dict[str, Any]:
+        """POST the query as the web client does -> its JSON answer (api_answer's errors otherwise). An empty or
+        non-JSON answer is retried `retries` times after a pause; explicit refusals are not."""
+        if not self.lsd:
+            raise UpstreamError("Instagram's page carried no LSD token for its API calls", code="no_session_token")
+        csrf = self.ie._get_cookies(WEB).get("csrftoken")
+        headers = {**self.ie._api_headers, "X-FB-Friendly-Name": name, "X-FB-LSD": self.lsd,
+                   "X-Requested-With": "XMLHttpRequest", "Referer": self.referer,
+                   "Content-Type": "application/x-www-form-urlencoded",
+                   **({"X-CSRFToken": csrf.value} if csrf else {})}
+        form = urlencode_postdata({"lsd": self.lsd, "fb_api_caller_class": "RelayModern",
+                                   "fb_api_req_friendly_name": name, "server_timestamps": "true",
+                                   "variables": json.dumps(variables, separators=(",", ":")), "doc_id": doc_id})
+        for attempt in range(retries + 1):
+            body, urlh = self.ie._download_webpage_handle(
+                _GRAPHQL_URL, name, f"Downloading {name}", data=form, headers=headers,
+                impersonate=self.ie._can_impersonate, expected_status=lambda _: True)
+            try:
+                return api_answer(urlh.status, body, urlh.url, logged_in=self.ie._is_logged_in)
+            except _NoJson:
+                if attempt >= retries:
+                    raise
+                time.sleep(_RETRY_DELAY * (attempt + 1))
+        raise AssertionError("unreachable")
+
+    def tab_page(self, tab: str, handle: str, cursor: str | None) -> dict[str, Any]:
+        """The posts (tab '') or reels tab's connection, after `cursor` (its first page without one), as the page's
+        own scrolling asks for it; the posts tab as served to crawlers, with each post's like and play counts.
+        BadRequest bad_cursor for a cursor Instagram can't continue from."""
+        name = _TAB_QUERY[tab]
+        doc_id, variables = self.preloaded.get(name, (_TAB_DOC_ID[tab], {"first": 12, "username": handle}))
+        variables = {**variables, **({_CRAWLER: True} if _CRAWLER in variables else {}),
+                     **({"after": cursor} if cursor else {})}
+        data = self.query(name, doc_id, variables)
+        user = traverse_obj(data, ("data", "xig_user_by_username", {dict}))
+        connection = traverse_obj(user, (_TAB_CONNECTION[tab], {dict}))
+        if connection is None:
+            if cursor and user and user.get("pk"):  # the profile answered, only the cursor's page didn't
+                raise BadRequest("Instagram can't continue the listing from this cursor", code="bad_cursor")
+            raise _graphql_failure(data, "profile listing")
+        return connection
+
+    def media_details(self, nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """pk -> the logged-out post query's media (InstagramIE's PolarisLoggedOutDesktopWWWPostRootContentQuery:
+        taken_at, caption with its ids, like and comment counts, image and video versions, the author) for each
+        node, one request each. A refusal stops the loop (more requests would only deepen the block), as does
+        _DETAILS_BUDGET; the nodes left out simply lack those fields."""
+        out: dict[str, dict[str, Any]] = {}
+        start = time.monotonic()
+        for index, node in enumerate(nodes):
+            pk = str_or_none(node.get("pk"))
+            if not pk or not pk.isdecimal() or pk in out:
+                continue
+            if time.monotonic() - start > _DETAILS_BUDGET:
+                log.info("instagram: post details stopped after %.0f s, %d of %d items without them",
+                         _DETAILS_BUDGET, len(nodes) - index, len(nodes))
+                break
+            try:
+                data = self.query(_POST_QUERY, _POST_DOC_ID, {"media_id": pk}, retries=0)
+            except (ApiError, ExtractorError) as exc:
+                log.info("instagram: post query for %s failed (%s), %d of %d items without details", pk,
+                         getattr(exc, "message", exc), len(nodes) - index, len(nodes))
+                break
+            media = traverse_obj(data, ("data", "xig_polaris_media", "if_not_gated_logged_out", {dict}))
+            if media and str_or_none(media.get("pk")) == pk:
+                out[pk] = media
+        return out
+
+
+@dataclasses.dataclass
+class Feed:
+    """One page of a profile's posts or reels tab."""
+
+    user: dict[str, Any]  # the profile page's xig_user_by_username (its own first page of the tab included)
+    nodes: list[dict[str, Any]]  # the page's media nodes
+    page_info: dict[str, Any]  # Instagram's: end_cursor, has_next_page
+    media: dict[str, dict[str, Any]]  # WebSession.media_details for the nodes
+
+
+def _feed_flow(handle: str, tab: str, cursor: str | None) -> Callable[[yt_dlp.YoutubeDL], Feed]:
+    def go(ydl: yt_dlp.YoutubeDL) -> Feed:
+        ie = ydl.get_info_extractor("InstagramUser")
+        url = f"{WEB}/{handle}/{tab + '/' if tab else ''}"
+        html, final_url = _page_flow("InstagramUser", url, handle)(ydl)
+        user = _profile_user(html, _check_page(html, final_url, "Profile"))
+        session = WebSession(ie, html, url)
+        connection = traverse_obj(user, (_TAB_CONNECTION[tab], {dict})) or {}
+        blocked = False
+        if cursor or not tab:  # the posts tab's first page again, for its like and play counts
+            try:
+                connection = session.tab_page(tab, handle, cursor)
+            except ApiError as exc:
+                if cursor:
+                    raise
+                blocked = isinstance(exc, UpstreamBlocked)  # its post queries would be turned away too
+                log.info("instagram: counts for %s's posts unavailable: %s", handle, exc.message)
+        nodes = traverse_obj(connection, ("edges", ..., "node", {dict})) or []
+        page_info = traverse_obj(connection, ("page_info", {dict})) or {}
+        return Feed(user, nodes, page_info, {} if blocked else session.media_details(nodes))
+
+    return go
+
+
+async def fetch_feed(handle: str, tab: str = "", cursor: str | None = None) -> Feed:
+    """A page of the profile's posts tab (tab '') or reels tab: the first one is the page's own, later ones the
+    tab's query after `cursor`; with each item's post-query details."""
+    return await with_ydl(PLATFORM, _feed_flow(handle, tab, cursor))
+
+
+def _highlight_flow(highlight_id: str) -> Callable[[yt_dlp.YoutubeDL], dict[str, Any] | None]:
+    """The reel of /stories/highlights/<id>/, the page InstagramStoryIE opens first: Instagram prefetches the
+    feed/reels_media answer into it (xdt_api__v1__feed__reels_media__connection) for logged-out visitors, while the
+    API call itself answers them with a web page. With a session, a page without it falls back to that call."""
+    def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any] | None:
+        ie = ydl.get_info_extractor("InstagramStory")
+        logged_in = ie._is_logged_in
+        html, final_url = _page_flow("InstagramStory", f"{WEB}/stories/highlights/{highlight_id}/", highlight_id)(ydl)
+        results = _check_page(html, final_url, "Highlight")
+        for node in traverse_obj(results, (..., "data", "xdt_api__v1__feed__reels_media__connection", "edges", ...,
+                                           "node", {dict})):
+            if node.get("id") == f"highlight:{highlight_id}":
+                return node
+        if not logged_in:
+            raise UpstreamBlocked("Instagram served the highlight page without its stories, as it does for "
+                                  "anonymous visitors it is throttling; try again later")
+        try:
+            data = _reels_media_flow(highlight_id)(ydl)
+        except ExtractorError as exc:
+            if isinstance(exc.cause, json.JSONDecodeError):  # a web page or nothing where JSON belongs
+                raise _NoJson("Instagram answered the highlight API with a web page instead of JSON; try again "
+                              "later") from exc
+            raise
+        return traverse_obj(data, ("reels", f"highlight:{highlight_id}", {dict}))
 
     return go
 
@@ -753,73 +986,99 @@ def _media_id(node: dict[str, Any], author: dict[str, Any]) -> str | None:
     return f"{node['pk']}_{author['pk']}" if node.get("pk") and author.get("pk") else str_or_none(node.get("pk"))
 
 
-_COUNT_KEYS = ("like_count", "comment_count", "play_count")
+def _count(key: str, *sources: dict[str, Any]) -> int | None:
+    """The first source's integer `key`. A like or play count Instagram hides (like_and_view_counts_disabled) and
+    reports as 0 is unknown, not 0."""
+    for source in sources:
+        value = source.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            hidden = key != "comment_count" and any(s.get("like_and_view_counts_disabled") is True for s in sources)
+            return None if hidden and value == 0 else value
+    return None
 
 
-def clip_counts(user: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Reels-tab clips by pk -> their like/comment/play counts (the posts tab has none).
-
-    The logged-out play_count is Instagram's alone, so it is also ig_play_count (as in user/reels).
-    """
-    out = {}
-    for node in traverse_obj(user, ("polaris_clips_connection", "edges", ..., "node", {dict})):
-        if not node.get("pk"):
-            continue
-        counts = {k: node[k] for k in _COUNT_KEYS if isinstance(node.get(k), int)}
-        if "play_count" in counts:
-            counts["ig_play_count"] = counts["play_count"]
-        out[str(node["pk"])] = counts
-    return out
+def _timestamp(*values: Any) -> int | None:
+    return next((v for v in values if isinstance(v, int) and not isinstance(v, bool) and v > 0), None)
 
 
-def map_user_posts(user: dict[str, Any], counts: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Profile page's posts-tab timeline -> SC v2 user/posts (first page only); counts joined by pk."""
-    items = []
-    for node in traverse_obj(user, ("polaris_ordered_timeline_connection", "edges", ..., "node", {dict})):
-        text = traverse_obj(node, ("caption", "text", {str}))
-        author = _node_author(node, user)
-        items.append(compact({
-            "id": _media_id(node, author),
-            "code": node.get("code"),
-            "media_type": node.get("media_type"),
-            "caption": {"text": text} if text is not None else None,
-            "display_uri": node.get("display_uri"),
-            "thumbnail_url": node.get("display_uri"),
-            "taken_at": node.get("taken_at"),
-            "taken_at_timestamp": node.get("taken_at"),
-            "user": author,
-            "owner": author,
-            "product_type": node.get("product_type"),
-            **(counts or {}).get(str(node.get("pk")), {}),
-            "url": f"{WEB}/p/{node['code']}/" if node.get("code") else None,
-        }))
-    profile = _user_v2(user)
+def map_feed_item(node: dict[str, Any], profile: dict[str, Any], media: dict[str, Any] | None = None, *,
+                  reel: bool = False) -> dict[str, Any]:
+    """A posts- or reels-tab node -> SC user/posts (v2) or user/reels item, its own author (collaborators included)
+    filled from the profile.
+
+    `media`, the logged-out post query's answer for it when fetched (WebSession.media_details), adds taken_at and
+    created_at, the caption with its ids (the reels tab has none), the comment count, image/video versions,
+    has_audio, video_duration and the author's name. Like and play counts are the tab's (the posts tab's crawler
+    query has like_count and play_count, the reels tab also comment_count): the post query has no play count
+    anonymously. play_count, logged out Instagram's alone, is also ig_play_count."""
+    media = media or {}
+    user = {**(traverse_obj(node, ("user", {dict})) or {}),
+            **{k: v for k, v in (traverse_obj(media, ("user", {dict})) or {}).items()
+               if v is not None and not isinstance(v, (dict, list))}}  # the media's user nests more of their posts
+    author = _node_author({"user": user}, profile)
+    pk = str_or_none(node.get("pk") or media.get("pk"))
+    code = node.get("code") or media.get("code")
+    mtype = traverse_obj(media, ("media_type", {int})) or traverse_obj(node, ("media_type", {int}))
+    video = mtype == 2 or _is_video_node(node) or bool(media.get("video_versions"))
+    caption = traverse_obj(media, ("caption", {dict})) or traverse_obj(node, ("caption", {dict})) or {}
+    text = caption.get("text") if isinstance(caption.get("text"), str) else None
+    caption_pk = str_or_none(caption.get("pk"))
+    taken_at = _timestamp(media.get("taken_at"), node.get("taken_at"))
+    play_count = _count("play_count", node, media)
+    return compact({
+        "id": _media_id({"pk": pk}, author),
+        "code": code,
+        "media_type": mtype,
+        "product_type": node.get("product_type") or media.get("product_type"),
+        "caption": compact({
+            "text": text,
+            "pk": caption_pk,
+            "created_at": _timestamp(caption.get("created_at")),
+            "media_id": pk if caption_pk else None,
+            "user_id": author.get("pk") if caption_pk else None,
+        }) if text is not None else None,
+        "taken_at": taken_at,
+        "taken_at_timestamp": taken_at,
+        "created_at": iso_utc(taken_at),
+        "like_count": _count("like_count", media, node),
+        "comment_count": _count("comment_count", media, node),
+        "play_count": play_count,
+        "ig_play_count": play_count,
+        "has_audio": media.get("has_audio") if video and isinstance(media.get("has_audio"), bool) else None,
+        "video_duration": video_duration(media) if video and media else None,
+        "is_paid_partnership": media.get("is_paid_partnership") if isinstance(media.get("is_paid_partnership"),
+                                                                              bool) else None,
+        "display_uri": node.get("display_uri") or media.get("display_uri"),
+        "thumbnail_url": node.get("display_uri") or media.get("display_uri"),
+        "image_versions2": prune(traverse_obj(media, ("image_versions2", {dict})), IMAGE_VERSIONS) or None,
+        "video_versions": prune(traverse_obj(media, ("video_versions", ..., {dict})), VIDEO_VERSION) or None,
+        "user": author,
+        "owner": author,
+        "url": f"{WEB}/{'reel' if reel else 'p'}/{code}/" if code else None,
+    })
+
+
+def _cursor(page_info: dict[str, Any]) -> str | None:
+    """Instagram's end_cursor while it says there is a next page."""
+    end = page_info.get("end_cursor")
+    return end if page_info.get("has_next_page") is True and isinstance(end, str) and end else None
+
+
+def map_user_posts(feed: Feed) -> dict[str, Any]:
+    """A posts-tab page -> SC v2 user/posts; next_max_id is Instagram's own cursor for the next page."""
+    items = [map_feed_item(node, feed.user, feed.media.get(str(node.get("pk")))) for node in feed.nodes]
+    profile = _user_v2(feed.user)
     top = {k: profile[k] for k in ("pk", "pk_id", "full_name", "is_private", "id", "username", "is_verified",
                                    "profile_pic_url") if k in profile}
-    return {"items": items, "num_results": len(items), "user": top}
+    has_next = feed.page_info.get("has_next_page")
+    return compact({"items": items, "num_results": len(items), "next_max_id": _cursor(feed.page_info),
+                    "more_available": has_next if isinstance(has_next, bool) else None, "user": top})
 
 
-def map_user_reels(user: dict[str, Any]) -> dict[str, Any]:
-    """Profile reels tab (polaris_clips_connection) -> SC user/reels (first page only)."""
-    items = []
-    for node in traverse_obj(user, ("polaris_clips_connection", "edges", ..., "node", {dict})):
-        author = _node_author(node, user)
-        items.append(compact({
-            "id": _media_id(node, author),
-            "code": node.get("code"),
-            "play_count": node.get("play_count"),
-            "ig_play_count": node.get("play_count"),
-            "comment_count": node.get("comment_count"),
-            "like_count": node.get("like_count"),
-            "display_uri": node.get("display_uri"),
-            "thumbnail_url": node.get("display_uri"),
-            "taken_at": node.get("taken_at"),
-            "taken_at_timestamp": node.get("taken_at"),
-            "user": author,
-            "owner": author,
-            "url": f"{WEB}/reel/{node['code']}/" if node.get("code") else None,
-        }))
-    return {"items": items}
+def map_user_reels(feed: Feed) -> dict[str, Any]:
+    """A reels-tab page -> SC user/reels; max_id is Instagram's own cursor for the next page."""
+    items = [map_feed_item(node, feed.user, feed.media.get(str(node.get("pk"))), reel=True) for node in feed.nodes]
+    return compact({"items": items, "max_id": _cursor(feed.page_info)})
 
 
 def map_highlights(user: dict[str, Any]) -> list[dict[str, Any]]:
@@ -832,6 +1091,30 @@ def map_highlights(user: dict[str, Any]) -> list[dict[str, Any]]:
         "owner": owner,
         "title": node.get("title"),
     }) for node in traverse_obj(user, ("lox_highlights_connection", "edges", ..., "node", {dict}))]
+
+
+def map_highlight_reel(reel: dict[str, Any]) -> dict[str, Any]:
+    """A feed/reels_media reel (the highlight page's prefetched answer, or the API's) -> SC highlight detail, trimmed
+    to ScrapeCreators' keys. The page's items name their author by pk and id only; as InstagramStoryIE does, the
+    reel's user (a highlight holds its owner's stories) fills in their user and owner. media_count and media_ids,
+    which the page leaves out, count and list the items: the reel carries all of them."""
+    owner = {k: v for k, v in (traverse_obj(reel, ("user", {dict})) or {}).items() if v is not None}
+    items = []
+    for item in traverse_obj(reel, ("items", ..., {dict})):
+        user = traverse_obj(item, ("user", {dict})) or {}
+        if owner.get("pk") and str(user.get("pk") or owner["pk"]) == str(owner["pk"]):
+            user = {**owner, **{k: v for k, v in user.items() if v is not None}}
+            item = {**item, "user": user, "owner": item.get("owner") or user}
+        items.append(item)
+    out = prune({**reel, "items": items}, HIGHLIGHT_REEL)
+    if "media_count" not in out:
+        out["media_count"] = len(items)
+    if "media_ids" not in out and all(item.get("pk") for item in items):
+        out["media_ids"] = [str(item["pk"]) for item in items]
+    fbid = traverse_obj(out, ("user", "interop_messaging_user_fbid", {str}))
+    if fbid and fbid.isdecimal():  # the page's GraphQL types it as a string, the API (and SC) as a number
+        out["user"]["interop_messaging_user_fbid"] = int(fbid)
+    return out
 
 
 _PAGE_TITLE = re.compile(
@@ -1082,46 +1365,45 @@ async def instagram_post_count(handle: str = Query(...), allow_estimated: str | 
     return {"handle": handle, "media_count": count, "is_estimated": estimated}
 
 
-@sc_get(router, "/v2/instagram/user/posts", source="yt-dlp InstagramUserIE profile page (posts + reels tab Relay data)",
-        notes="First 12 posts of the logged-out profile page only: id, code, media_type, product_type, caption "
-              "text, display_uri, url and each post's own author (collaborators included). like_count, "
-              "comment_count and play_count (= ig_play_count) are joined from the profile's /reels/ tab (a second "
-              "page request) and so only appear on reels among its first 12 clips; they are left out if that tab "
-              "fails. No taken_at or image/video versions. next_max_id is never returned (InstagramUserIE's "
-              "timeline query is rejected by Instagram) and passing one returns 501. A restricted (age-gated) "
-              "profile returns 403 restricted_profile. trim is ignored.")
+_DETAILS_NOTE = ("Each item is completed by the logged-out post query InstagramIE makes (one request per item, in "
+                 "turn): taken_at and created_at, the caption with its pk/created_at, comment_count, like_count, "
+                 "image_versions2, video_versions, has_audio and video_duration. Those requests stop at the first "
+                 "one Instagram refuses or after 40 s; the items left (and any Instagram doesn't answer for) lack "
+                 "those fields rather than carry guesses.")
+
+
+@sc_get(router, "/v2/instagram/user/posts",
+        source="yt-dlp InstagramUserIE profile page + the logged-out web client's posts-tab and post GraphQL queries",
+        notes="12 posts per page, newest first after any pinned ones, from the logged-out profile's posts tab: id, "
+              "code, media_type, product_type, caption, display_uri, url and each post's own author "
+              "(collaborators included); like_count and play_count (= ig_play_count) from the tab's query as "
+              "Instagram serves it to crawlers (hidden counts are left out). " + _DETAILS_NOTE + " next_max_id "
+              "is Instagram's cursor for the next page (the tab's query with `after`, as the page's own scrolling "
+              "makes it) and more_available says whether there is one; a cursor Instagram can't continue from "
+              "returns 400 bad_cursor. A restricted (age-gated) profile returns 403 restricted_profile. trim is "
+              "ignored.")
 async def instagram_user_posts(handle: str = Query(...), next_max_id: str | None = None,
                                trim: str | None = None) -> dict[str, Any]:
-    handle = clean_handle(handle)
-    _no_pagination(next_max_id, "Post")
-    user, _ = await fetch_profile(handle)
-    counts: dict[str, dict[str, Any]] = {}
-    product_types = traverse_obj(user, ("polaris_ordered_timeline_connection", "edges", ..., "node", "product_type"))
-    if user.get("has_any_clips") is not False and "clips" in product_types:
-        try:
-            counts = clip_counts((await fetch_profile(handle, "reels"))[0])
-        except ApiError as exc:
-            log.info("instagram: reels tab for %s failed, posts returned without counts: %s", handle, exc)
-    return map_user_posts(user, counts)
+    return map_user_posts(await fetch_feed(clean_handle(handle), "", next_max_id or None))
 
 
-@sc_get(router, "/v1/instagram/user/reels", source="yt-dlp InstagramUserIE profile page (/reels/ tab Relay data)",
-        notes="First 12 reels of the logged-out profile's reels tab: id, code, play_count (= ig_play_count), "
-              "comment_count, like_count, display_uri, url and the author (a collaborator's reel carries only "
-              "their pk/id: the tab has no username for them). No caption, taken_at or image/video versions on "
-              "that tab. handle only: user_id alone returns 501. max_id is never "
-              "returned and passing one returns 501. A private account with nothing visible returns 403, as does a "
-              "restricted (age-gated) profile (restricted_profile). trim is ignored.")
+@sc_get(router, "/v1/instagram/user/reels",
+        source="yt-dlp InstagramUserIE profile page (/reels/ tab) + the logged-out web client's reels-tab and post "
+               "GraphQL queries",
+        notes="12 reels per page from the logged-out profile's reels tab: id, code, play_count (= ig_play_count), "
+              "comment_count, like_count, display_uri, url and the author. " + _DETAILS_NOTE + " max_id is "
+              "Instagram's cursor for the next page (the tab's query with `after`); a cursor Instagram can't "
+              "continue from returns 400 bad_cursor. handle only: user_id alone returns 501. A private account "
+              "with nothing visible returns 403, as does a restricted (age-gated) profile (restricted_profile). "
+              "trim is ignored.")
 async def instagram_user_reels(user_id: str | None = None, handle: str | None = None, max_id: str | None = None,
                                trim: str | None = None) -> dict[str, Any]:
     require_one(user_id=user_id, handle=handle)
     if not handle:
         raise NotSupported("Lookup by user_id is not supported; pass handle")
-    handle = clean_handle(handle)
-    _no_pagination(max_id, "Reels")
-    user, _ = await fetch_profile(handle, "reels")
-    reels = map_user_reels(user)
-    if not reels["items"] and user.get("is_private") is True:  # collab media of a private account stays visible
+    feed = await fetch_feed(clean_handle(handle), "reels", max_id or None)
+    reels = map_user_reels(feed)
+    if not reels["items"] and feed.user.get("is_private") is True:  # collab media of a private account stays visible
         raise Forbidden("This account is private")
     return reels
 
@@ -1142,19 +1424,22 @@ async def instagram_highlights(user_id: str | None = None, handle: str | None = 
     return {"highlights": highlights}
 
 
-@sc_get(router, "/v1/instagram/user/highlight/detail", source="yt-dlp InstagramStoryIE (feed/reels_media API)",
-        notes="Reel object from the reels_media call InstagramStoryIE makes for highlight:<id> (works "
-              "anonymously), trimmed to ScrapeCreators' keys. cover_media.crop_rect holds fractions (SC's example "
-              "shows integers). Accepts the numeric id, 'highlight:<id>', a /stories/highlights/<id>/ URL or the "
-              "app's share link (/s/<base64 of 'highlight:<id>'>).")
+@sc_get(router, "/v1/instagram/user/highlight/detail",
+        source="yt-dlp InstagramStoryIE's highlight page (its prefetched feed/reels_media answer)",
+        notes="The reel Instagram prefetches into the logged-out /stories/highlights/<id>/ page (the answer of the "
+              "feed/reels_media call InstagramStoryIE makes, which itself answers anonymous clients with a web "
+              "page), trimmed to ScrapeCreators' keys; media_count is the number of items. With cookies a page "
+              "without it falls back to that call. cover_media.crop_rect holds fractions (SC's example shows "
+              "integers). Accepts the numeric id, 'highlight:<id>', a /stories/highlights/<id>/ URL or the app's "
+              "share link (/s/<base64 of 'highlight:<id>'>). The aliases /v1/instagram/highlights/details and "
+              "/v1/instagram/highlight/details redirect here, their highlight_id param becoming id.")
 async def instagram_highlight_detail(id: str | None = None) -> dict[str, Any]:
     require_one(id=id)
     highlight_id = clean_highlight_id(id)
-    data = await with_ydl(PLATFORM, _reels_media_flow(highlight_id))
-    reel = traverse_obj(data, ("reels", f"highlight:{highlight_id}", {dict}))
+    reel = await with_ydl(PLATFORM, _highlight_flow(highlight_id))
     if not reel:
         raise NotFound("Highlight not found (or not visible without login)")
-    return prune(reel, HIGHLIGHT_REEL)
+    return map_highlight_reel(reel)
 
 
 @sc_get(router, "/v1/instagram/search/popular", source="yt-dlp InstagramTagIE page (/explore/tags/ -> /popular/)",
@@ -1242,22 +1527,45 @@ async def instagram_reels_search(query: str = Query(...), date_posted: str | Non
     return {"reels": [map_hashtag_post(n) for n in topic_nodes(data) if _is_video_node(n)]}
 
 
-@sc_get(router, "/v1/instagram/search", source="profile search compatibility source composed locally",
-        notes="Composes the working profile-search source into Instagram's mixed-search envelope; hashtags and places "
-              "remain empty when the source has none.")
-async def search_instagram(request: Request, query: str = Query(..., min_length=1)) -> dict[str, Any]:
-    from .. import fallback
+def map_search(query: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Blended top-search answer -> SC search's data: users, hashtags and places, each with its position."""
+    def entries(key: str, inner: str) -> list[tuple[int, dict[str, Any], dict[str, Any]]]:
+        """(position, entry, its user/hashtag/place) for each entry, the position its index when it has none."""
+        out = []
+        for index, entry in enumerate(traverse_obj(data, (key, ..., {dict}))):
+            position = entry["position"] if isinstance(entry.get("position"), int) else index
+            out.append((position, entry, traverse_obj(entry, (inner, {dict})) or {}))
+        return out
 
-    status, answer, problem = await fallback.ask_path(request.app, "/v1/instagram/search/profiles", {"query": query})
-    if problem or status != 200 or not isinstance(answer, dict):
-        raise UpstreamError("Instagram profile search is unavailable")
     users = [compact({
-        "full_name": profile.get("full_name"), "id": str_or_none(profile.get("id")),
-        "is_verified": profile.get("is_verified"), "position": index,
-        "profile_pic_url": profile.get("profile_pic_url"), "username": profile.get("username"),
-    }) for index, profile in enumerate(traverse_obj(answer, ("profiles", ..., {dict})))]
-    return {"data": {"hashtags": [], "keywords": [], "places": [], "query": query,
-                     "rank_token": None, "users": users}}
+        "full_name": user.get("full_name"), "id": str_or_none(user.get("pk") or user.get("id")),
+        "is_verified": user.get("is_verified"), "position": position, "profile_pic_url": user.get("profile_pic_url"),
+        "username": user.get("username"),
+    }) for position, _, user in entries("users", "user") if user.get("username")]
+    hashtags = [compact({
+        "id": str_or_none(tag.get("id")), "media_count": tag.get("media_count"), "name": tag.get("name"),
+        "position": position, "search_result_subtitle": tag.get("search_result_subtitle"),
+    }) for position, _, tag in entries("hashtags", "hashtag") if tag.get("name")]
+    places = [compact({
+        "facebook_places_id": str_or_none(traverse_obj(place, ("location", "facebook_places_id"))),
+        "id": str_or_none(traverse_obj(place, ("location", "pk"))), "name": traverse_obj(place, ("location", "name")),
+        "position": position, "subtitle": place.get("subtitle"), "title": place.get("title"),
+    }) for position, _, place in entries("places", "place") if place]
+    return {"hashtags": hashtags, "keywords": [], "places": places, "query": query,
+            "rank_token": str_or_none(data.get("rank_token")), "users": users}
+
+
+@sc_get(router, "/v1/instagram/search", source="Instagram web top-search API (blended) with saved cookies",
+        status="needs_setup",
+        notes="Instagram's blended top search (users, hashtags, places), which it serves to signed-in sessions only: "
+              "the logged-out call answers with a 404 page and the logged-out web has no search box. Without an "
+              "Instagram cookie account in Platform settings this returns 501 platform_auth_required (a setup "
+              "gap, which the ScrapeCreators fallback takes when enabled), not a 500. keywords is always empty.")
+async def search_instagram(query: str = Query(..., min_length=1)) -> dict[str, Any]:
+    from .instagram_private import topsearch  # instagram_private imports this module
+
+    data = await topsearch(query, "blended")
+    return {"data": map_search(query, data if isinstance(data, dict) else {})}
 
 
 @sc_get(router, "/v1/instagram/user/embed", source="public Instagram profile embed page",
