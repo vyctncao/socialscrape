@@ -22,9 +22,11 @@ import json
 import logging
 import re
 import secrets
+import threading
 import time
 import unicodedata
 import urllib.parse
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
@@ -299,6 +301,9 @@ def _check_session(logged_in: bool, rec: _Recorder) -> None:
 
 _LOGIN_WALL = "Instagram redirected the anonymous request to its login page (logged-out rate limit); retry later " \
               "or configure cookies"
+_EMPTY_PAGE = "Instagram returned an empty page, as it does for anonymous requests it is throttling; try again later"
+_NOT_APP = ("Instagram answered with a page that isn't its web app (a block page), as it does for anonymous requests "
+            "it is throttling; try again later")
 
 
 def _follow_share(ie: Any, url: str) -> str:
@@ -313,6 +318,22 @@ def _follow_share(ie: Any, url: str) -> str:
     if final.startswith(f"{WEB}/") and InstagramBaseIE._is_login_redirect(final):  # it only looks at the path
         raise SessionRejected() if logged_in else UpstreamBlocked(_LOGIN_WALL)
     raise NotFound("This share link does not lead to an Instagram post or reel")  # an unknown id answers 200
+
+
+def _unrendered(bodies: list[tuple[str, str]]) -> UpstreamBlocked | None:
+    """The block a recorded Instagram page stands for: an empty body, or HTML that isn't a page of its web app (every
+    one names its pageID). API answers and the login page (whose meaning depends on the session) are the caller's;
+    the home page, which InstagramIE reads its LSD token from logged out, is checked."""
+    for url, body in bodies:
+        parts = urllib.parse.urlparse(url)
+        if (parts.netloc.lower() not in _INSTAGRAM_HOSTS
+                or parts.path.startswith(("/api/", "/graphql", "/accounts/login"))):
+            continue
+        if not body.strip():
+            return UpstreamBlocked(_EMPTY_PAGE)
+        if body.lstrip().startswith("<") and not _PAGE_ID.search(body):
+            return UpstreamBlocked(_NOT_APP)
+    return None
 
 
 def _post_flow(url: str) -> Callable[[yt_dlp.YoutubeDL], tuple[dict[str, Any], dict[str, Any] | None]]:
@@ -338,6 +359,9 @@ def _post_flow(url: str) -> Callable[[yt_dlp.YoutubeDL], tuple[dict[str, Any], d
                 raise NotFound("Post not found") from None
             # A dead session's media/info call lands on the login page, which yt-dlp reports as "Failed to parse JSON".
             _check_session(logged_in, rec)
+            # The page it reads its LSD token from came back empty or as a block page: "Unable to extract LSD token"
+            if blocked := _unrendered(rec.bodies):
+                raise blocked from None
             raise
         if not products:
             raise NotFound("No data returned for this post")
@@ -371,6 +395,8 @@ def _check_page(html: str, final_url: str, what: str) -> list[dict[str, Any]]:
         raise NotFound(f"{what} not found")
     if InstagramBaseIE._is_login_redirect(final_url):
         raise UpstreamBlocked(_LOGIN_WALL)
+    if not html.strip():
+        raise UpstreamBlocked(_EMPTY_PAGE)
     page = _PAGE_ID.search(html)
     if page and page.group(1) == "httpErrorPage":
         raise NotFound(f"{what} not found")
@@ -406,6 +432,8 @@ def missing_profile_error(html: str) -> ApiError:
         return NotFound("Profile not found: Instagram serves an app page, not a profile, at this name")
     if reason := profile_restriction(html):
         return RestrictedProfile(f"Instagram hides this profile from logged-out visitors ({reason})", html)
+    if page is None:  # every page of Instagram's web app names its pageID: this is a block page served in its place
+        return UpstreamBlocked(_EMPTY_PAGE if not html.strip() else _NOT_APP)
     return UpstreamError("Instagram returned the profile page without profile data", code="no_profile_data")
 
 
@@ -441,6 +469,8 @@ async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
     data = next((r["data"] for r in results
                  if isinstance(r.get("data"), dict) and any(k in r["data"] for k in _TOPIC_KEYS)), None)
     if data is None:
+        if not _PAGE_ID.search(html):  # not a page of Instagram's web app at all
+            raise UpstreamBlocked(_NOT_APP)
         raise NotFound("Instagram has no popular page for this topic")
     return data, html
 
@@ -499,6 +529,52 @@ _RETRY_DELAY = 2.0  # seconds before the one retry of an empty or non-JSON Graph
 _DETAILS_BUDGET = 40.0
 
 
+_PLEASE_WAIT = re.compile(r"please wait", re.I)  # "Please wait a few minutes before you try again."
+_KEPT_SECONDS = 900.0  # a post query's media, and a posts-tab caption, are reused this long
+_KEPT_ITEMS = 1024  # of each, the oldest dropped first
+
+
+class _Kept:
+    """key -> value for _KEPT_SECONDS, the oldest dropped past _KEPT_ITEMS. Thread-safe: listings fill it from yt-dlp's
+    workers. lock(key) is the lock of the key's stripe, held while one listing asks Instagram for it, so a listing
+    running alongside waits and reuses the answer instead of asking again."""
+
+    def __init__(self) -> None:
+        self._items: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+        self._stripes = [threading.Lock() for _ in range(64)]
+
+    def get(self, key: str) -> Any:
+        with self._lock:
+            hit = self._items.get(key)
+            if hit and time.monotonic() - hit[0] < _KEPT_SECONDS:
+                return hit[1]
+            self._items.pop(key, None)
+            return None
+
+    def put(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._items[key] = (time.monotonic(), value)
+            self._items.move_to_end(key)
+            while len(self._items) > _KEPT_ITEMS:
+                self._items.popitem(last=False)
+
+    def lock(self, key: str) -> threading.Lock:
+        return self._stripes[hash(key) % len(self._stripes)]
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
+
+# The logged-out post query's media by pk, and the posts tab's (crawler) captions by shortcode. A client listing an
+# account's posts and its reels (Stratton: posts+reels merged by shortcode, reels then posts when refreshing) asks for
+# most items twice; the second listing reuses the first one's answers, which saves those post queries and, when
+# Instagram turns them away (throttling), keeps what the first listing got: dates, captions, comment counts.
+MEDIA = _Kept()
+CAPTIONS = _Kept()
+
+
 class _NoJson(UpstreamBlocked):
     """An empty body or a web page where Instagram's API answers JSON: how it turns away anonymous calls it is
     throttling (also transiently). Retried once; a 503 like any block, so with_ydl tries the next proxy."""
@@ -508,8 +584,9 @@ def api_answer(status: int, body: str, final_url: str, *, logged_in: bool = Fals
     """The JSON object an Instagram API call (/api/graphql, /api/v1) answered, else the ApiError the answer means.
 
     Calls Instagram refuses anonymously come back as a redirect to the login page, an empty body, a web page (its
-    httpErrorPage) instead of JSON, or 401 {"require_login": true, "message": "Please wait a few minutes before you
-    try again."}: blocks (503, retryable), not the "Failed to parse JSON" 500 yt-dlp reports."""
+    httpErrorPage) instead of JSON, 401 {"require_login": true, "message": "Please wait a few minutes before you
+    try again."} (also without require_login, at any status), or a GraphQL `errors` list without data: blocks (503,
+    retryable), as tab_connection reads them, not the "Failed to parse JSON" 500 yt-dlp reports."""
     if InstagramBaseIE._is_login_redirect(final_url):
         raise SessionRejected() if logged_in else UpstreamBlocked(_LOGIN_WALL)
     if status == 429:
@@ -526,10 +603,16 @@ def api_answer(status: int, body: str, final_url: str, *, logged_in: bool = Fals
         raise _NoJson("Instagram answered its API with a web page instead of JSON, as it does for anonymous "
                       "requests it is throttling; try again later")
     message = data.get("message") if isinstance(data.get("message"), str) else None
-    if data.get("require_login") is True or status in (401, 403):
+    if (data.get("require_login") is True or status in (401, 403)
+            or (data.get("status") == "fail" and _PLEASE_WAIT.search(message or ""))):
         raise UpstreamBlocked(f"Instagram refused the anonymous request: {message or f'HTTP {status}'}")
     if status >= 400 or data.get("status") == "fail":
         raise UpstreamError(f"Instagram answered HTTP {status}: {message or 'error'}")
+    errors = [m for m in traverse_obj(data, ("errors", ..., "message")) if isinstance(m, str)]
+    if errors and not isinstance(data.get("data"), dict) and not any("was not found" in m for m in errors):
+        # GraphQL's refusal of an anonymous query it is throttling: {"errors": [{"message": "execution error",
+        # "code": 1675004}]} and no data (a retired query id, "...was not found", is _graphql_failure's)
+        raise UpstreamBlocked(f"Instagram refused the anonymous request: {errors[0]}")
     return data
 
 
@@ -587,7 +670,8 @@ class WebSession:
         own scrolling asks for it; the posts tab as served to crawlers, with each post's like and play counts.
         BadRequest bad_cursor for a cursor Instagram can't continue from."""
         name = _TAB_QUERY[tab]
-        doc_id, variables = self.preloaded.get(name, (_TAB_DOC_ID[tab], {"first": 12, "username": handle}))
+        known = {"first": 12, "username": handle, **({_CRAWLER: False} if not tab else {})}  # as the pages preload
+        doc_id, variables = self.preloaded.get(name, (_TAB_DOC_ID[tab], known))
         variables = {**variables, **({_CRAWLER: True} if _CRAWLER in variables else {}),
                      **({"after": cursor} if cursor else {})}
         data = self.query(name, doc_id, variables)
@@ -599,30 +683,43 @@ class WebSession:
             raise _graphql_failure(data, "profile listing")
         return connection
 
-    def media_details(self, nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    def media_details(self, nodes: list[dict[str, Any]], *, ask: bool = True) -> dict[str, dict[str, Any]]:
         """pk -> the logged-out post query's media (InstagramIE's PolarisLoggedOutDesktopWWWPostRootContentQuery:
         taken_at, caption with its ids, like and comment counts, image and video versions, the author) for each
-        node, one request each. A refusal stops the loop (more requests would only deepen the block), as does
-        _DETAILS_BUDGET; the nodes left out simply lack those fields."""
+        node, one request each unless MEDIA has it from another listing. A refusal stops the requests (more would
+        only deepen the block), as does _DETAILS_BUDGET or ask=False; the nodes left out simply lack those fields."""
         out: dict[str, dict[str, Any]] = {}
         start = time.monotonic()
         for index, node in enumerate(nodes):
             pk = str_or_none(node.get("pk"))
             if not pk or not pk.isdecimal() or pk in out:
                 continue
+            if (kept := MEDIA.get(pk)) is not None:
+                out[pk] = kept
+                continue
+            if not ask:
+                continue
             if time.monotonic() - start > _DETAILS_BUDGET:
                 log.info("instagram: post details stopped after %.0f s, %d of %d items without them",
                          _DETAILS_BUDGET, len(nodes) - index, len(nodes))
-                break
-            try:
-                data = self.query(_POST_QUERY, _POST_DOC_ID, {"media_id": pk}, retries=0)
-            except (ApiError, ExtractorError) as exc:
-                log.info("instagram: post query for %s failed (%s), %d of %d items without details", pk,
-                         getattr(exc, "message", exc), len(nodes) - index, len(nodes))
-                break
-            media = traverse_obj(data, ("data", "xig_polaris_media", "if_not_gated_logged_out", {dict}))
-            if media and str_or_none(media.get("pk")) == pk:
-                out[pk] = media
+                ask = False
+                continue
+            with MEDIA.lock(pk):
+                if (kept := MEDIA.get(pk)) is not None:  # a listing running alongside just asked for it
+                    out[pk] = kept
+                    continue
+                try:
+                    data = self.query(_POST_QUERY, _POST_DOC_ID, {"media_id": pk}, retries=0)
+                except (ApiError, ExtractorError) as exc:
+                    log.info("instagram: post query for %s failed (%s), %d of %d items without details", pk,
+                             getattr(exc, "message", exc), len(nodes) - index, len(nodes))
+                    ask = False
+                    continue
+                media = traverse_obj(data, ("data", "xig_polaris_media", "if_not_gated_logged_out", {dict}))
+                if media and str_or_none(media.get("pk")) == pk:
+                    user = traverse_obj(media, ("user", {dict})) or {}  # it nests more of their posts: not kept
+                    out[pk] = {**media, "user": {k: v for k, v in user.items() if not isinstance(v, (dict, list))}}
+                    MEDIA.put(pk, out[pk])
         return out
 
 
@@ -655,9 +752,43 @@ def _feed_flow(handle: str, tab: str, cursor: str | None) -> Callable[[yt_dlp.Yo
                 log.info("instagram: counts for %s's posts unavailable: %s", handle, exc.message)
         nodes = traverse_obj(connection, ("edges", ..., "node", {dict})) or []
         page_info = traverse_obj(connection, ("page_info", {dict})) or {}
-        return Feed(user, nodes, page_info, {} if blocked else session.media_details(nodes))
+        _keep_captions(nodes)  # the posts tab has each caption; the reels tab has none
+        nodes = [_with_kept_caption(node) for node in nodes]
+        media = session.media_details(nodes, ask=not blocked)
+        if tab and not cursor and any(_needs_caption(node, media) for node in nodes):
+            # Instagram turned the post queries away: the posts tab's first page has the captions of the newest
+            # posts, most of them these reels (11 of jane's 12), in one request it answers when it refuses those
+            try:
+                posts = session.tab_page("", handle, None)
+            except ApiError as exc:
+                log.info("instagram: posts tab for %s's reel captions unavailable: %s", handle, exc.message)
+            else:
+                _keep_captions(traverse_obj(posts, ("edges", ..., "node", {dict})) or [])
+                nodes = [_with_kept_caption(node) for node in nodes]
+        return Feed(user, nodes, page_info, media)
 
     return go
+
+
+def _keep_captions(nodes: list[dict[str, Any]]) -> None:
+    for node in nodes:
+        code, caption = node.get("code"), traverse_obj(node, ("caption", {dict}))
+        if isinstance(code, str) and caption and isinstance(caption.get("text"), str):
+            CAPTIONS.put(code, caption)
+
+
+def _needs_caption(node: dict[str, Any], media: dict[str, dict[str, Any]]) -> bool:
+    """A node with neither a caption of its own nor post-query media (which has it)."""
+    return not traverse_obj(node, ("caption", {dict})) and str(node.get("pk")) not in media
+
+
+def _with_kept_caption(node: dict[str, Any]) -> dict[str, Any]:
+    """The node, with the caption the posts tab gave its shortcode when it has none of its own (a reels-tab node):
+    what the post query would add, for when Instagram turns that query away."""
+    code = node.get("code")
+    if traverse_obj(node, ("caption", {dict})) or not isinstance(code, str) or (kept := CAPTIONS.get(code)) is None:
+        return node
+    return {**node, "caption": kept}
 
 
 async def fetch_feed(handle: str, tab: str = "", cursor: str | None = None) -> Feed:
@@ -1594,9 +1725,12 @@ async def instagram_post_count(handle: str = Query(...), allow_estimated: str | 
 
 _DETAILS_NOTE = ("Each item is completed by the logged-out post query InstagramIE makes (one request per item, in "
                  "turn): taken_at and created_at, the caption with its pk/created_at, comment_count, like_count, "
-                 "image_versions2, video_versions, has_audio and video_duration. Those requests stop at the first "
-                 "one Instagram refuses or after 40 s; the items left (and any Instagram doesn't answer for) lack "
-                 "those fields rather than carry guesses.")
+                 "image_versions2, video_versions, has_audio and video_duration. An item user/posts or user/reels "
+                 "got in the last 15 minutes isn't asked again (listing an account's posts and its reels shares "
+                 "them), and a reel without one takes the caption the posts tab gave its shortcode. Those requests "
+                 "stop at the first one Instagram refuses (a GraphQL errors list or 'Please wait a few minutes' "
+                 "included) or after 40 s; the items left (and any Instagram doesn't answer for) lack those fields "
+                 "rather than carry guesses.")
 
 
 @sc_get(router, "/v2/instagram/user/posts",
@@ -1795,14 +1929,24 @@ async def search_instagram(query: str = Query(..., min_length=1)) -> dict[str, A
     return {"data": map_search(query, data if isinstance(data, dict) else {})}
 
 
+_EMBED_PROFILE = re.compile(r'"isProfileEmbed":true|<div class="Embed" ')  # nasa's embed page, 2026-10-24
+_EMBED_APP = re.compile(r'"PolarisEmbedSimple"')
+
+
 @sc_get(router, "/v1/instagram/user/embed", source="public Instagram profile embed page",
-        notes="Returns Instagram's public profile embed HTML. The caller embeds or sanitizes it according to context.")
+        notes="Returns Instagram's public profile embed HTML. The caller embeds or sanitizes it according to context. "
+              "404 when the embed page has no profile to show (an unknown name, as Instagram answers it); an empty "
+              "or block page in its place is a 503 upstream_blocked, not HTML returned as success.")
 async def instagram_user_embed(handle: str = Query(...)) -> dict[str, Any]:
     name = clean_handle(handle)
     html, final_url = await with_ydl(PLATFORM, _page_flow("InstagramUser", f"{WEB}/{name}/embed/", name))
     if InstagramBaseIE._is_login_redirect(final_url):
         raise UpstreamBlocked(_LOGIN_WALL)
-    return {"html": html}
+    if _EMBED_PROFILE.search(html):
+        return {"html": html}
+    if _EMBED_APP.search(html):  # the embed app, without a profile to show (isProfileEmbed false, contextJSON null)
+        raise NotFound("Instagram has no embeddable profile at this name (unknown, private or restricted)")
+    raise UpstreamBlocked(_EMPTY_PAGE if not html.strip() else _NOT_APP)
 
 
 @sc_get(router, "/v1/instagram/reels/trending", source="public Instagram Popular reels composition",

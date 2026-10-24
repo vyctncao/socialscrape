@@ -39,8 +39,10 @@ def mlx_client():
 @pytest.fixture(autouse=True)
 def _fresh_platform_memory(monkeypatch):
     """Each test starts with what the platforms keep per process empty: TikTok's item_list cooling windows and
-    remembered region lookups."""
-    from socialscrape.platforms import tiktok
+    remembered region lookups, Instagram's kept post-query media and posts-tab captions."""
+    from socialscrape.platforms import instagram, tiktok
 
     monkeypatch.setattr(tiktok, "_cooling", {})
     monkeypatch.setattr(tiktok, "_regions", {})
+    monkeypatch.setattr(instagram, "MEDIA", instagram._Kept())
+    monkeypatch.setattr(instagram, "CAPTIONS", instagram._Kept())

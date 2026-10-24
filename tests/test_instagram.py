@@ -853,6 +853,47 @@ def test_fetch_page_outcomes(pages):
         asyncio.run(ig.fetch_profile("developer"))
 
 
+_BLOCK_PAGE = "<html><head><title>Access Denied</title></head><body>blocked</body></html>"
+
+
+@pytest.mark.parametrize("html", ["", " \n", _BLOCK_PAGE])
+def test_an_empty_or_block_page_is_a_block(pages, html):
+    """verify-load ig-all-empty / ig-all-html: an empty 200 (or a page that isn't Instagram's app) in place of a
+    profile was a 500 no_profile_data, in place of a topic page a 404 "no popular page"."""
+    import asyncio
+
+    for url in ("https://www.instagram.com/jane/", "https://www.instagram.com/explore/tags/travel/",
+                "https://www.instagram.com/popular/travel/"):
+        pages.served[url] = (html, url)
+    with pytest.raises(UpstreamBlocked) as exc:
+        asyncio.run(ig.fetch_profile("jane"))
+    assert exc.value.status == 503 and "try again later" in exc.value.message
+    with pytest.raises(UpstreamBlocked):
+        asyncio.run(ig.fetch_topic("travel"))
+
+
+def test_post_page_without_its_app_is_a_block():
+    """verify-load: /v1/instagram/post and /v2/instagram/post/comments were a 500 "Unable to extract LSD token" when
+    the page yt-dlp reads its token from came back empty or as a block page."""
+    from yt_dlp.utils import ExtractorError
+
+    for html in ("", _BLOCK_PAGE):
+        ie = SimpleNamespace(_is_logged_in=False, _can_impersonate=False, _extract_product=None)
+        ie._download_webpage_handle = lambda url, *a, html=html, **kw: (html, SimpleNamespace(url=url))
+
+        def extract(url, ie=ie):
+            ie._download_webpage_handle(f"{ig.WEB}/")
+            raise ExtractorError("Unable to extract LSD token")
+
+        ie.extract = extract
+        with pytest.raises(UpstreamBlocked):
+            ig._post_flow(f"{ig.WEB}/p/{REEL_CODE}/")(_ydl(ie))
+    # the app's page, and still no token: yt-dlp's error as it was
+    ie._download_webpage_handle = lambda url, *a, **kw: ('{"pageID":"postPage"}', SimpleNamespace(url=url))
+    with pytest.raises(ExtractorError):
+        ig._post_flow(f"{ig.WEB}/p/{REEL_CODE}/")(_ydl(ie))
+
+
 def test_fetch_topic_retries_popular_page(pages):
     import asyncio
 
@@ -1776,7 +1817,20 @@ def test_private_instagram_routes_need_a_saved_account(client):
 
 
 def test_public_embed_and_trending_routes_are_registered(client, monkeypatch):
+    # what nasa's embed page (2026-10-24) and an unknown name's carry
+    embed = ('<div class="Embed" data-media-type="Profile" data-owner-id="528817151"></div>'
+             '"require":[["PolarisEmbedSimple","init",[],[{"isProfileEmbed":true,"contextJSON":"{}"}]]]')
+    unknown = '"require":[["PolarisEmbedSimple","init",[],[{"isProfileEmbed":false,"contextJSON":null}]]]'
+    page = {"html": embed}
+
     async def with_ydl(platform, fn, **opts):
-        return "<article>embed</article>", "https://www.instagram.com/nasa/embed/"
+        return page["html"], "https://www.instagram.com/nasa/embed/"
     monkeypatch.setattr(ig, "with_ydl", with_ydl)
-    assert client.get("/v1/instagram/user/embed", params={"handle": "nasa"}).json()["html"].startswith("<article")
+    assert client.get("/v1/instagram/user/embed", params={"handle": "nasa"}).json()["html"] == embed
+    # verify-load ig-all-empty / ig-all-html: an empty or block page was returned as the embed (200)
+    for html, status, code in ((unknown, 404, "not_found"), ("", 503, "upstream_blocked"),
+                               ("<html><head><title>Access Denied</title></head><body>blocked</body></html>", 503,
+                                "upstream_blocked")):
+        page["html"] = html
+        r = client.get("/v1/instagram/user/embed", params={"handle": "nasa"})
+        assert (r.status_code, r.json()["error"]) == (status, code), html

@@ -261,6 +261,62 @@ def test_reels_carry_captions_and_dates(client, net):
     assert [r[0] for r in net.ig.requests] == ["GET", ig._POST_QUERY, ig._POST_QUERY]  # no tab query on page 1
 
 
+def test_posts_and_reels_share_their_post_queries(client, net):
+    """verify-consumer: Stratton lists an account's reels and its posts (merged by shortcode), so most items were asked
+    for twice (24 post queries for 13 jane posts). The second listing reuses the first one's answers."""
+    net.ig = jane({ig._POST_QUERY: posts_answers})
+    reels = client.get("/v1/instagram/user/reels", params={"handle": "jane"}).json()["items"]
+    assert [r[0] for r in net.ig.requests].count(ig._POST_QUERY) == 2
+    net.ig = jane({POSTS_Q: [(200, json.dumps(fixture("posts_tab_first.json")))], ig._POST_QUERY: posts_answers})
+    posts = client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()["items"]
+    assert [r[2] for r in net.ig.requests if r[0] == ig._POST_QUERY] == [{"media_id": "4002146922441727065"}]
+    assert [(i["code"], i["taken_at"], i["comment_count"]) for i in posts] == [
+        ("DQhKIRakcbY", 1762009243, 18730), ("Dezpkchv5fD", 1792694492, reels[1]["comment_count"]),
+        ("DeKe2vzD9xZ", 1791313113, 157)]
+    assert posts[0]["caption"] == reels[0]["caption"] and posts[0]["play_count"] == 30888401  # the posts tab's own
+
+
+def test_reels_keep_what_the_posts_listing_got_when_post_queries_are_refused(client, net):
+    """verify-consumer: with the post query refused (production throttling), reels had no caption and Stratton's
+    posts+reels merge, which keeps the reel for a shortcode, lost the caption the posts listing carried."""
+    refused = (401, json.dumps(fixture("api_require_login.json")))
+    net.ig = jane({POSTS_Q: [(200, json.dumps(fixture("posts_tab_first.json")))], ig._POST_QUERY: lambda v: refused})
+    posts = client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()["items"]
+    assert all(i["caption"]["text"] for i in posts) and not any("taken_at" in i for i in posts)
+    net.ig = jane({ig._POST_QUERY: lambda v: refused})
+    reels = client.get("/v1/instagram/user/reels", params={"handle": "jane"}).json()["items"]
+    by_code = {i["code"]: i for i in posts}
+    assert [r["caption"]["text"] for r in reels] == [by_code[r["code"]]["caption"]["text"] for r in reels]
+    assert not any("taken_at" in r for r in reels)  # still unknown, not guessed
+    assert [r[0] for r in net.ig.requests] == ["GET", ig._POST_QUERY]  # the one refused query, then no more
+
+    # and the dates once a listing got them: the posts listing's tab refused, its items still dated
+    net.ig = jane({ig._POST_QUERY: posts_answers})
+    client.get("/v1/instagram/user/reels", params={"handle": "jane"})
+    net.ig = jane({POSTS_Q: [refused], ig._POST_QUERY: posts_answers})
+    posts = client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()["items"]
+    assert [i.get("taken_at") for i in posts] == [1762009243, 1792694492, None]
+    assert [r[0] for r in net.ig.requests] == ["GET", POSTS_Q]  # throttled: nothing more asked
+
+
+def test_reels_first_take_captions_from_the_posts_tab_when_post_queries_are_refused(client, net):
+    """Stratton's fetchFeed asks posts and reels at once (and its incremental sweep reels first): reels refused their
+    post queries ask the posts tab's first page once for its captions, as Instagram answers that query when it turns
+    the post queries away."""
+    refused = (401, json.dumps(fixture("api_require_login.json")))
+    net.ig = jane({ig._POST_QUERY: lambda v: refused, POSTS_Q: [(200, json.dumps(fixture("posts_tab_first.json")))]})
+    reels = client.get("/v1/instagram/user/reels", params={"handle": "jane"}).json()["items"]
+    assert [r["caption"]["text"][:12] for r in reels] == ["CHICKENLEIGH", "Never change"]
+    assert not any("taken_at" in r for r in reels)
+    assert net.ig.requests[1:] == [(ig._POST_QUERY, ig._POST_DOC_ID, {"media_id": "3756328113124001496"}),
+                                   (POSTS_Q, "29483846714553007", {"first": 12, "username": "jane", ig._CRAWLER: True})]
+    # the posts tab refused too: the reels are still served, without captions
+    ig.CAPTIONS.clear()
+    net.ig = jane({ig._POST_QUERY: lambda v: refused, POSTS_Q: [refused]})
+    body = client.get("/v1/instagram/user/reels", params={"handle": "jane"}).json()
+    assert body["success"] is True and not any("caption" in r for r in body["items"])
+
+
 def test_reels_next_page(client, net):
     net.ig = jane({REELS_Q: [(200, json.dumps(fixture("reels_tab_after.json")))],
                    ig._POST_QUERY: lambda v: (200, json.dumps({"data": {"xig_polaris_media": None}}))})
@@ -308,6 +364,14 @@ def test_collab_author_comes_from_the_post_query():
     (500, '{"message":"We\'re sorry, but something went wrong. Please try again.","status_code":"500",'
           '"status":"fail"}', ig._GRAPHQL_URL, UpstreamError),
     (200, '{"status":"fail","message":"x"}', ig._GRAPHQL_URL, UpstreamError),
+    # verify-merged: what tab_connection already read as refusals was data (and then a 500) here
+    (200, json.dumps({"errors": [{"message": "execution error", "severity": "CRITICAL", "code": 1675004}]}),
+     ig._GRAPHQL_URL, UpstreamBlocked),
+    (200, json.dumps({"data": None, "errors": [{"message": "execution error"}]}), ig._GRAPHQL_URL, UpstreamBlocked),
+    (200, '{"message":"Please wait a few minutes before you try again.","status":"fail"}', ig._GRAPHQL_URL,
+     UpstreamBlocked),
+    (400, '{"message":"Please wait a few minutes before you try again.","status":"fail"}', ig._GRAPHQL_URL,
+     UpstreamBlocked),
 ])
 def test_api_answer_failure_shapes(status, body, final, error):
     with pytest.raises(error) as exc:
@@ -316,6 +380,30 @@ def test_api_answer_failure_shapes(status, body, final, error):
     if status == 401:
         assert "Please wait a few minutes" in exc.value.message
     assert ig.api_answer(200, '{"data": {}}', ig._GRAPHQL_URL) == {"data": {}}
+    # a retired query id is left for _graphql_failure (query_unavailable), errors next to data for the caller
+    assert ig.api_answer(200, json.dumps(fixture("graphql_unknown_doc.json")), ig._GRAPHQL_URL)["errors"]
+    assert ig.api_answer(200, json.dumps(fixture("graphql_bad_cursor.json")), ig._GRAPHQL_URL)["data"]
+
+
+_EXECUTION_ERROR = (200, json.dumps({"errors": [{"message": "execution error", "severity": "CRITICAL",
+                                                 "code": 1675004}]}))
+
+
+def test_graphql_refusals_are_blocks_and_stop_the_post_queries(client, net):
+    """verify-merged: the next page answering GraphQL's errors list was a 500 "no profile listing: execution error",
+    and every post query of a page kept being sent into that refusal (3 of 3 here, 12 on a real page)."""
+    net.ig = jane({POSTS_Q: [_EXECUTION_ERROR]})
+    r = client.get("/v2/instagram/user/posts", params={"handle": "jane", "next_max_id": "QVFDabc"})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked") and "execution error" in r.json()["message"]
+    net.ig = jane({REELS_Q: [_EXECUTION_ERROR]})
+    r = client.get("/v1/instagram/user/reels", params={"handle": "jane", "max_id": "QVFDabc"})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked")
+
+    net.ig = jane({POSTS_Q: [(200, json.dumps(fixture("posts_tab_first.json")))],
+                   ig._POST_QUERY: lambda v: _EXECUTION_ERROR})
+    body = client.get("/v2/instagram/user/posts", params={"handle": "jane"}).json()
+    assert body["success"] is True and len(body["items"]) == 3 and not any("taken_at" in i for i in body["items"])
+    assert [r[0] for r in net.ig.requests] == ["GET", POSTS_Q, ig._POST_QUERY]  # stopped at the first refusal
 
 
 def test_api_answer_login_redirect_with_a_session_is_a_cookie_problem(monkeypatch):
