@@ -2,7 +2,7 @@ window.EndpointTests = (() => {
   // Results survive a reload in this browser; response bodies stay in memory only.
   const STORAGE_KEY = 'socialscrape.endpoint-tests.v2';
   const LEGACY_STORAGE_KEY = 'socialscrape.endpoint-tests.v1';
-  const SETUP_ERRORS = new Set(['transcription_disabled', 'transcription_unavailable']);
+  const SETUP_ERRORS = new Set(['transcription_disabled', 'transcription_unavailable', 'platform_auth_required', 'platform_oauth_required', 'platform_shop_auth_required', 'platform_shop_credentials_incomplete', 'platform_scope_unavailable']);
   const OUTCOMES = {
     idle:['Not run', ''], queued:['Queued', ''], running:['Running', ''], passed:['Passed', 'good'], failed:['Failed', 'bad'],
     setup:['Needs setup', 'warn'], unsupported:['Not supported', ''], skipped:['Skipped', ''], stopped:['Stopped', '']
@@ -56,15 +56,19 @@ window.EndpointTests = (() => {
       return missing.length ? {outcome:'failed', message:`The response has no ${missing.join(', ')}.`} : {outcome:'passed'};
     }
     const upstream = body.fallback && typeof body.fallback === 'object' ? ` ScrapeCreators failed too${body.fallback.error ? ` (${body.fallback.error})` : ''}.` : '';
-    if (status === 501 && body.error === 'not_supported' && !test.implemented) return {outcome:'unsupported', message:upstream.trim()};
     if (status === 501 && SETUP_ERRORS.has(body.error)) return {outcome:'setup', code:body.error, message:body.message};
+    if (status === 501 && body.error === 'not_supported' && !test.implemented) return {outcome:'unsupported', message:upstream.trim()};
     if (status === 401) return {outcome:'failed', message:'Your session ended. Sign in again, then run the tests.'};
     if (status >= 200 && status < 300) return {outcome:'failed', message:data ? 'The response didn’t report success.' : 'The response wasn’t JSON.'};
     return {outcome:'failed', code:typeof body.error === 'string' ? body.error : '', message:(typeof body.message === 'string' && body.message ? body.message : `The API answered ${status}.`) + upstream};
   }
 
   const testFor = path => model.tests.find(test => test.path === path);
-  const resultFor = path => model.results[path]?.outcome in OUTCOMES ? model.results[path] : {outcome:'idle'};
+  const resultFor = path => {
+    if (model.results[path]?.outcome in OUTCOMES) return model.results[path];
+    const test = testFor(path);
+    return test?.needs_setup ? {outcome:'setup', message:test.reason} : {outcome:'idle'};
+  };
   const usable = test => Boolean(test) && resultFor(test.path).outcome === 'passed' && model.bodies.has(test.path);
   const scope = () => model.tests.filter(test => model.filter === 'all' || test.platform === model.filter);
   const pending = path => Boolean(model.run?.pending.has(path));
@@ -258,7 +262,7 @@ window.EndpointTests = (() => {
     const result = resultFor(test.path), [name, tone] = OUTCOMES[result.outcome] || OUTCOMES.idle;
     const spinner = result.outcome === 'running' ? icon('circle-notch') : '';
     const status = result.status && !['passed', 'unsupported'].includes(result.outcome) ? ` · ${result.status}` : '';
-    const message = result.message || (!test.implemented && ['idle', 'unsupported'].includes(result.outcome) ? 'Not implemented on this server, which answers 501.' : '');
+    const message = result.message || (result.outcome === 'unsupported' ? 'No Social Scrape handler is available.' : '');
     const time = result.ms === undefined || ['queued', 'running'].includes(result.outcome) ? '' : `<span class="test-time">${number(result.ms)} ms</span>`;
     return `<div class="test-result"><span class="badge ${tone}">${spinner}${name}${status}</span>${time}${result.via ? '<span class="badge">via ScrapeCreators</span>' : ''}${result.code ? `<code>${esc(result.code)}</code>` : ''}${message ? `<small>${esc(message)}</small>` : ''}</div>`;
   }

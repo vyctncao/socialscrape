@@ -1651,3 +1651,59 @@ def test_user_live_retries_one_transient_block(client, monkeypatch):
     monkeypatch.setattr(tiktok.asyncio, "sleep", no_wait)
     body = client.get("/v1/tiktok/user/live", params={"handle": "someone"}).json()
     assert body["is_live"] is False and calls == 2
+
+
+def test_private_tiktok_routes_need_saved_account_cookies(client):
+    requests = [
+        ("/v1/tiktok/video/comments", {"url": STOOL_VIDEO}),
+        ("/v1/tiktok/video/comment/replies", {"url": STOOL_VIDEO, "comment_id": "1"}),
+        ("/v1/tiktok/user/followers", {"handle": "stoolpresidente"}),
+        ("/v1/tiktok/user/following", {"handle": "stoolpresidente"}),
+        ("/v1/tiktok/search/suggestions", {"query": "travel"}),
+        ("/v1/tiktok/get-trending-feed", {"region": "US"}),
+    ]
+    for path, params in requests:
+        response = client.get(path, params=params)
+        assert response.status_code == 501 and response.json()["error"] == "platform_auth_required"
+
+
+def test_all_credential_gated_tiktok_routes_are_registered(client):
+    expected = {
+        "/v1/tiktok/video/comments": "platform_auth_required",
+        "/v1/tiktok/video/comment/replies": "platform_auth_required",
+        "/v1/tiktok/user/followers": "platform_auth_required",
+        "/v1/tiktok/user/following": "platform_auth_required",
+        "/v1/tiktok/search/suggestions": "platform_auth_required",
+        "/v1/tiktok/search/hashtag": "platform_auth_required",
+        "/v1/tiktok/search/keyword": "platform_auth_required",
+        "/v1/tiktok/search/top": "platform_auth_required",
+        "/v1/tiktok/get-trending-feed": "platform_auth_required",
+        "/v1/tiktok/ad-library/ad": "platform_oauth_required",
+        "/v1/tiktok/ad-library/search": "platform_oauth_required",
+        "/v1/tiktok/user/audience": "platform_oauth_required",
+        "/v1/tiktok/product": "platform_shop_auth_required",
+        "/v1/tiktok/shop/product/reviews": "platform_shop_auth_required",
+        "/v1/tiktok/shop/products": "platform_shop_auth_required",
+        "/v1/tiktok/shop/search": "platform_shop_auth_required",
+        "/v1/tiktok/user/showcase": "platform_shop_auth_required",
+    }
+    params = {
+        "url": "https://www.tiktok.com/@x/video/123", "comment_id": "1", "handle": "x", "query": "x",
+        "hashtag": "x", "region": "US", "ad_id": "1", "product_id": "1",
+    }
+    for path, error in expected.items():
+        names = {p["name"] for p in client.app.openapi()["paths"][path]["get"].get("parameters", [])}
+        response = client.get(path, params={name: params[name] for name in names if name in params})
+        assert response.status_code == 501 and response.json()["error"] == error, path
+
+
+def test_tiktok_api_tokens_stay_out_of_settings_repr(monkeypatch):
+    from socialscrape.config import get_settings
+    monkeypatch.setenv("SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN", "research-secret")
+    monkeypatch.setenv("SOCIALSCRAPE_TIKTOK_SHOP_ACCESS_TOKEN", "shop-secret")
+    get_settings.cache_clear()
+    try:
+        shown = repr(get_settings())
+        assert "research-secret" not in shown and "shop-secret" not in shown
+    finally:
+        get_settings.cache_clear()

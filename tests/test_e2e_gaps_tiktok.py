@@ -24,6 +24,7 @@ from importlib.util import find_spec
 
 import pytest
 
+from socialscrape.catalog import CATALOG
 from socialscrape.errors import UpstreamBlocked, UpstreamUnreachable
 from socialscrape.platforms import tiktok
 from tests.e2e import LEAKS, app_with, free_port, skip_if_blocked, spaced_get
@@ -96,32 +97,19 @@ def _tiktok_rows(c) -> dict[str, str]:
 # --- server surface (no TikTok traffic) ----------------------------------------------------------
 
 
-def test_tiktok_501_routes_answer_501_405_and_expose_no_params(client):
+def test_every_tiktok_catalog_route_has_a_direct_or_setup_handler(client):
     rows = _tiktok_rows(client)
-    unsupported = sorted(p for p, s in rows.items() if s == "not_supported")
-    assert len(unsupported) >= 17, unsupported
+    assert sorted(path for path, status in rows.items() if status == "not_supported") == []
     spec = client.get("/openapi.json").json()["paths"]
-    for path in unsupported:
-        check_err(client.get(path, params={"handle": STOOL, "url": SCOUT_VIDEO}), 501, "not_supported")
-        r = client.post(path)
-        check_err(r, 405, "method_not_allowed")
-        assert r.headers.get("allow") == "GET", (path, r.headers)
-        params = {p["name"] for p in spec[path]["get"].get("parameters", [])}
-        assert params <= {"cache_max_age"}, (path, params)
-
-
-def test_implemented_routes_openapi_params_and_405(client):
-    rows = _tiktok_rows(client)
-    implemented = {p for p, s in rows.items() if s != "not_supported"}
-    assert implemented == set(ROUTE_PARAMS), implemented ^ set(ROUTE_PARAMS)
-    spec = client.get("/openapi.json").json()["paths"]
-    for path, names in ROUTE_PARAMS.items():
-        params = {p["name"] for p in spec[path]["get"].get("parameters", [])}
-        assert params == names | {"cache_max_age"}, (path, params ^ (names | {"cache_max_age"}))
+    catalog = {entry["path"]: entry for entry in CATALOG if entry["path"].split("/")[2] == "tiktok"}
+    assert set(rows) == set(catalog)
+    for path, entry in catalog.items():
+        params = {param["name"] for param in spec[path]["get"].get("parameters", [])}
+        assert params == set(entry["params"]) | {"cache_max_age"}, (path, params)
         for method in ("post", "put", "delete"):
-            r = getattr(client, method)(path)
-            check_err(r, 405, "method_not_allowed")
-            assert r.headers.get("allow") == "GET", (path, method, r.headers)
+            response = getattr(client, method)(path)
+            check_err(response, 405, "method_not_allowed")
+            assert response.headers.get("allow") == "GET", (path, method)
 
 
 def test_trailing_slash_redirects_and_wrong_case_is_404(client):

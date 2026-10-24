@@ -50,7 +50,7 @@ def _unsupported(client) -> list[str]:
 def test_unsupported_routes_are_501_with_reason(client):
     cov = _coverage(client)
     paths = _unsupported(client)
-    assert paths, "expected some not_supported endpoints"
+    assert paths == []  # every catalog path has a direct or setup-gated Social Scrape handler
     for path in paths:
         dummy = {p: "x" for p in CATALOG_BY_PATH[path]["params"] if p != "cache_max_age"}
         for params in ({}, dummy, {**dummy, "unknown_param": "1"}):
@@ -84,7 +84,8 @@ def test_meta_coverage_is_consistent(client):
     assert body["total"] == len(CATALOG) == len(rows)
     assert [row["path"] for row in rows] == [e["path"] for e in CATALOG]
     assert body["implemented"] == sum(row["status"] == "implemented" for row in rows)
-    assert 0 < body["implemented"] < body["total"]
+    assert body["implemented"] + body["needs_setup"] == body["total"]
+    assert body["unsupported"] == 0
     for row in rows:
         assert row["platform"] == row["path"].split("/")[2] and row["platform"] in ("youtube", "tiktok", "instagram")
         assert row["summary"] == CATALOG_BY_PATH[row["path"]]["summary"]
@@ -92,7 +93,7 @@ def test_meta_coverage_is_consistent(client):
         if row["status"] == "implemented":
             assert row["source"], row["path"]
         else:
-            assert row["status"] == "not_supported" and row["source"] is None
+            assert row["status"] == "needs_setup" and row["source"], row["path"]
 
 
 def test_openapi_covers_catalog(client):
@@ -146,7 +147,7 @@ def test_health_reflects_settings(tmp_path):
 @pytest.mark.parametrize("keys,good", [("solo", ["solo"]), (" k1 , k2 ,,", ["k1", "k2"])])
 def test_api_key_auth(tmp_path, keys, good):
     with app_with({"SOCIALSCRAPE_API_KEYS": keys}, tmp_path) as c:
-        path = _unsupported(c)[0]
+        path = "/v1/tiktok/video/comments"
         for headers in ({}, {"x-api-key": ""}, {"x-api-key": "wrong"}, {"x-api-key": good[0].upper()},
                         {"x-api-key": ",".join(good) + ",x"}, {"Authorization": f"Bearer {good[0]}"}):
             r = c.get(path, headers=headers)
@@ -155,8 +156,8 @@ def test_api_key_auth(tmp_path, keys, good):
                                 "message": "Missing or invalid x-api-key header"}
         assert c.get(path, params={"x-api-key": good[0]}).status_code == 401  # header only, like ScrapeCreators
         for key in good:
-            assert c.get(path, headers={"x-api-key": key}).status_code == 501
-            assert c.get(path, headers={"X-API-KEY": key}).status_code == 501
+            assert c.get(path, params={"url": "x"}, headers={"x-api-key": key}).status_code == 501
+            assert c.get(path, params={"url": "x"}, headers={"X-API-KEY": key}).status_code == 501
         # implemented routes are guarded before any upstream work
         assert c.get("/v1/tiktok/profile", params={"handle": "tiktok"}).status_code == 401
         assert c.get("/v1/tiktok/profile").status_code == 401

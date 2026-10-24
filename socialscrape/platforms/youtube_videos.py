@@ -32,9 +32,6 @@ from . import _youtube_videos_parse as P
 router = APIRouter()
 
 UNSUPPORTED = {
-    "/v1/youtube/shorts/trending": (
-        "YouTube removed its Trending page (yt-dlp's YoutubeTabIE now gets redirected to the home page for "
-        "/feed/trending), and no yt-dlp extractor calls the Shorts feed/reel API that serves trending Shorts."),
 }
 
 _LANG = re.compile(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*")

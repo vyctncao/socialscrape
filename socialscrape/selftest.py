@@ -164,9 +164,10 @@ def tests() -> list[dict[str, Any]]:
     for row in coverage():
         preset = PRESETS[row["path"]]
         implemented = row["status"] == "implemented"
+        needs_setup = row["status"] == "needs_setup"
         out.append({
             "path": row["path"], "platform": row["platform"], "summary": row["summary"], "implemented": implemented,
-            "reason": None if implemented else row["notes"], "params": preset.params, "expect": list(preset.expect),
+            "needs_setup": needs_setup, "reason": None if implemented else row["notes"], "params": preset.params, "expect": list(preset.expect),
             "derive": [{"param": name, "source": source, "pick": pick}
                        for name, (source, pick) in preset.derive.items()],
             "note": preset.note,

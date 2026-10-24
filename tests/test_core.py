@@ -507,7 +507,7 @@ def test_non_ascii_api_key_header_is_401(monkeypatch):
         for header in ("é".encode(), "k1é".encode(), "é".encode("latin-1"), "密".encode(), b"wrong", None):
             r = c.get("/v1/youtube/shorts/trending", headers={"x-api-key": header} if header else {})
             _envelope(r, 401, "unauthorized")
-        assert c.get("/v1/youtube/shorts/trending", headers={"x-api-key": "k1"}).status_code == 501
+        assert c.get("/v1/tiktok/video/comments", params={"url": "x"}, headers={"x-api-key": "k1"}).status_code == 501
     finally:
         monkeypatch.delenv("SOCIALSCRAPE_API_KEYS")
         get_settings.cache_clear()
@@ -524,7 +524,7 @@ def test_api_key_header_whitespace_is_ignored(monkeypatch):
     try:
         c = TestClient(create_app())
         for header in ("k1 ", " k1", "  k1\t", "k1\t", "\tk2 "):
-            assert c.get("/v1/youtube/shorts/trending", headers={"x-api-key": header}).status_code == 501, header
+            assert c.get("/v1/tiktok/video/comments", params={"url": "x"}, headers={"x-api-key": header}).status_code == 501, header
         for header in ("k1x", "k 1", "k1\x0b", "k1,k2", " "):  # only SP/HTAB around the value are dropped
             _envelope(c.get("/v1/youtube/shorts/trending", headers={"x-api-key": header}), 401, "unauthorized")
     finally:
@@ -604,12 +604,8 @@ def test_openapi_lists_cache_max_age(client):
     status = {r["path"]: r["status"] for r in client.get("/meta/coverage").json()["endpoints"]}
     for e in CATALOG:
         names = [p["name"] for p in spec["paths"][e["path"]]["get"].get("parameters", [])]
-        if status[e["path"]] == "implemented":  # CacheMiddleware serves it on every implemented GET
-            assert names.count("cache_max_age") == 1, e["path"]
-        else:
-            assert "cache_max_age" not in names, e["path"]
-    assert {e["path"] for e in CATALOG if "cache_max_age" in e["params"]} - {
-        p for p, s in status.items() if s == "implemented"} == {"/v1/instagram/basic-profile"}  # a 501
+        assert names.count("cache_max_age") == 1, e["path"]
+    assert {e["path"] for e in CATALOG if "cache_max_age" in e["params"]} <= set(status)
 
 
 def test_openapi_documents_the_error_envelope(client):
@@ -619,14 +615,10 @@ def test_openapi_documents_the_error_envelope(client):
     assert "HTTPValidationError" not in str(spec)
     envelope = spec["components"]["schemas"]["ErrorResponse"]
     assert set(envelope["required"]) == {"success", "error", "message"} and envelope["additionalProperties"] is True
-    status = {r["path"]: r["status"] for r in client.get("/meta/coverage").json()["endpoints"]}
     errors = {"400", "401", "403", "404", "500", "501", "502", "503", "default"}
     for e in CATALOG:
         responses = spec["paths"][e["path"]]["get"]["responses"]
-        if status[e["path"]] == "implemented":
-            assert set(responses) - {"422"} == {"200", *errors}, e["path"]
-        else:  # what a 501 route sends: 501, or 400 (bad cache_max_age) and 401 (auth) before it
-            assert set(responses) == {"400", "401", "501"}, e["path"]
+        assert set(responses) - {"422"} == {"200", *errors}, e["path"]
         for code, r in responses.items():
             if code != "200":
                 assert r["content"]["application/json"]["schema"] == {"$ref": "#/components/schemas/ErrorResponse"}
@@ -850,14 +842,15 @@ def test_bad_cache_max_age_is_400_with_or_without_the_cache(env, cache_path, tmp
         r = c.get("/v1/youtube/video", params={**wrong_platform, "cache_max_age": value})
         assert r.status_code == 400 and "cache_max_age" in r.json()["message"], (value[:20], r.json())
         # gap-instagram-5: with the cache off the 501 routes ignored it (CacheMiddleware rejects it when on)
-        r = c.get("/v1/instagram/basic-profile", params={"cache_max_age": value})
+        r = c.get("/v1/instagram/basic-profile", params={"userId": "1", "cache_max_age": value})
         assert r.status_code == 400 and "cache_max_age" in r.json()["message"], (value[:20], r.json())
     # a valid (or blank) value reaches the handler, once the invisible ends a copy carries are cut
     for value in ("7d", "12h", "", "999999h", "7d\u200b", "\u200b"):
         r = c.get("/v1/youtube/video", params={**wrong_platform, "cache_max_age": value})
         assert r.status_code == 400 and "cache_max_age" not in r.json()["message"], (value[:20], r.json())
-        assert c.get("/v1/instagram/basic-profile", params={"cache_max_age": value}).status_code == 501
-    r = c.get("/v1/instagram/basic-profile", params=[("cache_max_age", "1d"), ("cache_max_age", "bogus")])
+        assert c.get("/v1/instagram/basic-profile", params={"userId": "1", "cache_max_age": value}).status_code == 501
+    r = c.get("/v1/instagram/basic-profile", params=[("userId", "1"), ("cache_max_age", "1d"),
+                                                      ("cache_max_age", "bogus")])
     assert r.status_code == 400  # the last value counts, as on the implemented routes
     # With the cache off, an unknown path was a 404 and a trailing slash a 307 here (400s with the cache on)
     for path in ("/v1/unknown", "/v1/youtube/video/"):
@@ -1835,21 +1828,22 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
         if route == 'fallback':
             assert 'ScrapeCreators API key' in initial
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
-    assert owner.get("/v1/youtube/shorts/trending").status_code == 501  # dashboard sessions can call the API
+    assert owner.get("/v1/tiktok/video/comments", params={"url": "x"}).status_code == 501
 
     me = owner.get("/portal/api/me").json()
     headers = {"x-csrf-token": me["csrf"]}
     created = owner.post("/portal/api/keys", headers=headers, json={"name": "Tests"}).json()
     assert created["key"].startswith("ss_") and created["key"] not in owner.get("/portal/api/keys").text
-    assert owner.get("/v1/youtube/shorts/trending", headers={"x-portal-key-id": str(created["id"])}).status_code == 501
+    assert owner.get("/v1/tiktok/video/comments", params={"url": "x"},
+                     headers={"x-portal-key-id": str(created["id"])}).status_code == 501
     assert owner.get("/portal/api/keys").json()["keys"][0]["last_used_at"] is not None
     assert TestClient(create_app(), base_url="https://testserver").get(
-        "/v1/youtube/shorts/trending", headers={"x-api-key": created["key"]}).status_code == 501
+        "/v1/tiktok/video/comments", params={"url": "x"}, headers={"x-api-key": created["key"]}).status_code == 501
     history = owner.get("/portal/api/history").json()["requests"]
-    assert history[0]["path"] == "/v1/youtube/shorts/trending" and history[0]["has_response"] is True
+    assert history[0]["path"] == "/v1/tiktok/video/comments" and history[0]["has_response"] is True
     detail = owner.get(f"/portal/api/history/{history[0]['id']}").json()
     assert detail["status"] == 501 and detail["response_truncated"] == 0
-    assert json.loads(detail["response"])["error"] == "not_supported"
+    assert json.loads(detail["response"])["error"] == "platform_auth_required"
 
     invite = owner.post("/portal/api/invites", headers=headers, json={"email": "friend@example.com"}).json()["url"]
     friend = TestClient(create_app(), base_url="https://testserver")

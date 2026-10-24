@@ -256,6 +256,8 @@ def create_app() -> FastAPI:
         return {
             "success": True,
             "implemented": sum(r["status"] == "implemented" for r in rows),
+            "needs_setup": sum(r["status"] == "needs_setup" for r in rows),
+            "unsupported": sum(r["status"] == "not_supported" for r in rows),
             "total": len(rows),
             "endpoints": rows,
         }

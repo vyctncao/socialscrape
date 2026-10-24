@@ -87,7 +87,9 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     assert video["implemented"] is True and video["reason"] is None and video["platform"] == "youtube"
     assert video["params"] == selftest.PRESETS["/v1/youtube/video"].params and video["expect"]
     trending = by_path["/v1/youtube/shorts/trending"]
-    assert trending["implemented"] is False and "Trending" in trending["reason"]
+    assert trending["implemented"] is True and trending["reason"] is None
+    gated = by_path["/v1/tiktok/video/comments"]
+    assert gated["implemented"] is False and gated["needs_setup"] is True
     [chained] = [test for test in data["tests"] if test["path"] == "/v1/youtube/video/comment/replies"]
     assert chained["derive"] == [{"param": "continuationToken", "source": "/v1/youtube/video/comments",
                                   "pick": selftest.PRESETS[chained["path"]].derive["continuationToken"][1]}]
@@ -104,9 +106,8 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     assert set(re.findall(r'data-loading-test-group="(instagram|tiktok|youtube)"', initial)) == {"instagram", "tiktok", "youtube"}
     assert initial.count('class="table-wrap skeleton-table"') == 3
     assert "window.EndpointTests" in c.get(f"/assets/selftest.js?v={version}").text
-    # What the page reads as "not supported" when the fallback is skipped.
-    unsupported = c.get("/v1/youtube/shorts/trending", headers={fallback.HEADER: "off"})
-    assert unsupported.status_code == 501 and unsupported.json()["error"] == "not_supported"
+    gated = c.get("/v1/tiktok/video/comments", params={"url": "x"}, headers={fallback.HEADER: "off"})
+    assert gated.status_code == 501 and gated.json()["error"] == "platform_auth_required"
 
 
 def test_the_page_learns_what_falls_back(signed_in):
@@ -115,8 +116,9 @@ def test_the_page_learns_what_falls_back(signed_in):
     assert falls_back["provider"] == "scrapecreators" and falls_back["triggers"] == list(fallback.DEFAULT_TRIGGERS)
     assert sorted(falls_back["platforms"]) == ["instagram", "tiktok", "youtube"]
     # The page's requests skip it unless the member allows it.
-    r = c.get("/v1/youtube/shorts/trending", headers={fallback.HEADER: "OFF"})
-    assert r.status_code == 501 and fallback.HEADER not in r.headers and "fallback" not in r.json()
+    r = c.get("/v1/tiktok/video/comments", params={"url": "x"}, headers={fallback.HEADER: "OFF"})
+    assert r.status_code == 501 and r.json()["error"] == "platform_auth_required"
+    assert fallback.HEADER not in r.headers and "fallback" not in r.json()
 
 
 def test_an_opted_out_request_is_not_answered_with_a_cached_fallback(signed_in, tmp_path):
@@ -124,7 +126,7 @@ def test_an_opted_out_request_is_not_answered_with_a_cached_fallback(signed_in, 
     try:
         c = signed_in(SOCIALSCRAPE_SCRAPECREATORS_API_KEY="sc-key", SOCIALSCRAPE_SCRAPECREATORS_URL=upstream.url,
                       SOCIALSCRAPE_CACHE_PATH=str(tmp_path / "cache.sqlite3"))
-        path, params = "/v1/youtube/shorts/trending", {"cache_max_age": "1d"}
+        path, params = "/v1/tiktok/video/comments", {"url": "x", "cache_max_age": "1d"}
         assert c.get(path, params=params).headers[fallback.HEADER] == fallback.PROVIDER  # answered there, cached
         assert c.get(path, params=params).headers["x-cache"] == "hit"
         own = c.get(path, params=params, headers={fallback.HEADER: "off"})
@@ -139,9 +141,17 @@ def test_endpoint_test_assets_encode_accessible_run_state_and_mobile_rows():
     script = (root / "socialscrape/static/selftest.js").read_text()
     styles = (root / "socialscrape/static/selftest.css").read_text()
     assert "socialscrape.endpoint-tests.v2" in script and "lastRun" in script
+    assert "platform_auth_required" in script and "Needs setup" in script
     assert 'aria-live="polite" aria-atomic="true"' in script
     assert 'data-label="Endpoint"' in script and 'data-label="Preset parameters"' in script
     assert 'data-label="Result"' in script and 'data-label="Actions"' in script
     assert "Retry ${plural(retry.length" in script
     assert ".test-group thead th{position:sticky" in styles
     assert "@media(max-width:760px)" in styles and ".test-group td::before{content:attr(data-label)" in styles
+
+
+def test_platform_setup_errors_render_as_needs_setup():
+    script = (__import__('pathlib').Path(__file__).parents[1] / 'socialscrape' / 'static' / 'selftest.js').read_text()
+    for code in ("platform_auth_required", "platform_oauth_required", "platform_shop_auth_required",
+                 "platform_shop_credentials_incomplete", "platform_scope_unavailable"):
+        assert code in script
