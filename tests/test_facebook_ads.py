@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import pytest
+from yt_dlp.utils import ExtractorError
 
 from socialscrape.errors import BadRequest, NotFound, UpstreamBlocked, UpstreamError
 from socialscrape.platforms import _facebook_ads_map as M
@@ -11,6 +12,8 @@ from tests.contract import assert_conforms
 
 FIXTURES = Path(__file__).parent / "fixtures" / "facebook_ads"
 DETAIL_FIXTURE = FIXTURES / "ad-detail.json"
+DETAILS_FIXTURE = FIXTURES / "ad-details.json"  # AdLibraryV3AdDetailsQuery answers: EU-delivered and political
+MISSING_FIXTURE = FIXTURES / "missing-ad-page.html"  # the deep-link page Meta serves for an unknown ad id
 SEARCH_FIXTURE = FIXTURES / "search-page1.json"
 COMPANY_FIXTURE = FIXTURES / "company-search.json"
 
@@ -53,6 +56,29 @@ def test_archive_parser_and_not_found():
         F._archive(html, "999")
     with pytest.raises(UpstreamBlocked):
         F._archive("<title>Log in to Facebook</title>", "999")
+
+
+def test_missing_ad_landing_page_is_404_not_a_block():
+    """Recorded 2026-10-24 for id 999999999999999999: Meta renders the Ad Library landing page (deeplinkAdID null),
+    whose consent config lists arkose_captcha and google_recaptcha. That used to read as a 503 bot check."""
+    page = MISSING_FIXTURE.read_text()
+    assert "arkose_captcha" in page and '"deeplinkAdID":null' in page
+    with pytest.raises(NotFound) as exc:
+        F._archive(page, "999999999999999999")
+    assert exc.value.code == "ad_not_found"
+    shell_for_this_ad = page.replace('"deeplinkAdID":null', '"deeplinkAdID":999999999999999999')
+    with pytest.raises(UpstreamBlocked):  # the app was asked for this ad yet sent none: not provably missing
+        F._archive(shell_for_this_ad, "999999999999999999")
+
+
+def test_detail_image_crops_follow_the_scrapecreators_object_shape():
+    archive = {"ad_archive_id": "1", "snapshot": {"images": [
+        {"image_crops": [], "original_image_url": "https://x/a.jpg"},
+        {"image_crops": [{"x": 0, "y": 0}], "original_image_url": "https://x/b.jpg"}, "unexpected"]}}
+    images = M.detail(archive)["snapshot"]["images"]
+    assert images[0]["image_crops"] == {} and images[1]["image_crops"] == {"0": {"x": 0, "y": 0}}
+    assert images[2] == "unexpected" and archive["snapshot"]["images"][0]["image_crops"] == []
+    assert M.detail(archive, trim=True)["snapshot"]["images"][0]["image_crops"] == {}
 
 
 @pytest.mark.parametrize("kwargs", [
@@ -177,22 +203,127 @@ def test_company_search_mapping(client, monkeypatch):
 def test_detail_and_image_transcript(client, monkeypatch):
     archive = json.loads(DETAIL_FIXTURE.read_text())["archive"]
     image = dict(archive, snapshot={"images": [{}], "page_name": archive["page_name"]})
+    eu = json.loads(DETAILS_FIXTURE.read_text())["eu"]["response"]["data"]["ad_library_main"]["ad_details"]
+    asked = []
 
-    async def detail(_):
-        return archive
+    async def detail(_, *, details=False):
+        asked.append(details)
+        return archive, eu if details else None
 
     monkeypatch.setattr(F, "_detail_archive", detail)
     result = client.get("/v1/facebook/adLibrary/ad", params={"id": archive["ad_archive_id"]})
     assert result.status_code == 200
-    assert result.json()["adArchiveID"] == int(archive["ad_archive_id"])
+    body = result.json()
+    assert body["adArchiveID"] == int(archive["ad_archive_id"])
+    assert body["aaa_info"]["eu_total_reach"] == 20138
+    assert_conforms(body, "/v1/facebook/adLibrary/ad", min_coverage=0.6)
 
-    async def image_detail(_):
-        return image
+    async def image_detail(_, *, details=False):
+        asked.append(details)
+        return image, None
 
     monkeypatch.setattr(F, "_detail_archive", image_detail)
     result = client.get("/v1/facebook/adLibrary/ad/transcript", params={"id": archive["ad_archive_id"]})
     assert result.status_code == 200
     assert result.json()["data"]["transcript_available"] is False
+    assert asked == [True, False]  # the transcript route never pays for the details query
+
+
+def details_case(name: str) -> tuple[dict, dict]:
+    case = json.loads(DETAILS_FIXTURE.read_text())[name]
+    return case["archive"], case["response"]
+
+
+def test_aaa_info_merges_payer_data_with_eu_transparency():
+    _, response = details_case("eu")
+    info = M.aaa_info(response["data"]["ad_library_main"]["ad_details"])
+    assert info["payer_beneficiary_data"] == [{"payer": "FigureO POD", "beneficiary": "FigureO POD"}]
+    assert info["targets_eu"] is True and info["is_ad_taken_down"] is False
+    assert info["eu_total_reach"] == 20138
+    assert info["age_audience"] == {"min": 18, "max": 65} and info["gender_audience"] == "All"
+    assert [row["name"] for row in info["location_audience"]] == ["Africa", "Europe", "South America"]
+    first = info["age_country_gender_reach_breakdown"][0]
+    assert first["country"] == "YT"
+    assert {"age_range": "45-54", "male": 125, "female": 82, "unknown": None} in first["age_gender_breakdowns"]
+
+
+def test_aaa_info_normalizes_political_delivery_shares_without_inventing():
+    _, response = details_case("political")
+    info = M.aaa_info(response["data"]["ad_library_main"]["ad_details"])
+    assert info["location_audience"][-1] == {"name": "California", "reach": 0.99}
+    assert all(set(row) == {"name", "reach"} for row in info["location_audience"])
+    assert info["age_country_gender_reach_breakdown"] == [{"country": "US", "age_gender_breakdowns": [
+        {"age_range": "18-24", "male": 0.13, "female": 0.13, "unknown": 0},
+        {"age_range": "25-34", "male": 0.22, "female": 0.19, "unknown": 0},
+        {"age_range": "35-44", "male": 0.16, "female": 0.16, "unknown": 0}]}]
+    assert "eu_total_reach" not in info and "payer_beneficiary_data" not in info
+
+
+def test_aaa_info_prefers_eu_then_uk_and_keeps_absolute_total_reach():
+    uk = {"location_audience": [{"name": "United Kingdom", "num_obfuscated": 0, "type": "countries",
+                                 "excluded": False}], "total_reach": 5120, "gender_audience": "All"}
+    info = M.aaa_info({"aaa_info": None, "transparency_by_location": {
+        "br_transparency": {"total_reach": 1}, "eu_transparency": None, "uk_transparency": uk}})
+    assert info == uk
+    assert M.aaa_info(None) is None
+    assert M.aaa_info({"aaa_info": None, "insights": None,
+                       "transparency_by_location": {"eu_transparency": None}}) is None
+    assert M.detail({"ad_archive_id": "1"}, details=None)["aaa_info"] is None
+
+
+class DetailsIE:
+    def __init__(self, answer):
+        self.answer, self.forms = answer, []
+
+    def _download_json(self, url, ident, *, data, headers):
+        from urllib.parse import parse_qs
+        self.forms.append({key: values[0] for key, values in parse_qs(data.decode()).items()})
+        assert headers["X-FB-Friendly-Name"] == "AdLibraryV3AdDetailsQuery"
+        if isinstance(self.answer, BaseException):
+            raise self.answer
+        return self.answer
+
+
+@pytest.mark.parametrize("name", ["eu", "political"])
+def test_ad_details_asks_like_the_pages_own_modal(name):
+    archive, response = details_case(name)
+    page = json.loads(DETAILS_FIXTURE.read_text())["page"]
+    ie = DetailsIE(response)
+    F._DOC_IDS.clear()
+    details = F._ad_details(ie, "https://www.facebook.com/ads/library/?id=1", page, archive)
+    assert details is response["data"]["ad_library_main"]["ad_details"]
+    form = ie.forms[0]
+    assert form["doc_id"] == F.DETAILS_DOC_ID and form["fb_api_req_friendly_name"] == "AdLibraryV3AdDetailsQuery"
+    variables = json.loads(form["variables"])
+    assert variables == {"adArchiveID": archive["ad_archive_id"], "pageID": archive["page_id"], "country": "US",
+                         "sessionID": "70135ce7-6a00-4508-bb92-8a6912fe22da", "source": None,
+                         "isAdNonPolitical": name != "political", "isAdNotAAAEligible": name != "eu"}
+
+
+def test_ad_details_skips_unregulated_ads_without_a_request():
+    ie = DetailsIE(pytest.fail)
+    archive = {"ad_archive_id": "1", "page_id": "2", "is_aaa_eligible": False, "categories": ["UNKNOWN"]}
+    assert F._ad_details(ie, "url", "", archive) is None and ie.forms == []
+
+
+@pytest.mark.parametrize("answer", [
+    {"errors": [{"message": "Rate limit exceeded"}]},
+    {"errors": [{"message": "Something else broke"}]},
+    ExtractorError("Unable to download JSON metadata: HTTP Error 500"),
+])
+def test_ad_details_failure_leaves_aaa_info_unknown(monkeypatch, answer):
+    """aaa_info is supplementary: a refused or broken details query is null (unknown), never a failed ad."""
+    archive, _ = details_case("eu")
+    page = json.loads(DETAILS_FIXTURE.read_text())["page"]
+    monkeypatch.setattr(F, "_discover_doc_id", lambda *args: pytest.fail("must not refresh"))
+    F._DOC_IDS.clear()
+    assert F._ad_details(DetailsIE(answer), "url", page, archive) is None
+
+
+def test_details_operation_id_parses_the_recorded_bundle():
+    bundle = ('__d("AdLibraryV3AdDetailsQuery_facebookRelayOperation",[],(function(t,n,r,o,a,i)'
+              '{a.exports="25068828942793558"}),null);')
+    assert F._operation_id(bundle, "AdLibraryV3AdDetailsQuery") == F.DETAILS_DOC_ID
 
 
 def test_bundle_discovery_only_accepts_declared_meta_scripts():
