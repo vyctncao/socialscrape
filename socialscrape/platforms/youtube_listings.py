@@ -6,19 +6,27 @@ chips are the InnerTube browse/search continuations it requests itself
 (`_extract_response`), on its 'web' client or, where that one hides data,
 its 'mweb' (mobile web) client. Native continuation tokens are wrapped in our
 own `ss1.` cursor together with the little page context later pages need.
+
+What a grid item doesn't carry (a Short's publish date, likes, comments...) comes from one more InnerTube call
+per item, `reel/reel_item_watch` (see _video_extras), bounded per page and cached for a while.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import copy
 import hashlib
+import logging
 import re
+import threading
 import time
 import unicodedata
 import urllib.parse
+from collections import OrderedDict
 from collections.abc import Callable
+from functools import partial
 from typing import Any, Literal, TypeVar
 
 from fastapi import APIRouter, Query
@@ -26,13 +34,16 @@ from yt_dlp.extractor.youtube import YoutubeBaseInfoExtractor
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError, ISO3166Utils, traverse_obj
 
+from ..config import get_settings
 from ..cursor import decode_cursor, encode_cursor
-from ..errors import BadRequest, NotFound, NotSupported, UpstreamError, require_one
+from ..errors import (ApiError, BadRequest, Forbidden, NotFound, NotSupported, UpstreamBlocked, UpstreamError,
+                      require_one)
 from ..registry import sc_get
 from ..util import truthy
-from ..ytdlp import with_ydl
+from ..ytdlp import translate_error, with_ydl
 from . import _youtube_listings_parse as p
 
+log = logging.getLogger("socialscrape.youtube")
 router = APIRouter()
 UNSUPPORTED: dict[str, str] = {}
 
@@ -449,6 +460,184 @@ def _channel_link(ctx: list) -> str | None:
     return f"{YT}/@{ctx[2]}" if ctx[2] else (f"{YT}/channel/{ctx[0]}" if ctx[0] else None)
 
 
+# --- per-video extras ----------------------------------------------------------
+
+_EXTRAS_JOBS = 4  # yt-dlp workers one page's extras take at once (at most half the pool, at least one)
+_EXTRAS_BUDGET = 60  # most items of one page that get extras: a Shorts page holds 48, a Videos page 30
+_EXTRAS_SECONDS = 20.0  # no extras request starts later than this after a page's first; later items keep nulls
+_EXTRAS_TTL = 900.0  # s a video's extras are served again for (counts move on; 15 minutes behind is fine)
+_EXTRAS_KEEP = 5000  # videos whose extras are kept
+_EXTRAS_FAILURES = 2  # items in a row whose request failed (after its retry) that stop a job
+_RETRY_WAIT = 0.5  # s before the one retry of an extras request that failed in passing (HTTP 5xx, garbled body)
+_MASK_RESTS = 3600.0  # s the field mask stays off once YouTube refused it or answered without its fields
+# The fields reel_extras reads. With this mask YouTube answers in ~1 KB instead of 250-480 KB (the Shorts player's
+# frameworkUpdates, engagement panels and top bars), which matters when a page is 48 requests through a paid proxy.
+REEL_MASK = ("status,playerResponse(playabilityStatus(status,reason),videoDetails(videoId,lengthSeconds,"
+             "shortDescription,viewCount),microformat.playerMicroformatRenderer(publishDate,uploadDate,likeCount,"
+             "viewCount,category,lengthSeconds)),overlay.reelPlayerOverlayRenderer.playerOverlay."
+             "reelPlayerOverlayViewModel.actionBar.reelActionBarViewModel.buttonViewModels(buttonViewModel("
+             "iconName,title,accessibilityText,accessibilityId))")
+
+_EXTRAS_NOTE = (f"They come from one more InnerTube request per item (reel/reel_item_watch, what YouTube's Shorts "
+                f"player asks for; it answers for any video), up to {_EXTRAS_JOBS} at a time and at most "
+                f"{_EXTRAS_BUDGET} items or {_EXTRAS_SECONDS:.0f} s per page, cached {_EXTRAS_TTL / 60:.0f} minutes. "
+                "publishDate is YouTube's own, with its offset ('2026-10-23T11:00:08-07:00'); likeCountInt and "
+                "viewCountInt are exact; commentCountInt is exact (the comment button's label) and commentCountText "
+                "is the button's own text ('6,633', '40K'); description is '' for a video without one. Anything "
+                "unknown is null, never 0: likes hidden, comments off, and every extra of an item whose request "
+                "failed, was bot-checked or came past the budget (the listing is still served).")
+
+
+class _ExtrasCache:
+    """Video id -> reel_extras ({} for a video YouTube no longer shows) for _EXTRAS_TTL, oldest dropped past
+    _EXTRAS_KEEP. Thread-safe: the extras jobs fill it from yt-dlp's workers, and a job that with_ydl runs again on
+    the next proxy profile skips what the first attempt already got."""
+
+    def __init__(self) -> None:
+        self._items: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, vid: str) -> dict[str, Any] | None:
+        with self._lock:
+            hit = self._items.get(vid)
+            if hit and time.monotonic() - hit[0] < _EXTRAS_TTL:
+                return hit[1]
+            self._items.pop(vid, None)
+            return None
+
+    def put(self, vid: str, extras: dict[str, Any]) -> None:
+        with self._lock:
+            self._items[vid] = (time.monotonic(), extras)
+            self._items.move_to_end(vid)
+            while len(self._items) > _EXTRAS_KEEP:
+                self._items.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
+
+EXTRAS = _ExtrasCache()
+_mask_off_until = 0.0
+
+
+def _reel_item(ie: Any, vid: str, mask: bool) -> dict[str, Any]:
+    """POST youtubei/v1/reel/reel_item_watch for one video on yt-dlp's web client: one attempt."""
+    ytcfg = ie._get_default_ytcfg("web")
+    headers = ie.generate_api_headers(ytcfg=ytcfg, default_client="web")
+    if mask:
+        headers["X-Goog-FieldMask"] = REEL_MASK
+    query = {"playerRequest": {"videoId": vid, "contentCheckOk": True, "racyCheckOk": True},
+             "disablePlayerResponse": False}
+    return ie._call_api("reel/reel_item_watch", query, vid, headers=headers, context=ie._extract_context(ytcfg, "web"),
+                        default_client="web", note="Downloading reel item") or {}
+
+
+def _mask_lost(resp: dict[str, Any]) -> bool:
+    """A masked answer without the fields the mask names (no status; a success without a player response): YouTube
+    has moved them, or stopped honoring masks."""
+    return not resp.get("status") or (resp["status"] == p.REEL_OK
+                                      and not traverse_obj(resp, ("playerResponse", {dict})))
+
+
+def _rest_mask(why: str) -> None:
+    global _mask_off_until
+    _mask_off_until = time.monotonic() + _MASK_RESTS
+    log.warning("YouTube reel_item_watch %s; asking without a field mask for %d s", why, _MASK_RESTS)
+
+
+def _reel_answer(ie: Any, vid: str) -> dict[str, Any]:
+    """reel_item_watch's answer on `vid`, past what YouTube answers in passing. With the field mask, an HTTP 400 (the
+    mask refused) or an answer without its fields is asked again without it, and the mask rests (_MASK_RESTS). An
+    HTTP 5xx, a network error or a body that isn't JSON is asked once more after _RETRY_WAIT. Raises the ApiError
+    otherwise: UpstreamBlocked / Forbidden at once for HTTP 429 / 403 or an empty body (YouTube's throttled
+    answer), NotFound for HTTP 404."""
+    retried = False
+    while True:
+        mask = time.monotonic() >= _mask_off_until
+        try:
+            resp = _reel_item(ie, vid, mask)
+        except ExtractorError as exc:
+            status = exc.cause.status if isinstance(exc.cause, HTTPError) else None
+            if mask and status == 400:
+                _rest_mask("refused the field mask (HTTP 400)")
+                continue
+            error = translate_error(exc)
+            if retried or isinstance(error, (UpstreamBlocked, Forbidden, NotFound)) or (status or 500) < 500:
+                raise error from exc
+            retried = True
+            time.sleep(_RETRY_WAIT)
+            continue
+        if mask and _mask_lost(resp):
+            _rest_mask("answered without the masked fields")
+            continue
+        return resp
+
+
+def _fetch_extras(ydl: Any, ids: list[str], deadline: float) -> None:
+    """One job of _video_extras: reel_extras of `ids` in turn into EXTRAS, skipping those already there, until the
+    deadline. A bot check, HTTP 429 / 403 or an empty answer stops the job (raised, so that with_ydl runs it again on
+    the next proxy profile, if the dashboard has one); so do _EXTRAS_FAILURES items in a row that failed otherwise.
+    A video YouTube no longer shows (REEL_ERROR, HTTP 404, a player reason such as 'Video unavailable') is kept
+    as {}."""
+    ie = ydl.get_info_extractor("YoutubeTab")
+    ie.initialize()
+    failures = 0
+    for vid in ids:
+        if time.monotonic() >= deadline:
+            return
+        if EXTRAS.get(vid) is not None:
+            continue
+        try:
+            resp = _reel_answer(ie, vid)
+        except (UpstreamBlocked, Forbidden):
+            raise
+        except NotFound:
+            EXTRAS.put(vid, {})
+            continue
+        except ApiError:
+            failures += 1
+            if failures >= _EXTRAS_FAILURES:
+                raise
+            continue
+        if (extras := p.reel_extras(resp, vid)) is not None:
+            EXTRAS.put(vid, extras)
+            failures = 0
+            continue
+        if not resp:
+            raise UpstreamBlocked("YouTube answered a Shorts player request with an empty body")
+        reason = p.reel_reason(resp)
+        if reason and isinstance(translate_error(ExtractorError(reason, expected=True)), UpstreamBlocked):
+            raise UpstreamBlocked(reason)  # 'Sign in to confirm you’re not a bot'
+        if resp.get("status") == p.REEL_GONE or reason:
+            EXTRAS.put(vid, {})
+            continue
+        failures += 1  # a success that names another video, or none
+        if failures >= _EXTRAS_FAILURES:
+            raise UpstreamError("YouTube's Shorts player answers name no video")
+
+
+async def _video_extras(ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Video id -> reel_extras of `ids`: from EXTRAS, else fetched for the first _EXTRAS_BUDGET by up to _EXTRAS_JOBS
+    jobs at once, each asking for every n-th id in turn (so a page's first items come first). Best effort: a video
+    that failed, or came after the budget or a block, is left out (its fields stay null), and the listing is served
+    either way; the reason is logged."""
+    wanted = list(dict.fromkeys(ids))
+    todo = [v for v in wanted[:_EXTRAS_BUDGET] if EXTRAS.get(v) is None]
+    if todo:
+        jobs = min(_EXTRAS_JOBS, max(1, get_settings().max_workers // 2), len(todo))
+        deadline = time.monotonic() + _EXTRAS_SECONDS
+        results = await asyncio.gather(*(with_ydl("youtube", partial(_fetch_extras, ids=todo[i::jobs],
+                                                                     deadline=deadline))
+                                         for i in range(jobs)), return_exceptions=True)
+        for result in results:
+            if isinstance(result, ApiError):
+                log.warning("YouTube video extras stopped: %s (%s)", result.code, result.message)
+            elif isinstance(result, BaseException):
+                raise result
+    return {v: x for v in wanted if (x := EXTRAS.get(v))}
+
+
 # --- channel -----------------------------------------------------------------
 
 @sc_get(router, "/v1/youtube/channel", source=f"{_SRC} (channel /about page, ytInitialData)",
@@ -473,10 +662,10 @@ async def youtube_channel(channelId: str | None = None, handle: str | None = Non
               "tab with members-only videos); the listing itself (first page and continuations) comes from yt-dlp's "
               "mweb InnerTube client, whose items carry exact view counts "
               "('251,675,820 views'). sort=popular falls back to latest when the channel shows no chips. "
-              "description is not part of the tab listing and is omitted; channel.thumbnail is null like "
-              "ScrapeCreators. includeExtras is ignored (needs one extra request per video); "
-              "is_paid_promotions=true returns 501. publishedTime is derived from relative text ('3 weeks ago') "
-              "and is approximate.")
+              "channel.thumbnail is null like ScrapeCreators. is_paid_promotions=true returns 501. Without "
+              "includeExtras, description is omitted (not part of the tab listing) and publishedTime is derived from "
+              "relative text ('3 weeks ago'), so approximate. includeExtras=true adds description, likeCountText/Int, "
+              "commentCountText/Int and publishDate to each video and makes publishedTime exact. " + _EXTRAS_NOTE)
 async def youtube_channel_videos(channelId: str | None = None, handle: str | None = None,
                                  sort: Literal["latest", "popular"] | None = None,
                                  continuationToken: str | None = None, is_paid_promotions: str | None = None,
@@ -489,13 +678,19 @@ async def youtube_channel_videos(channelId: str | None = None, handle: str | Non
     channel = {"title": ctx[1], "thumbnail": None}
     videos = [p.sc_video(v, "video", channel) for k, n in items
               if (v := p.video_item(k, n) or (p.lockup_video(n) if k == "lockupViewModel" else None))]
+    if truthy(includeExtras):
+        extras = await _video_extras([v["id"] for v in videos])
+        videos = [p.with_extras(v, extras.get(v["id"])) for v in videos]
     return {"videos": videos, "continuationToken": cursor}
 
 
-@sc_get(router, "/v1/youtube/channel/shorts", source=f"{_SRC} (channel Shorts tab + browse continuations)",
-        notes="The Shorts tab grid only carries id, title, thumbnail and view count; description, like/comment "
-              "counts, genre, duration and publishDate need a per-video request and are omitted. sort=popular "
-              "follows the tab's 'Popular' chip. viewCountInt comes from abbreviated text ('25M views').")
+@sc_get(router, "/v1/youtube/channel/shorts",
+        source=f"{_SRC} (channel Shorts tab + browse continuations; InnerTube reel_item_watch per Short)",
+        notes="The Shorts tab grid only carries id, title, thumbnail and the abbreviated view count ('25M views', "
+              "kept as viewCountText); description, viewCountInt (exact), likeCountText/Int, commentCountText/Int, "
+              "publishDate, genre, durationMs and durationFormatted are added per Short. " + _EXTRAS_NOTE
+              + " An item without them keeps the grid's approximate viewCountInt. sort=popular follows the tab's "
+              "'Popular' chip.")
 async def youtube_channel_shorts(handle: str | None = None, channelId: str | None = None,
                                  sort: Literal["newest", "popular"] | None = None,
                                  continuationToken: str | None = None):
@@ -503,6 +698,8 @@ async def youtube_channel_shorts(handle: str | None = None, channelId: str | Non
     items, cursor, _ = await _channel_tab("channel-shorts", ("shorts",), channelId, handle, continuationToken,
                                           "Popular" if sort == "popular" else None)
     shorts = [s for k, n in items if k in _SHORT_KEYS and (s := p.shorts_lockup(n))]
+    extras = await _video_extras([s["id"] for s in shorts])
+    shorts = [p.sc_short(s, extras.get(s["id"])) for s in shorts]
     return {"videos": [], "channels": [], "playlists": [], "shorts": shorts, "shelves": [], "lives": [],
             "continuationToken": cursor}
 

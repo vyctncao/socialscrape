@@ -1,0 +1,401 @@
+{
+ "responseContext": {
+  "visitorData": "CgtNNGtMbktBalg3dyj55_DWBjIKCgJVUxIEGgAgHg%3D%3D"
+ },
+ "overlay": {
+  "reelPlayerOverlayRenderer": {
+   "playerOverlay": {
+    "reelPlayerOverlayViewModel": {
+     "actionBar": {
+      "reelActionBarViewModel": {
+       "buttonViewModels": [
+        {
+         "likeButtonViewModel": {
+          "toggleButtonViewModel": {
+           "toggleButtonViewModel": {
+            "defaultButtonViewModel": {
+             "buttonViewModel": {
+              "iconName": "EMPTY_HEART",
+              "title": "935K",
+              "onTap": {
+               "innertubeCommand": {
+                "commandMetadata": {
+                 "webCommandMetadata": {
+                  "ignoreNavigation": true
+                 }
+                },
+                "modalEndpoint": {
+                 "modal": {
+                  "modalWithTitleAndButtonRenderer": {
+                   "title": {
+                    "runs": [
+                     {
+                      "text": "Like this video?"
+                     }
+                    ]
+                   },
+                   "content": {
+                    "runs": [
+                     {
+                      "text": "Sign in to make your opinion count."
+                     }
+                    ]
+                   },
+                   "button": {
+                    "buttonRenderer": {
+                     "style": "STYLE_MONO_FILLED",
+                     "size": "SIZE_DEFAULT",
+                     "isDisabled": false,
+                     "text": {
+                      "simpleText": "Sign in"
+                     },
+                     "navigationEndpoint": {
+                      "commandMetadata": {
+                       "webCommandMetadata": {
+                        "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DwSh8fAFWEWs&hl=en",
+                        "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                        "rootVe": 83769
+                       }
+                      },
+                      "signInEndpoint": {
+                       "hack": true,
+                       "nextEndpoint": {
+                        "commandMetadata": {
+                         "webCommandMetadata": {
+                          "url": "/watch?v=wSh8fAFWEWs",
+                          "webPageType": "WEB_PAGE_TYPE_WATCH",
+                          "rootVe": 3832
+                         }
+                        },
+                        "watchEndpoint": {
+                         "videoId": "wSh8fAFWEWs"
+                        }
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              },
+              "accessibilityText": "like this video along with 935 thousand other people",
+              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+              "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+              "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+              "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+              "accessibilityId": "id.reel_like_button",
+              "useYoutubeLoggingDirectives": true,
+              "shouldLogGestures": true,
+              "targetId": "",
+              "tooltip": "I like this"
+             }
+            },
+            "toggledButtonViewModel": {
+             "buttonViewModel": {
+              "iconName": "FULL_HEART",
+              "title": "935K",
+              "onTap": {
+               "innertubeCommand": {
+                "commandMetadata": {
+                 "webCommandMetadata": {
+                  "ignoreNavigation": true
+                 }
+                },
+                "modalEndpoint": {
+                 "modal": {
+                  "modalWithTitleAndButtonRenderer": {
+                   "title": {
+                    "runs": [
+                     {
+                      "text": "Like this video?"
+                     }
+                    ]
+                   },
+                   "content": {
+                    "runs": [
+                     {
+                      "text": "Sign in to make your opinion count."
+                     }
+                    ]
+                   },
+                   "button": {
+                    "buttonRenderer": {
+                     "style": "STYLE_MONO_FILLED",
+                     "size": "SIZE_DEFAULT",
+                     "isDisabled": false,
+                     "text": {
+                      "simpleText": "Sign in"
+                     },
+                     "navigationEndpoint": {
+                      "commandMetadata": {
+                       "webCommandMetadata": {
+                        "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252Fwatch%253Fv%253DwSh8fAFWEWs&hl=en",
+                        "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                        "rootVe": 83769
+                       }
+                      },
+                      "signInEndpoint": {
+                       "hack": true,
+                       "nextEndpoint": {
+                        "commandMetadata": {
+                         "webCommandMetadata": {
+                          "url": "/watch?v=wSh8fAFWEWs",
+                          "webPageType": "WEB_PAGE_TYPE_WATCH",
+                          "rootVe": 3832
+                         }
+                        },
+                        "watchEndpoint": {
+                         "videoId": "wSh8fAFWEWs"
+                        }
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              },
+              "accessibilityText": "935,059 likes",
+              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+              "type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+              "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+              "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+              "accessibilityId": "id.reel_like_toggled_button",
+              "useYoutubeLoggingDirectives": true,
+              "shouldLogGestures": true,
+              "targetId": "",
+              "tooltip": "Unlike"
+             }
+            },
+            "isToggled": false,
+            "isTogglingDisabled": true
+           }
+          },
+          "likeStatusEntityKey": "Egt3U2g4ZkFGV0VXcyA-KAE%3D",
+          "likeStatusEntity": {
+           "key": "Egt3U2g4ZkFGV0VXcyA-KAE%3D",
+           "likeStatus": "INDIFFERENT"
+          }
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "SHORTS_COMMENT",
+          "title": "14K",
+          "onTap": {
+           "innertubeCommand": {
+            "showEngagementPanelEndpoint": {
+             "identifier": {
+              "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+              "tag": "shorts-comments-panel"
+             }
+            }
+           }
+          },
+          "accessibilityText": "View 14,648 comments",
+          "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+          "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+          "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+          "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+          "accessibilityId": "id.reel_comment_button",
+          "useYoutubeLoggingDirectives": true,
+          "shouldLogGestures": false,
+          "targetId": "",
+          "tooltip": "Comments"
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "SHORTS_SHARE",
+          "title": "Share",
+          "onTap": {
+           "innertubeCommand": {
+            "commandMetadata": {
+             "webCommandMetadata": {
+              "sendPost": true,
+              "apiUrl": "/youtubei/v1/share/get_share_panel"
+             }
+            },
+            "shareEntityServiceEndpoint": {
+             "serializedShareEntity": "Cgt3U2g4ZkFGV0VXc1ICCAKgAQM%3D",
+             "commands": [
+              {
+               "openPopupAction": {
+                "popup": {
+                 "unifiedSharePanelRenderer": {
+                  "showLoadingSpinner": true
+                 }
+                },
+                "popupType": "DIALOG",
+                "beReused": true
+               }
+              }
+             ]
+            }
+           }
+          },
+          "accessibilityText": "Share",
+          "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+          "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+          "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+          "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE",
+          "accessibilityId": "id.reel_share_button",
+          "useYoutubeLoggingDirectives": true,
+          "shouldLogGestures": false,
+          "targetId": "",
+          "tooltip": "Share"
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "REMIX_FILLED",
+          "title": "Remix",
+          "onTap": {
+           "innertubeCommand": {
+            "addToToastAction": {
+             "item": {
+              "notificationTextRenderer": {
+               "successResponseText": {
+                "runs": [
+                 {
+                  "text": "Feature not available for this video"
+                 }
+                ]
+               }
+              }
+             }
+            }
+           }
+          },
+          "accessibilityText": "Remix",
+          "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+          "type": "BUTTON_VIEW_MODEL_TYPE_TONAL",
+          "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+          "state": "BUTTON_VIEW_MODEL_STATE_DISABLED",
+          "accessibilityId": "id.reel_remix_button",
+          "useYoutubeLoggingDirectives": true,
+          "shouldLogGestures": true,
+          "targetId": "",
+          "tooltip": "Remix"
+         }
+        },
+        {
+         "pivotButtonViewModel": {
+          "thumbnail": {
+           "sources": [
+            {
+             "url": "https://yt3.ggpht.com/nxYrc_1_2f77DoBadyxMTmv7ZpRZapHR5jbuYe7PlPd5cIRJxtNNEYyOC0ZsxaDyJJzXrnJiuDE=s48-c-k-c0x00ffffff-no-rj",
+             "width": 48,
+             "height": 48
+            },
+            {
+             "url": "https://yt3.ggpht.com/nxYrc_1_2f77DoBadyxMTmv7ZpRZapHR5jbuYe7PlPd5cIRJxtNNEYyOC0ZsxaDyJJzXrnJiuDE=s88-c-k-c0x00ffffff-no-rj",
+             "width": 88,
+             "height": 88
+            },
+            {
+             "url": "https://yt3.ggpht.com/nxYrc_1_2f77DoBadyxMTmv7ZpRZapHR5jbuYe7PlPd5cIRJxtNNEYyOC0ZsxaDyJJzXrnJiuDE=s176-c-k-c0x00ffffff-no-rj",
+             "width": 176,
+             "height": 176
+            }
+           ]
+          },
+          "onClickCommand": {
+           "innertubeCommand": {
+            "showEngagementPanelEndpoint": {
+             "identifier": {
+              "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+              "tag": "engagement-panel-shorts-audio-pivot"
+             }
+            }
+           }
+          },
+          "contentDescription": "See more videos using this sound",
+          "soundAttributionTitle": {
+           "content": "Original Sound",
+           "commandRuns": [
+            {
+             "startIndex": 0,
+             "length": 14,
+             "onTap": {
+              "innertubeCommand": {
+               "showEngagementPanelEndpoint": {
+                "identifier": {
+                 "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                 "tag": "engagement-panel-shorts-audio-pivot"
+                }
+               }
+              }
+             }
+            }
+           ],
+           "styleRuns": [
+            {
+             "startIndex": 0,
+             "length": 14,
+             "weightLabel": "FONT_WEIGHT_NORMAL"
+            }
+           ]
+          },
+          "waveformAnimationStyle": "WAVEFORM_ANIMATION_STYLE_DEFAULT",
+          "backgroundAnimationStyle": "BACKGROUND_ANIMATION_STYLE_DEFAULT"
+         }
+        }
+       ],
+       "rendererContext": {}
+      }
+     }
+    }
+   }
+  }
+ },
+ "playerResponse": {
+  "playabilityStatus": {
+   "status": "UNPLAYABLE",
+   "reason": "Video unavailable"
+  },
+  "videoDetails": {
+   "videoId": "wSh8fAFWEWs",
+   "title": "Survivor vs Beast Games",
+   "lengthSeconds": "27",
+   "channelId": "UCX6OQ3DkcsbYNE6H8uQQuVA",
+   "isOwnerViewing": false,
+   "shortDescription": "",
+   "isCrawlable": true,
+   "allowRatings": true,
+   "viewCount": "41043631",
+   "author": "MrBeast",
+   "isPrivate": false,
+   "isUnpluggedCorpus": false,
+   "isLiveContent": false,
+   "isTvfilmVideo": false
+  },
+  "microformat": {
+   "playerMicroformatRenderer": {
+    "title": {
+     "simpleText": "Survivor vs Beast Games"
+    },
+    "lengthSeconds": "28",
+    "ownerProfileUrl": "http://www.youtube.com/@MrBeast",
+    "externalChannelId": "UCX6OQ3DkcsbYNE6H8uQQuVA",
+    "isFamilySafe": true,
+    "isUnlisted": false,
+    "hasYpcMetadata": false,
+    "viewCount": "41043631",
+    "category": "Entertainment",
+    "publishDate": "2026-01-16T11:00:01-08:00",
+    "ownerChannelName": "MrBeast",
+    "uploadDate": "2026-01-16T11:00:01-08:00",
+    "isShortsEligible": true,
+    "externalVideoId": "wSh8fAFWEWs",
+    "likeCount": "935058",
+    "canonicalUrl": "https://www.youtube.com/shorts/wSh8fAFWEWs"
+   }
+  }
+ },
+ "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED"
+}

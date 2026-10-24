@@ -256,10 +256,13 @@ def test_channel_videos_paid_promotions_not_supported(client, value):
 
 
 @pytest.mark.live
-def test_channel_videos_ignored_params(client):
+def test_channel_videos_extra_params(client):
     base = ids_of([ok(client, "/v1/youtube/channel-videos", handle="MrBeast")["videos"]])
     for extra in ({"includeExtras": "true"}, {"is_paid_promotions": "false"}):
         assert ids_of([ok(client, "/v1/youtube/channel-videos", handle="MrBeast", **extra)["videos"]]) == base
+    videos = ok(client, "/v1/youtube/channel-videos", handle="MrBeast", includeExtras="true")["videos"]
+    assert sum(bool(isinstance(v["likeCountInt"], int) and isinstance(v["commentCountInt"], int)
+                    and v["publishDate"] and v["description"]) for v in videos) >= len(videos) - 2
 
 
 # --- shorts / lives / playlists / community-posts -----------------------------

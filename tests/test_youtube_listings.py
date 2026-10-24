@@ -10,6 +10,7 @@ import json
 import os
 import re
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -1519,6 +1520,262 @@ def test_playlist_bare_last_page_is_the_end(client, monkeypatch):
     assert ie.calls == [("once", {"clientName": "web"})]  # one attempt, no retries
 
 
+# --- offline: per-video extras (reel_item_watch) ------------------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures" / "youtube_listings"
+TAB_SHORTS = ["mND4T0lzg_g", "Y8IJi7iP5vk", "aNI2jv7lBPQ"]  # the recorded Shorts tab page's items, newest first
+GRID_VIEWS = [7_400_000, 109_000_000, 48_000_000]  # their abbreviated grid views: '7.4M views', '109M', '48M'
+SC_SHORT_KEYS = ["type", "id", "url", "title", "description", "thumbnail", "viewCountText", "viewCountInt",
+                 "likeCountText", "likeCountInt", "commentCountText", "commentCountInt", "publishDate", "genre",
+                 "durationMs", "durationFormatted"]
+# The player YouTube's anonymous web client gets once it bot-checks an IP (no videoDetails, no microformat).
+BOT_CHECK = {"status": P.REEL_OK, "playerResponse": {"playabilityStatus": {
+    "status": "LOGIN_REQUIRED", "reason": "Sign in to confirm you’re not a bot"}}}
+PROXY_1, PROXY_2 = "http://proxy-1.example:8080", "http://proxy-2.example:8080"
+
+
+def recorded(name: str) -> dict:
+    return json.loads((FIXTURES / f"{name}.json").read_text())
+
+
+def reel_error(status: int) -> ExtractorError:
+    response = Response(io.BytesIO(b""), "https://www.youtube.com/youtubei/v1/reel/reel_item_watch", {}, status=status)
+    return ExtractorError(f"HTTP Error {status}", cause=HTTPError(response))
+
+
+def unreadable(body: str) -> ExtractorError:
+    """What yt-dlp raises for an answer that isn't JSON; an empty one is how YouTube answers a throttled call."""
+    return ExtractorError("Failed to parse JSON", cause=json.JSONDecodeError("Expecting value", body, 0))
+
+
+class Reels:
+    """Stands in for YouTube's reel_item_watch under the real with_ydl: YoutubeTabIE._call_api answers a video from
+    answers[id] in turn (the last one repeats; an exception is raised, a function is called with the proxy), else
+    with its recorded answer, and logs (video id, whether the field mask was sent, proxy) per call."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch):
+        self.calls: list[tuple[str, bool, str | None]] = []
+        self.answers: dict[str, list] = {}
+
+        def call_api(ie, ep, query, video_id, **kw):
+            assert ep == "reel/reel_item_watch" and query["disablePlayerResponse"] is False
+            vid, proxy = query["playerRequest"]["videoId"], ie._downloader.params.get("proxy")
+            self.calls.append((vid, "X-Goog-FieldMask" in (kw.get("headers") or {}), proxy))
+            queue = self.answers.get(vid)
+            answer = (queue.pop(0) if len(queue) > 1 else queue[0]) if queue else recorded(f"reel_{vid}")
+            answer = answer(proxy) if callable(answer) else answer
+            if isinstance(answer, Exception):
+                raise answer
+            return copy.deepcopy(answer)
+
+        monkeypatch.setattr(YoutubeTabIE, "_call_api", call_api)
+        monkeypatch.setattr(M, "_RETRY_WAIT", 0)
+        monkeypatch.setattr(M, "_mask_off_until", 0.0)
+        M.EXTRAS.clear()
+
+    def ids(self) -> list[str]:
+        return [c[0] for c in self.calls]
+
+
+@pytest.fixture
+def reels(monkeypatch):
+    yield Reels(monkeypatch)
+    M.EXTRAS.clear()
+
+
+def shorts_page(client, upstream: Upstream) -> dict:
+    """/v1/youtube/channel/shorts on the recorded first page of MrBeast's Shorts tab."""
+    upstream.answers = [(recorded("mrbeast_shorts_tab"), {})]
+    r = client.get("/v1/youtube/channel/shorts", params={"handle": "MrBeast", "sort": "newest"})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_reel_extras_reads_the_recorded_answers():
+    """reel_item_watch answers as the field mask cuts them: exact counts, YouTube's publish date with its offset, and
+    the comment count from the button's label where its title is rounded ('40K')."""
+    assert P.reel_extras(recorded("reel_mND4T0lzg_g"), "mND4T0lzg_g") == {
+        "description": "", "viewCountInt": 7506927, "likeCountText": "289278", "likeCountInt": 289278,
+        "commentCountText": "6,633", "commentCountInt": 6633, "publishDate": "2026-10-23T11:00:08-07:00",
+        "genre": "Entertainment", "durationMs": 30000, "durationFormatted": "00:00:30"}
+    popular = P.reel_extras(recorded("reel_50G0kIty7Cg"), "50G0kIty7Cg")
+    assert (popular["commentCountText"], popular["commentCountInt"]) == ("40K", 40525)
+    assert (popular["viewCountInt"], popular["likeCountInt"]) == (1331129480, 12607576)
+    video = P.reel_extras(recorded("reel_plN7JMbadRg"), "plN7JMbadRg")  # a long video is answered alike
+    assert video["description"].startswith("I trapped 4 strangers in an entire supermarket")
+    assert (video["commentCountText"], video["commentCountInt"], video["durationFormatted"]) == \
+        ("158K", 158439, "00:57:59")
+    # unmasked: the same fields among ~450 KB of the Shorts player's panels and top bars (cut down here)
+    full = P.reel_extras(recorded("reel_wSh8fAFWEWs_unmasked"), "wSh8fAFWEWs")
+    assert (full["likeCountInt"], full["commentCountText"], full["commentCountInt"], full["publishDate"]) == \
+        (935058, "14K", 14648, "2026-01-16T11:00:01-08:00")
+
+
+def test_reel_extras_unknown_is_null_never_zero():
+    answer = recorded("reel_mND4T0lzg_g")
+    del answer["playerResponse"]["microformat"]["playerMicroformatRenderer"]["likeCount"]  # likes hidden
+    for button in P.reel_buttons(answer):  # a comment button without a number (comments off)
+        if button.get("iconName") == "SHORTS_COMMENT":
+            button.update(title="Comments", accessibilityText="Comments")
+    extras = P.reel_extras(answer, "mND4T0lzg_g")
+    assert [extras[k] for k in ("likeCountText", "likeCountInt", "commentCountText", "commentCountInt")] == [None] * 4
+    assert extras["viewCountInt"] == 7506927 and extras["publishDate"] == "2026-10-23T11:00:08-07:00"
+    assert P.reel_extras(recorded("reel_aaaaaaaaaaa"), "aaaaaaaaaaa") is None  # REEL_ERROR: no such video
+    assert P.reel_extras(recorded("reel_mND4T0lzg_g"), "Y8IJi7iP5vk") is None  # an answer on another video
+    assert P.reel_extras(BOT_CHECK, "mND4T0lzg_g") is None and P.reel_reason(BOT_CHECK).endswith("not a bot")
+    item = P.sc_short({"id": "x", "url": "u", "title": "t", "thumbnail": None, "viewCountText": "1.2M views",
+                       "viewCountInt": 1_200_000}, None)
+    assert list(item) == SC_SHORT_KEYS and item["viewCountInt"] == 1_200_000
+    assert all(item[k] is None for k in P.EXTRA_KEYS if k != "viewCountInt")
+
+
+def test_channel_shorts_route_adds_extras(client, upstream, reels):
+    """blocker 5: the Shorts grid has no publish date, likes or comments, which the consumer turned into missing
+    dates and zero counters. One field-masked reel_item_watch per Short fills ScrapeCreators' fields in; the page's
+    cursor is the grid's. A second request within _EXTRAS_TTL asks YouTube for none of them again."""
+    body = shorts_page(client, upstream)
+    shorts = body["shorts"]
+    assert [s["id"] for s in shorts] == TAB_SHORTS and all(list(s) == SC_SHORT_KEYS for s in shorts)
+    assert sorted(c[:2] for c in reels.calls) == sorted((v, True) for v in TAB_SHORTS)
+    first = shorts[0]
+    assert (first["viewCountText"], first["viewCountInt"]) == ("7.4M views", 7506927)  # exact, not the grid's 7.4M
+    assert (first["likeCountInt"], first["commentCountText"], first["commentCountInt"]) == (289278, "6,633", 6633)
+    assert first["publishDate"] == "2026-10-23T11:00:08-07:00" and first["durationMs"] == 30000
+    assert [s["publishDate"][:10] for s in shorts] == ["2026-10-23", "2026-10-16", "2026-10-09"]
+    assert all(isinstance(s[k], int) for s in shorts for k in ("likeCountInt", "commentCountInt", "durationMs"))
+    assert_conforms(body, "/v1/youtube/channel/shorts", min_coverage=0.9)
+    assert M._state(body["continuationToken"], "channel-shorts")["t"].startswith("4qmFsgLDCxIYVUNYNk9RM0RrY3NiWU")
+    assert shorts_page(client, upstream)["shorts"] == shorts and len(reels.calls) == 3
+
+
+@pytest.mark.parametrize("answers, calls, enriched", [
+    ([recorded("reel_aaaaaaaaaaa")], 1, False),  # REEL_ERROR: a video YouTube no longer shows
+    ([{"status": P.REEL_OK, "playerResponse": {"playabilityStatus": {"status": "ERROR",
+                                                                     "reason": "Video unavailable"}}}], 1, False),
+    ([reel_error(404)], 1, False),
+    ([reel_error(500), None], 2, True),  # None: the recorded answer
+    ([reel_error(500)], 2, False),  # failed twice: this one keeps nulls, the next is still asked for
+    ([unreadable("<html><title>Error</title>")], 2, False),
+], ids=["reel_error", "unavailable", "http_404", "http_500_once", "http_500_twice", "not_json"])
+def test_channel_shorts_route_item_failures(client, upstream, reels, monkeypatch, answers, calls, enriched):
+    """An item whose request fails keeps null extras (and the grid's approximate viewCountInt); the page and the other
+    items are served as usual. A 5xx or a body that isn't JSON is asked once more; a gone video is not."""
+    monkeypatch.setattr(M, "_EXTRAS_JOBS", 1)
+    reels.answers["Y8IJi7iP5vk"] = [a if a is not None else recorded("reel_Y8IJi7iP5vk") for a in answers]
+    shorts = shorts_page(client, upstream)["shorts"]
+    assert reels.ids() == ["mND4T0lzg_g", *["Y8IJi7iP5vk"] * calls, "aNI2jv7lBPQ"]
+    assert (shorts[0]["likeCountInt"], shorts[2]["likeCountInt"]) == (289278, 1210371)
+    if enriched:
+        assert (shorts[1]["publishDate"], shorts[1]["commentCountInt"]) == ("2026-10-16T09:00:02-07:00", 12281)
+    else:
+        assert all(shorts[1][k] is None for k in P.EXTRA_KEYS if k != "viewCountInt")
+        assert shorts[1]["viewCountInt"] == GRID_VIEWS[1]
+
+
+@pytest.mark.parametrize("block, masked", [
+    (reel_error(429), True), (reel_error(403), True), (unreadable(""), True), (BOT_CHECK, True), ({}, False),
+], ids=["http_429", "http_403", "empty_body", "bot_check", "empty_object_unmasked"])
+def test_channel_shorts_route_stops_asking_once_blocked(client, upstream, reels, monkeypatch, block, masked):
+    """A bot check, HTTP 429 / 403 or an empty answer stops the job at once: nothing is asked for the items after
+    it, and the page is still served, their extras null (never 0) and viewCountInt the grid's."""
+    monkeypatch.setattr(M, "_EXTRAS_JOBS", 1)
+    if not masked:
+        monkeypatch.setattr(M, "_mask_off_until", float("inf"))
+    reels.answers["mND4T0lzg_g"] = [block]
+    body = shorts_page(client, upstream)
+    assert reels.ids() == ["mND4T0lzg_g"] and [s["id"] for s in body["shorts"]] == TAB_SHORTS
+    assert all(s[k] is None for s in body["shorts"] for k in P.EXTRA_KEYS if k != "viewCountInt")
+    assert [s["viewCountInt"] for s in body["shorts"]] == GRID_VIEWS
+
+
+@pytest.mark.parametrize("refusal", [reel_error(400), {"status": P.REEL_OK}, {}],
+                         ids=["http_400", "fields_missing", "empty_object"])
+def test_field_mask_rests_when_youtube_refuses_it(client, upstream, reels, monkeypatch, refusal):
+    """The field mask cuts each answer from 250-480 KB to ~1 KB. Should YouTube refuse it (HTTP 400) or answer
+    without its fields, the item is asked for again without it, and so are the items after it."""
+    monkeypatch.setattr(M, "_EXTRAS_JOBS", 1)
+    reels.answers["mND4T0lzg_g"] = [refusal, recorded("reel_mND4T0lzg_g")]
+    shorts = shorts_page(client, upstream)["shorts"]
+    assert [c[:2] for c in reels.calls] == [("mND4T0lzg_g", True), ("mND4T0lzg_g", False),
+                                            ("Y8IJi7iP5vk", False), ("aNI2jv7lBPQ", False)]
+    assert all(isinstance(s["likeCountInt"], int) for s in shorts)
+
+
+def test_extras_budget_and_time_limit(client, upstream, reels, monkeypatch):
+    """At most _EXTRAS_BUDGET items of a page get extras, and none is asked for past _EXTRAS_SECONDS; the rest keep
+    nulls."""
+    monkeypatch.setattr(M, "_EXTRAS_JOBS", 1)
+    monkeypatch.setattr(M, "_EXTRAS_BUDGET", 2)
+    shorts = shorts_page(client, upstream)["shorts"]
+    assert reels.ids() == TAB_SHORTS[:2] and shorts[1]["publishDate"] and shorts[2]["publishDate"] is None
+    M.EXTRAS.clear()
+    reels.calls.clear()
+    monkeypatch.setattr(M, "_EXTRAS_SECONDS", 0)
+    shorts = shorts_page(client, upstream)["shorts"]
+    assert reels.calls == [] and [s["id"] for s in shorts] == TAB_SHORTS
+    assert all(s["likeCountInt"] is None and s["publishDate"] is None for s in shorts)
+
+
+def test_extras_take_at_most_half_the_workers(client, upstream, reels, monkeypatch):
+    """A page's extras run as at most _EXTRAS_JOBS with_ydl jobs, never more than half of yt-dlp's workers, each
+    asking for every n-th item in turn."""
+    jobs: list[list[str]] = []
+    real = M.with_ydl
+
+    async def with_ydl(platform, fn, **kw):
+        jobs.append(fn.keywords["ids"])
+        return await real(platform, fn, **kw)
+
+    monkeypatch.setattr(M, "with_ydl", with_ydl)
+    monkeypatch.setattr(M, "get_settings", lambda: type("S", (), {"max_workers": 4})())
+    shorts_page(client, upstream)
+    assert sorted(jobs) == [["Y8IJi7iP5vk"], ["mND4T0lzg_g", "aNI2jv7lBPQ"]]
+
+
+def test_blocked_extras_go_on_through_the_next_proxy_profile(client, upstream, reels, monkeypatch):
+    """with_ydl runs a job YouTube blocked again on the dashboard's next proxy profile, which goes on from the item
+    that was blocked: the ones before it are in EXTRAS already."""
+    from socialscrape import portal
+
+    monkeypatch.setattr(portal, "active_platform_pool", lambda platform: ([PROXY_1, PROXY_2], []))
+    monkeypatch.setattr(M, "_EXTRAS_JOBS", 1)
+    reels.answers["Y8IJi7iP5vk"] = [lambda proxy: reel_error(429) if proxy == PROXY_1 else recorded("reel_Y8IJi7iP5vk")]
+    shorts = shorts_page(client, upstream)["shorts"]
+    assert reels.calls == [("mND4T0lzg_g", True, PROXY_1), ("Y8IJi7iP5vk", True, PROXY_1),
+                           ("Y8IJi7iP5vk", True, PROXY_2), ("aNI2jv7lBPQ", True, PROXY_2)]
+    assert all(isinstance(s["commentCountInt"], int) for s in shorts)
+
+
+def videos_tab() -> dict:
+    """A channel Videos tab webpage (the mweb listing replaces its items) naming MrBeast."""
+    tab = {"tabRenderer": {"selected": True, "endpoint": {
+        "browseEndpoint": {"browseId": MRBEAST, "params": "EgZ2aWRlb3PyBgQKAjoA"},
+        "commandMetadata": {"webCommandMetadata": {"url": "/@MrBeast/videos"}}},
+        "content": {"richGridRenderer": {"contents": []}}}}
+    return {"contents": {"twoColumnBrowseResultsRenderer": {"tabs": [tab]}},
+            "metadata": {"channelMetadataRenderer": {"externalId": MRBEAST, "title": "MrBeast",
+                                                     "vanityChannelUrl": "http://www.youtube.com/@MrBeast"}}}
+
+
+def test_channel_videos_include_extras(client, upstream, reels):
+    """includeExtras=true (ScrapeCreators: 'the like + comment count and the description') adds them and YouTube's
+    publishDate per video, and makes publishedTime exact; without it nothing more is asked for."""
+    mweb = {"contents": {"sectionListRenderer": {"contents": [{"lockupViewModel": LOCKUP_VIDEO}, cont("NEXT")]}}}
+    upstream.answers = [(videos_tab(), {}), copy.deepcopy(mweb)]
+    plain = client.get("/v1/youtube/channel-videos", params={"handle": "MrBeast"}).json()["videos"][0]
+    assert reels.calls == [] and "likeCountInt" not in plain and plain["publishedTimeText"] == "10 days ago"
+    upstream.answers = [(videos_tab(), {}), copy.deepcopy(mweb)]
+    body = client.get("/v1/youtube/channel-videos", params={"handle": "MrBeast", "includeExtras": "true"}).json()
+    video = body["videos"][0]
+    assert reels.ids() == ["plN7JMbadRg"] and list(video)[:5] == ["type", "id", "url", "title", "description"]
+    assert video["description"].startswith("I trapped 4 strangers")
+    assert (video["likeCountText"], video["likeCountInt"], video["commentCountText"], video["commentCountInt"]) == \
+        ("4311623", 4311623, "158K", 158439)
+    assert (video["publishDate"], video["publishedTime"]) == ("2026-10-03T09:00:01-07:00", "2026-10-03T16:00:01.000Z")
+    assert video["viewCountInt"] == 293548025 and video["publishedTimeText"] == "10 days ago"
+    assert_conforms(body, "/v1/youtube/channel-videos", min_coverage=0.5)
+
+
 # --- live --------------------------------------------------------------------------------
 
 _LIVE: dict[str, dict] = {}
@@ -1601,10 +1858,18 @@ def test_channel_videos_popular_pages_live(client):
 @pytest.mark.live
 def test_channel_shorts_live(client):
     body = get(client, "/v1/youtube/channel/shorts", handle="MrBeast")
-    assert_conforms(body, "/v1/youtube/channel/shorts", min_coverage=0.45)
+    assert_conforms(body, "/v1/youtube/channel/shorts", min_coverage=0.9)
     shorts = body["shorts"]
     assert len(shorts) >= 20 and all(s["type"] == "short" and s["title"] and s["thumbnail"] for s in shorts)
     assert body["videos"] == body["lives"] == body["shelves"] == []
+    # every Short's extras (a few may miss out on a throttled run: null then, never 0)
+    assert sum(bool(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d", s["publishDate"] or ""))
+               for s in shorts) >= len(shorts) - 2
+    assert sum(bool(isinstance(s["likeCountInt"], int) and isinstance(s["commentCountInt"], int)
+                    and s["durationMs"]) for s in shorts) >= len(shorts) - 2
+    assert not any(s[k] == 0 for s in shorts for k in ("likeCountInt", "commentCountInt"))
+    dates = [s["publishDate"] for s in shorts if s["publishDate"]]
+    assert dates == sorted(dates, key=lambda d: datetime.fromisoformat(d), reverse=True)  # newest first
     pages(client, "/v1/youtube/channel/shorts", "shorts", handle="MrBeast")
 
 

@@ -1,0 +1,707 @@
+{
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@MrBeast/shorts",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCX6OQ3DkcsbYNE6H8uQQuVA",
+        "params": "EgZzaG9ydHPyBgUKA5oBAA%3D%3D",
+        "canonicalBaseUrl": "/@MrBeast"
+       }
+      },
+      "title": "Shorts",
+      "selected": true,
+      "content": {
+       "richGridRenderer": {
+        "targetId": "6bc60d95-0000-2771-8209-d4f547f77874",
+        "style": "RICH_GRID_STYLE_SHORTS_GRID",
+        "contents": [
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-mND4T0lzg_g",
+             "accessibilityText": "How People Treat You Based on Subscribers, 7.4 million views - play Short",
+             "onTap": {
+              "innertubeCommand": {
+               "commandMetadata": {
+                "webCommandMetadata": {
+                 "url": "/shorts/mND4T0lzg_g",
+                 "webPageType": "WEB_PAGE_TYPE_SHORTS",
+                 "rootVe": 37414
+                }
+               },
+               "reelWatchEndpoint": {
+                "videoId": "mND4T0lzg_g",
+                "playerParams": "8AEByAMkuAQ0ogYVAah2qTM3jVLM6ZeRiJLHraVLTfoLkAcC",
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://i.ytimg.com/vi/mND4T0lzg_g/frame0.jpg",
+                   "width": 1080,
+                   "height": 1920
+                  }
+                 ],
+                 "isOriginalAspectRatio": true
+                },
+                "overlay": {
+                 "reelPlayerOverlayRenderer": {
+                  "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+                  "reelPlayerNavigationModel": "REEL_PLAYER_NAVIGATION_MODEL_UNSPECIFIED"
+                 }
+                },
+                "params": "CDMwAroBGFVDWDZPUTNEa2NzYllORTZIOHVRUXVWQQ%3D%3D",
+                "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+                "ustreamerConfig": "CAw="
+               }
+              }
+             },
+             "menuOnTap": {
+              "innertubeCommand": {
+               "showSheetCommand": {
+                "panelLoadingStrategy": {
+                 "inlineContent": {
+                  "sheetViewModel": {
+                   "content": {
+                    "listViewModel": {
+                     "listItems": [
+                      {
+                       "listItemViewModel": {
+                        "title": {
+                         "content": "Add to queue"
+                        },
+                        "leadingImage": {
+                         "sources": [
+                          {
+                           "clientResource": {
+                            "imageName": "ADD_TO_QUEUE_TAIL"
+                           }
+                          }
+                         ]
+                        },
+                        "rendererContext": {
+                         "commandContext": {
+                          "onTap": {
+                           "innertubeCommand": {
+                            "commandMetadata": {
+                             "webCommandMetadata": {
+                              "sendPost": true
+                             }
+                            },
+                            "signalServiceEndpoint": {
+                             "signal": "CLIENT_SIGNAL",
+                             "actions": [
+                              {
+                               "addToPlaylistCommand": {
+                                "openMiniplayer": true,
+                                "videoId": "mND4T0lzg_g",
+                                "listType": "PLAYLIST_EDIT_LIST_TYPE_QUEUE",
+                                "onCreateListCommand": {
+                                 "commandMetadata": {
+                                  "webCommandMetadata": {
+                                   "sendPost": true,
+                                   "apiUrl": "/youtubei/v1/playlist/create"
+                                  }
+                                 },
+                                 "createPlaylistServiceEndpoint": {
+                                  "videoIds": [
+                                   "mND4T0lzg_g"
+                                  ],
+                                  "params": "CAQ%3D"
+                                 }
+                                },
+                                "videoIds": [
+                                 "mND4T0lzg_g"
+                                ],
+                                "videoCommand": {
+                                 "commandMetadata": {
+                                  "webCommandMetadata": {
+                                   "url": "/watch?v=mND4T0lzg_g",
+                                   "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                   "rootVe": 3832
+                                  }
+                                 },
+                                 "watchEndpoint": {
+                                  "videoId": "mND4T0lzg_g",
+                                  "watchEndpointSupportedOnesieConfig": {
+                                   "html5PlaybackOnesieConfig": {
+                                    "commonConfig": {
+                                     "url": "https://rr1---sn-a5mlrnll.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&oehoh5=1&msp=1&odepv=1&id=98d0f84f497383f8&ip=172.118.147.144&initcwndbps=3751250&mt=1792815662&oweuc="
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      },
+                      {
+                       "listItemViewModel": {
+                        "title": {
+                         "content": "Send feedback"
+                        },
+                        "leadingImage": {
+                         "sources": [
+                          {
+                           "clientResource": {
+                            "imageName": "FEEDBACK"
+                           }
+                          }
+                         ]
+                        },
+                        "rendererContext": {
+                         "commandContext": {
+                          "onTap": {
+                           "innertubeCommand": {
+                            "commandMetadata": {
+                             "webCommandMetadata": {
+                              "ignoreNavigation": true
+                             }
+                            },
+                            "userFeedbackEndpoint": {
+                             "additionalDatas": [
+                              {
+                               "userFeedbackEndpointProductSpecificValueData": {
+                                "key": "video_id",
+                                "value": "mND4T0lzg_g"
+                               }
+                              },
+                              {
+                               "userFeedbackEndpointProductSpecificValueData": {
+                                "key": "lockup",
+                                "value": "shelf"
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     ]
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             },
+             "indexInCollection": 0,
+             "menuOnTapA11yLabel": "More actions",
+             "overlayMetadata": {
+              "primaryText": {
+               "content": "How People Treat You Based on Subscribers"
+              },
+              "secondaryText": {
+               "content": "7.4M views"
+              }
+             },
+             "thumbnailViewModel": {
+              "thumbnailViewModel": {
+               "image": {
+                "sources": [
+                 {
+                  "url": "https://i.ytimg.com/vi/mND4T0lzg_g/sardefault.jpg?sqp=-oaymwEhCJUDENAFSFWQAgHyq4qpAxAIARUAAIhCcAHAAQa4AvMY&rs=AOn4CLDqF8leEytRt3clo1Xsms_EKD73lg",
+                  "width": 405,
+                  "height": 720
+                 },
+                 {
+                  "url": "https://i.ytimg.com/vi/mND4T0lzg_g/sardefault.jpg?sqp=-oaymwEkCJUDEOAESFWQAgHyq4qpAxMIARUAAIhCcAHAAQbIAQG4AvMY&rs=AOn4CLCxqvLvoywBgTfwak9NtRjW_y3tBA",
+                  "width": 405,
+                  "height": 608
+                 }
+                ]
+               }
+              }
+             },
+             "stackedFrameData": {},
+             "titleTruncationStyle": "SHORTS_LOCKUP_TITLE_TRUNCATION_STYLE_UNKNOWN",
+             "inlinePopStateEntityKey": "Eh1zaG9ydHMtc2hlbGYtaXRlbS1tTkQ0VDBsemdfZyDMAygB0.609592"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-Y8IJi7iP5vk",
+             "accessibilityText": "Last To Fall Wins, 109 million views - play Short",
+             "onTap": {
+              "innertubeCommand": {
+               "commandMetadata": {
+                "webCommandMetadata": {
+                 "url": "/shorts/Y8IJi7iP5vk",
+                 "webPageType": "WEB_PAGE_TYPE_SHORTS",
+                 "rootVe": 37414
+                }
+               },
+               "reelWatchEndpoint": {
+                "videoId": "Y8IJi7iP5vk",
+                "playerParams": "8AEByAMkuAQ0ogYVAah2qTOO01xcSZ5RN-6RJfw_I_oXkAcC",
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://i.ytimg.com/vi/Y8IJi7iP5vk/frame0.jpg",
+                   "width": 1080,
+                   "height": 1920
+                  }
+                 ],
+                 "isOriginalAspectRatio": true
+                },
+                "overlay": {
+                 "reelPlayerOverlayRenderer": {
+                  "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+                  "reelPlayerNavigationModel": "REEL_PLAYER_NAVIGATION_MODEL_UNSPECIFIED"
+                 }
+                },
+                "params": "CDMwAroBGFVDWDZPUTNEa2NzYllORTZIOHVRUXVWQQ%3D%3D",
+                "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+                "ustreamerConfig": "CAw="
+               }
+              }
+             },
+             "menuOnTap": {
+              "innertubeCommand": {
+               "showSheetCommand": {
+                "panelLoadingStrategy": {
+                 "inlineContent": {
+                  "sheetViewModel": {
+                   "content": {
+                    "listViewModel": {
+                     "listItems": [
+                      {
+                       "listItemViewModel": {
+                        "title": {
+                         "content": "Add to queue"
+                        },
+                        "leadingImage": {
+                         "sources": [
+                          {
+                           "clientResource": {
+                            "imageName": "ADD_TO_QUEUE_TAIL"
+                           }
+                          }
+                         ]
+                        },
+                        "rendererContext": {
+                         "commandContext": {
+                          "onTap": {
+                           "innertubeCommand": {
+                            "commandMetadata": {
+                             "webCommandMetadata": {
+                              "sendPost": true
+                             }
+                            },
+                            "signalServiceEndpoint": {
+                             "signal": "CLIENT_SIGNAL",
+                             "actions": [
+                              {
+                               "addToPlaylistCommand": {
+                                "openMiniplayer": true,
+                                "videoId": "Y8IJi7iP5vk",
+                                "listType": "PLAYLIST_EDIT_LIST_TYPE_QUEUE",
+                                "onCreateListCommand": {
+                                 "commandMetadata": {
+                                  "webCommandMetadata": {
+                                   "sendPost": true,
+                                   "apiUrl": "/youtubei/v1/playlist/create"
+                                  }
+                                 },
+                                 "createPlaylistServiceEndpoint": {
+                                  "videoIds": [
+                                   "Y8IJi7iP5vk"
+                                  ],
+                                  "params": "CAQ%3D"
+                                 }
+                                },
+                                "videoIds": [
+                                 "Y8IJi7iP5vk"
+                                ],
+                                "videoCommand": {
+                                 "commandMetadata": {
+                                  "webCommandMetadata": {
+                                   "url": "/watch?v=Y8IJi7iP5vk",
+                                   "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                   "rootVe": 3832
+                                  }
+                                 },
+                                 "watchEndpoint": {
+                                  "videoId": "Y8IJi7iP5vk",
+                                  "watchEndpointSupportedOnesieConfig": {
+                                   "html5PlaybackOnesieConfig": {
+                                    "commonConfig": {
+                                     "url": "https://rr1---sn-qja5m5-5v.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&oehoh5=1&msp=1&odepv=1&id=63c2098bb88fe6f9&ip=172.118.147.144&initcwndbps=3742125&mt=1792815662&oweuc="
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      },
+                      {
+                       "listItemViewModel": {
+                        "title": {
+                         "content": "Send feedback"
+                        },
+                        "leadingImage": {
+                         "sources": [
+                          {
+                           "clientResource": {
+                            "imageName": "FEEDBACK"
+                           }
+                          }
+                         ]
+                        },
+                        "rendererContext": {
+                         "commandContext": {
+                          "onTap": {
+                           "innertubeCommand": {
+                            "commandMetadata": {
+                             "webCommandMetadata": {
+                              "ignoreNavigation": true
+                             }
+                            },
+                            "userFeedbackEndpoint": {
+                             "additionalDatas": [
+                              {
+                               "userFeedbackEndpointProductSpecificValueData": {
+                                "key": "video_id",
+                                "value": "Y8IJi7iP5vk"
+                               }
+                              },
+                              {
+                               "userFeedbackEndpointProductSpecificValueData": {
+                                "key": "lockup",
+                                "value": "shelf"
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     ]
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             },
+             "indexInCollection": 0,
+             "menuOnTapA11yLabel": "More actions",
+             "overlayMetadata": {
+              "primaryText": {
+               "content": "Last To Fall Wins"
+              },
+              "secondaryText": {
+               "content": "109M views"
+              }
+             },
+             "thumbnailViewModel": {
+              "thumbnailViewModel": {
+               "image": {
+                "sources": [
+                 {
+                  "url": "https://i.ytimg.com/vi/Y8IJi7iP5vk/sardefault.jpg?sqp=-oaymwEhCJUDENAFSFWQAgHyq4qpAxAIARUAAIhCcAHAAQa4AvMY&rs=AOn4CLBAx3tJwhNifgwutBpM_VyJr0DKcA",
+                  "width": 405,
+                  "height": 720
+                 },
+                 {
+                  "url": "https://i.ytimg.com/vi/Y8IJi7iP5vk/sardefault.jpg?sqp=-oaymwEkCJUDEOAESFWQAgHyq4qpAxMIARUAAIhCcAHAAQbIAQG4AvMY&rs=AOn4CLAOwSR8NhCDflvmtfR5IQRaSm8x4Q",
+                  "width": 405,
+                  "height": 608
+                 }
+                ]
+               }
+              }
+             },
+             "stackedFrameData": {},
+             "titleTruncationStyle": "SHORTS_LOCKUP_TITLE_TRUNCATION_STYLE_UNKNOWN",
+             "inlinePopStateEntityKey": "Eh1zaG9ydHMtc2hlbGYtaXRlbS1ZOElKaTdpUDV2ayDMAygB0.676597"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-aNI2jv7lBPQ",
+             "accessibilityText": "Giving $10,000 To A Random Subscriber, 48 million views - play Short",
+             "onTap": {
+              "innertubeCommand": {
+               "commandMetadata": {
+                "webCommandMetadata": {
+                 "url": "/shorts/aNI2jv7lBPQ",
+                 "webPageType": "WEB_PAGE_TYPE_SHORTS",
+                 "rootVe": 37414
+                }
+               },
+               "reelWatchEndpoint": {
+                "videoId": "aNI2jv7lBPQ",
+                "playerParams": "8AEByAMkuAQ0ogYVAah2qTPjt32GVyMaUyEWisRKTJ2ZkAcC",
+                "thumbnail": {
+                 "thumbnails": [
+                  {
+                   "url": "https://i.ytimg.com/vi/aNI2jv7lBPQ/frame0.jpg",
+                   "width": 1080,
+                   "height": 1920
+                  }
+                 ],
+                 "isOriginalAspectRatio": true
+                },
+                "overlay": {
+                 "reelPlayerOverlayRenderer": {
+                  "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+                  "reelPlayerNavigationModel": "REEL_PLAYER_NAVIGATION_MODEL_UNSPECIFIED"
+                 }
+                },
+                "params": "CDMwAroBGFVDWDZPUTNEa2NzYllORTZIOHVRUXVWQQ%3D%3D",
+                "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+                "ustreamerConfig": "CAw="
+               }
+              }
+             },
+             "menuOnTap": {
+              "innertubeCommand": {
+               "showSheetCommand": {
+                "panelLoadingStrategy": {
+                 "inlineContent": {
+                  "sheetViewModel": {
+                   "content": {
+                    "listViewModel": {
+                     "listItems": [
+                      {
+                       "listItemViewModel": {
+                        "title": {
+                         "content": "Add to queue"
+                        },
+                        "leadingImage": {
+                         "sources": [
+                          {
+                           "clientResource": {
+                            "imageName": "ADD_TO_QUEUE_TAIL"
+                           }
+                          }
+                         ]
+                        },
+                        "rendererContext": {
+                         "commandContext": {
+                          "onTap": {
+                           "innertubeCommand": {
+                            "commandMetadata": {
+                             "webCommandMetadata": {
+                              "sendPost": true
+                             }
+                            },
+                            "signalServiceEndpoint": {
+                             "signal": "CLIENT_SIGNAL",
+                             "actions": [
+                              {
+                               "addToPlaylistCommand": {
+                                "openMiniplayer": true,
+                                "videoId": "aNI2jv7lBPQ",
+                                "listType": "PLAYLIST_EDIT_LIST_TYPE_QUEUE",
+                                "onCreateListCommand": {
+                                 "commandMetadata": {
+                                  "webCommandMetadata": {
+                                   "sendPost": true,
+                                   "apiUrl": "/youtubei/v1/playlist/create"
+                                  }
+                                 },
+                                 "createPlaylistServiceEndpoint": {
+                                  "videoIds": [
+                                   "aNI2jv7lBPQ"
+                                  ],
+                                  "params": "CAQ%3D"
+                                 }
+                                },
+                                "videoIds": [
+                                 "aNI2jv7lBPQ"
+                                ],
+                                "videoCommand": {
+                                 "commandMetadata": {
+                                  "webCommandMetadata": {
+                                   "url": "/watch?v=aNI2jv7lBPQ",
+                                   "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                   "rootVe": 3832
+                                  }
+                                 },
+                                 "watchEndpoint": {
+                                  "videoId": "aNI2jv7lBPQ",
+                                  "watchEndpointSupportedOnesieConfig": {
+                                   "html5PlaybackOnesieConfig": {
+                                    "commonConfig": {
+                                     "url": "https://rr1---sn-qja5mc-5h.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&oehoh5=1&msp=1&odepv=1&id=68d2368efee504f4&ip=172.118.147.144&initcwndbps=3751250&mt=1792815662&oweuc="
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      },
+                      {
+                       "listItemViewModel": {
+                        "title": {
+                         "content": "Send feedback"
+                        },
+                        "leadingImage": {
+                         "sources": [
+                          {
+                           "clientResource": {
+                            "imageName": "FEEDBACK"
+                           }
+                          }
+                         ]
+                        },
+                        "rendererContext": {
+                         "commandContext": {
+                          "onTap": {
+                           "innertubeCommand": {
+                            "commandMetadata": {
+                             "webCommandMetadata": {
+                              "ignoreNavigation": true
+                             }
+                            },
+                            "userFeedbackEndpoint": {
+                             "additionalDatas": [
+                              {
+                               "userFeedbackEndpointProductSpecificValueData": {
+                                "key": "video_id",
+                                "value": "aNI2jv7lBPQ"
+                               }
+                              },
+                              {
+                               "userFeedbackEndpointProductSpecificValueData": {
+                                "key": "lockup",
+                                "value": "shelf"
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     ]
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             },
+             "indexInCollection": 0,
+             "menuOnTapA11yLabel": "More actions",
+             "overlayMetadata": {
+              "primaryText": {
+               "content": "Giving $10,000 To A Random Subscriber"
+              },
+              "secondaryText": {
+               "content": "48M views"
+              }
+             },
+             "thumbnailViewModel": {
+              "thumbnailViewModel": {
+               "image": {
+                "sources": [
+                 {
+                  "url": "https://i.ytimg.com/vi/aNI2jv7lBPQ/sardefault.jpg?sqp=-oaymwEhCJUDENAFSFWQAgHyq4qpAxAIARUAAIhCcAHAAQa4AvMY&rs=AOn4CLChvJ3P2JypHRs-zbTUjGQo1lPU1Q",
+                  "width": 405,
+                  "height": 720
+                 },
+                 {
+                  "url": "https://i.ytimg.com/vi/aNI2jv7lBPQ/sardefault.jpg?sqp=-oaymwEkCJUDEOAESFWQAgHyq4qpAxMIARUAAIhCcAHAAQbIAQG4AvMY&rs=AOn4CLDCG59j0uZEiGqV73B8mTywk6zEDg",
+                  "width": 405,
+                  "height": 608
+                 }
+                ]
+               }
+              }
+             },
+             "stackedFrameData": {},
+             "titleTruncationStyle": "SHORTS_LOCKUP_TITLE_TRUNCATION_STYLE_UNKNOWN",
+             "inlinePopStateEntityKey": "Eh1zaG9ydHMtc2hlbGYtaXRlbS1hTkkyanY3bEJQUSDMAygB0.202596"
+            }
+           }
+          }
+         },
+         {
+          "continuationItemRenderer": {
+           "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+           "continuationEndpoint": {
+            "commandMetadata": {
+             "webCommandMetadata": {
+              "sendPost": true,
+              "apiUrl": "/youtubei/v1/browse"
+             }
+            },
+            "continuationCommand": {
+             "token": "4qmFsgLDCxIYVUNYNk9RM0RrY3NiWU5FNkg4dVFRdVZBGqYLOGdhMkNCcXpDRkt3Q0RLdENBb2tObUpqTmpCa09UVXRNREF3TUMweU56Y3hMVGd5TURrdFpEUm1OVFEzWmpjM09EYzBFb0lJUVdaelYydHNOM1V5U1Zwa1lqWTRjbGxETFRVMFUzbDZSV1E0UjNScWJYcE5kell4VUhvNVdUUldPRU5UYzFvMWMyMUpSa0Z5VkVGbmJIUkxibFJTTW5KT05HUkhRMnc0ZVVzNE5reDNWa1pHVG5GVFdFRkhOV3cyTUU5SlQySTNZVFpHVERFd1JVSnZRMVV0VkdSdmQzVk9VakJzZW14dWMwbFhNMlZ1UzJwNExWWmlOR3c1YzIxT2MzcFZUbWR2VnpWclYzRXljSHAyUkRkM05FWldZbTFrV1VSd1lYQk9NVkozTVZWaFgzRnpjV0Z0Y2todmNWazVXVzlsTVhCSmEwMW5kVTkyVjBOT2FtVXpOV3AzYkY5S1l6RmhZMlIyZGtFM01rOVhXbTVCY2psd2FrSlRUSFZRUTFSelJXTkVRVE14VFhndFJrRmpUMFIxWjA5bmJsVkhhVTlHZURSWk9FdHBiblp0TUdneE9VWldZMHBoZUhoaVRFRkdhbGxzV1RBME1HOUhkUzFETkdaU1VteE5ZazVPUkZSblFYTkdWakpPY0VGeFNVUmhOMnBCYmtaak5VTkphV2RzUVZRM2EwOVZRMFJ0U25KdGQyY3dUV3hIVDJsQ2JYbG1SV041Vmt4bWIzUnZURmhyTkhJemJYZDFNVVkwWlVKT2JUaFJTa295TTA1WGIyeFZiamhyWjJOUVFVbERaWG8xTkZOeGJWSktVbkl5YkdwcGMwRlRlWGxHTXpoMmFXVkZYM0ozV1haeWRqUnliVlk1UzFKRlFqY3lRbm94T1VzNWFtRXlOMmRSTFc5WWMwUjJOMjkxY3poRk1qRkZTRm90V2xCdFNEaGFTVzFNTVdWVk5VSnROVTF1TTBSMVVYWkRaMkZGWm14WlN5MUxaa000V1RSbVFteHliRXBSV2tJelJHUlhMVkZmUkZkc1RtdDFlVmR2WDI1UlEwMDVkVUZ0TTB0V2VGODNNelJRWlRCeVExQnZWV2c1ZUdwalpXTkdXSFJKWVZwaU4wWlFXWFJZUjJWSVIxWjRVVEJKWm1ScVREZE5jRWxwVEdndGFGTklkbDh0ZEVJeVRGRjZWVTUwZEZvek1XUmFhVTFaV0d0WlpFeGhkRUUyTkZSMllsOWtSMWRIWDNSMWF5MXZkM0ZaTkVGTk5VOWFTbEZZVjJoSGIzSnhTVnBQUjE5TlpHWTRhbTFVTVZWQ1psZEhZMEZDYWxGMExXaFBRa2g1WjAxU1ZHWllMWFJaT1hNeVZHYzFNUzFuWDBOeWVVYzBSVzkzV1MxdldtbG5aVTV2VlRJMlIyMUxjMTlQWDBKQlYwWnlNMDk2VlZoM2EwcG9URkJNT0RsRmFHOUxhSEJSVUhjd2VXbHJWRU5aVW5oNE1VVkRNekJDY0VzM04zRnlSVmRRUlVKUlIwTkRTV3hIUlcxU2QxZG1kVnB2VEZadlpWaHVhWFZITm5OVlpTMVpaMVoxUTFKaU1IQnZTbGhQTmtGSE1HWm9VWGhTUTA5SlZsRnliSGhLVTJNMlVIbzVXWGRZVTI5cWNpMUZha3cxTWtOc1pUUkJjakZTWXpKdU9YZHJWVkUyTVY4MmExWnVSREJGWlVVeWExSlRkemRhTW5aV1RETlVSVjlyTlZZME0xVndlRmxYVUc4d2JIUlllWGRqVDBWNldpMU1YMjh5WVhWbGMyZ3pabmxQZEdOdE1XTklVRUoyY21aUldXdGpRbkJHYkRkNVZIQmtkWEJ6Y25kT1pYZGFZbGRUWTA0eFpYUjBlRkpRYUVOdlRuRXRVVFJqVDNCbmJURnBkbkYzR0FRJTNE",
+             "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ },
+ "metadata": {
+  "channelMetadataRenderer": {
+   "title": "MrBeast",
+   "externalId": "UCX6OQ3DkcsbYNE6H8uQQuVA",
+   "vanityChannelUrl": "http://www.youtube.com/@MrBeast",
+   "channelUrl": "https://www.youtube.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA"
+  }
+ }
+}
