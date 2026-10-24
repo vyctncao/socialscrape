@@ -12,10 +12,14 @@ Instagram embeds for logged-out visitors.
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import dataclasses
 import json
 import logging
 import re
+import secrets
+import time
 import unicodedata
 import urllib.parse
 from collections.abc import Callable
@@ -26,7 +30,14 @@ from fastapi import APIRouter, Query, Request
 from yt_dlp.extractor.instagram import InstagramBaseIE, InstagramIE, InstagramStoryIE, _id_to_pk
 from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
-from yt_dlp.utils import ExtractorError, parse_duration, str_or_none, traverse_obj, unescapeHTML
+from yt_dlp.utils import (
+    ExtractorError,
+    parse_duration,
+    str_or_none,
+    traverse_obj,
+    unescapeHTML,
+    urlencode_postdata,
+)
 
 from .. import transcribe
 from ..config import get_settings
@@ -939,6 +950,222 @@ def video_items(product: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
     return [(1, product)] if product.get("media_type") == 2 or product.get("video_versions") else []
 
 
+# --- reel play counts, from the owner's logged-out Reels tab -----------------------------
+# Nothing a logged-out visitor gets for one post carries a play count: the post query that had video_play_count was
+# retired in 2026, PolarisPostRootQuery answers view_count null and media/<pk>/info/ redirects to the login page. The
+# owner's Reels tab lists every reel with Instagram's own play_count (as on user/reels), and its pagination query
+# answers logged out back to the account's first reel. The tab is ordered newest first (pinned reels ahead), and a
+# media pk grows with its time, so paging stops at the reel, at the end of the tab, or once it has passed the reel's pk.
+
+REELS_TAB_QUERY = "PolarisLoggedOutDesktopWWWProfileReelsTabContentQuery"
+# The tab's pagination query (REELS_TAB_QUERY + "_connection"; variables after, first, id = the profile's Relay id
+# '17841…', not its pk). Its doc_id rotates with Instagram's bundle deploys and isn't in the page; a retired one answers
+# "The GraphQL document with ID … was not found", and the lookup then pages with the tab's own query, whose doc_id the
+# /<handle>/reels/ page names (its RelayPreloader's queryID) but which returns 12 reels per request whatever `first` is.
+REELS_TAB_DOC = "27420265870989234"
+_TAB_QUERY_ID = re.compile(r'ProfileReelsTabContentQueryRelayPreloader_[^"]*","queryID":"([0-9]+)"')
+_TAB_DOC_GONE = re.compile(r"GraphQL document with ID [0-9]+ was not found", re.I)
+_TAB_FIRST, _TAB_NEXT = 50, 150  # reels per request: the newest 50 (most lookups), then 150 a time (~1 KB each)
+_TAB_SMALL = 50  # a page Instagram fails with a 5xx is asked once more at this size (huge tabs fail deep at >=200)
+_TAB_ROOT_FIRST = 12
+_TAB_REQUESTS = 6  # per lookup: 50 + 5 x 150 reaches the 800th reel; a cached tab continues where it stopped
+_TAB_TTL = 300.0  # seconds a tab's pages are reused, so refreshing an account's reels pages its tab once
+_TAB_PAUSE = 1.0  # seconds between the requests of one lookup
+_TAB_KEEP = 64  # accounts whose tabs are kept
+
+
+class _TabQueryGone(Exception):
+    """Instagram no longer knows the pagination query's doc_id. Not an ApiError: no other proxy profile would help."""
+
+
+@dataclasses.dataclass
+class ReelsTab:
+    """What has been read of one account's Reels tab: play counts by shortcode, and where the tab continues."""
+
+    handle: str
+    user_id: str | None  # the profile's Relay id, which the pagination query takes
+    read_at: float = dataclasses.field(default_factory=time.monotonic)
+    plays: dict[str, int | None] = dataclasses.field(default_factory=dict)
+    cursor: str | None = None
+    more: bool = True
+    newest: int = 0  # pk range of the unpinned reels read
+    oldest: int | None = None
+    root_doc: str | None = None  # the tab's own query, once its page has been read
+
+    def add(self, connection: dict[str, Any]) -> None:
+        for node in traverse_obj(connection, ("edges", ..., "node", {dict})):
+            if not isinstance(code := node.get("code"), str):
+                continue
+            plays = node.get("play_count")
+            self.plays[code] = plays if isinstance(plays, int) and not isinstance(plays, bool) else None
+            pk = int(node["pk"]) if str(node.get("pk") or "").isdigit() else None
+            if pk and not node.get("clips_tab_pinned_user_ids"):  # a pinned reel sits ahead of its date
+                self.newest = max(self.newest, pk)
+                self.oldest = pk if self.oldest is None else min(self.oldest, pk)
+        page = traverse_obj(connection, ("page_info", {dict})) or {}
+        self.cursor = page.get("end_cursor") if isinstance(page.get("end_cursor"), str) else None
+        self.more = page.get("has_next_page") is True and bool(self.cursor)
+
+    def find(self, code: str, pk: int) -> bool | None:
+        """True once the reel has been read; False when it can't be further down (the tab ended, or it is newer than
+        reels already read); None while it may be."""
+        if code in self.plays:
+            return True
+        if not self.more or (self.oldest is not None and pk > self.oldest):
+            return False
+        return None
+
+
+_tabs: dict[str, ReelsTab] = {}
+_tab_locks: dict[str, asyncio.Lock] = {}
+_retired_docs: set[str] = set()
+
+
+def tab_connection(status: int, url: str, body: str, owner: str) -> dict[str, Any] | None:
+    """A Reels tab query's answer -> its polaris_clips_connection (`owner` is the key holding the profile: node for the
+    pagination query, xig_user_by_username for the tab's own); None when Instagram has no such profile.
+
+    Instagram refuses logged-out requests with a 429, its login page, an HTML page with a 200 (also its answer to a
+    form `lsd` that doesn't match the X-FB-LSD header), an empty body, `{"message": "Please wait a few minutes…",
+    "status": "fail"}` or an `errors` list: all of them are blocks (503, so the next proxy profile is tried)."""
+    if InstagramBaseIE._is_login_redirect(url):
+        raise UpstreamBlocked(_LOGIN_WALL)
+    if status == 429:
+        raise UpstreamBlocked("Instagram rate-limited the Reels tab query (HTTP 429)")
+    if status >= 500:
+        raise UpstreamError(f"Instagram failed the Reels tab query (HTTP {status})")
+    try:
+        data = json.loads(body)
+    except (ValueError, RecursionError):
+        data = None
+    if not isinstance(data, dict):
+        raise UpstreamBlocked("Instagram answered the Reels tab query with " + (
+            "an empty body" if not body.strip() else "a web page, not data") + " (logged-out limit); retry later")
+    errors = [m for m in traverse_obj(data, ("errors", ..., "message")) if isinstance(m, str)]
+    if any(_TAB_DOC_GONE.search(m) for m in errors):
+        raise _TabQueryGone(errors[0])
+    if errors or not isinstance(data.get("data"), dict):
+        reason = "; ".join(errors) or (data["message"] if isinstance(data.get("message"), str) else "no data")
+        raise UpstreamBlocked(f"Instagram refused the Reels tab query: {reason}")
+    profile = data["data"].get(owner)
+    if profile is None:
+        return None
+    return traverse_obj(profile, ("polaris_clips_connection", {dict})) or {}
+
+
+def _tab_query_flow(handle: str, doc: str, name: str, variables: dict[str, Any],
+                    owner: str) -> Callable[[yt_dlp.YoutubeDL], dict[str, Any] | None]:
+    """POST one Reels tab query to /api/graphql as the logged-out page does. `lsd` is a double-submit token: any value
+    works when the form field and the X-FB-LSD header carry the same one. Read inside the worker, so a block moves
+    on to the next configured proxy profile."""
+    def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any] | None:
+        ie = ydl.get_info_extractor("InstagramUser")
+        lsd = secrets.token_urlsafe(8)
+        body, urlh = ie._download_webpage_handle(
+            f"{WEB}/api/graphql", handle, "Downloading Reels tab", impersonate=ie._can_impersonate,
+            expected_status=lambda _: True,
+            headers={**ie._api_headers, "X-FB-Friendly-Name": name, "X-FB-LSD": lsd,
+                     "X-Requested-With": "XMLHttpRequest", "Referer": f"{WEB}/{handle}/reels/",
+                     "Content-Type": "application/x-www-form-urlencoded"},
+            data=urlencode_postdata({
+                "lsd": lsd, "fb_api_caller_class": "RelayModern", "fb_api_req_friendly_name": name,
+                "server_timestamps": "true", "variables": json.dumps(variables, separators=(",", ":")), "doc_id": doc,
+            }))
+        return tab_connection(urlh.status, urlh.url, body, owner)
+
+    return go
+
+
+async def _read_tab(tab: ReelsTab, first: int) -> None:
+    """Read the tab's next page into it: with the pagination query while its doc_id lives, else from the
+    /<handle>/reels/ page (the first 12, the profile's Relay id and the tab's own query) and then that query."""
+    if tab.user_id and REELS_TAB_DOC not in _retired_docs:
+        variables = {"after": tab.cursor, "first": first, "id": tab.user_id}
+        try:
+            try:
+                connection = await with_ydl(PLATFORM, _tab_query_flow(
+                    tab.handle, REELS_TAB_DOC, f"{REELS_TAB_QUERY}_connection", variables, "node"))
+            except UpstreamError:  # a 5xx: very large tabs fail deep pages of 200+ reels; ask once for fewer
+                if first <= _TAB_SMALL:
+                    raise
+                await asyncio.sleep(_TAB_PAUSE)
+                connection = await with_ydl(PLATFORM, _tab_query_flow(
+                    tab.handle, REELS_TAB_DOC, f"{REELS_TAB_QUERY}_connection", {**variables, "first": _TAB_SMALL},
+                    "node"))
+        except _TabQueryGone as exc:
+            _retired_docs.add(REELS_TAB_DOC)
+            log.warning("instagram: Reels tab pagination doc_id %s is retired (%s); paging 12 reels a request with "
+                        "the tab's own query until REELS_TAB_DOC is updated", REELS_TAB_DOC, exc)
+        else:
+            if connection is None:
+                raise NotFound("Instagram has no profile with this Relay id")
+            tab.add(connection)
+            return
+    if tab.root_doc is None:
+        user, html = await fetch_profile(tab.handle, "reels")
+        tab.user_id = tab.user_id or str_or_none(user.get("id"))
+        if not (m := _TAB_QUERY_ID.search(html)):
+            raise UpstreamError("The Reels tab page names no query to page the tab with", code="reels_tab_unavailable")
+        tab.root_doc = m.group(1)
+        if tab.cursor is None:  # the page holds the first 12
+            tab.add(traverse_obj(user, ("polaris_clips_connection", {dict})) or {})
+            return
+    connection = await with_ydl(PLATFORM, _tab_query_flow(
+        tab.handle, tab.root_doc, REELS_TAB_QUERY,
+        {"after": tab.cursor, "first": _TAB_ROOT_FIRST, "username": tab.handle}, "xig_user_by_username"))
+    if connection is None:
+        raise NotFound("Profile not found")
+    tab.add(connection)
+
+
+def needs_tab_plays(product: dict[str, Any]) -> bool:
+    """A reel whose item has no play count (every logged-out one): only reels are on the Reels tab, never feed videos,
+    IGTV or carousels."""
+    return (product.get("media_type") == 2 and product.get("product_type") == "clips"
+            and traverse_obj(product, "ig_play_count", "play_count") is None)
+
+
+async def reel_play_count(product: dict[str, Any]) -> int | None:
+    """Instagram's play count of a reel, read from its owner's Reels tab. None when the tab doesn't list it within
+    _TAB_REQUESTS requests (a cached tab continues where it stopped), lists it without one, or can't be read: the
+    count is best effort, and the post is returned either way."""
+    user = traverse_obj(product, ("user", {dict})) or {}
+    handle, code = user.get("username"), product.get("code")
+    if not (isinstance(handle, str) and _HANDLE.fullmatch(handle)
+            and isinstance(code, str) and _SHORTCODE_CHARS.fullmatch(code)):
+        return None
+    pk = int(product["pk"]) if str(product.get("pk") or "").isdigit() else _id_to_pk(code)
+    # the logged-in item's user.id is its pk; the logged-out one's is the Relay id the pagination query takes
+    relay_id = str_or_none(user.get("id"))
+    key = str_or_none(user.get("pk")) or handle.lower()
+    async with _tab_locks.setdefault(key, asyncio.Lock()):
+        tab, now = _tabs.get(key), time.monotonic()
+        if tab is None or now - tab.read_at > _TAB_TTL or (tab.newest and pk > tab.newest and code not in tab.plays):
+            tab = ReelsTab(handle, relay_id if relay_id != str_or_none(user.get("pk")) else None)
+        _tabs[key] = tab
+        while len(_tabs) > _TAB_KEEP:  # the account read longest ago goes
+            stale = min((k for k in _tabs if k != key), key=lambda k: _tabs[k].read_at)
+            del _tabs[stale]
+            if (lock := _tab_locks.get(stale)) and not lock.locked():
+                del _tab_locks[stale]
+        requests = 0
+        try:
+            while (found := tab.find(code, pk)) is None and requests < _TAB_REQUESTS:
+                if requests:
+                    await asyncio.sleep(_TAB_PAUSE)
+                await _read_tab(tab, _TAB_NEXT if tab.plays else _TAB_FIRST)
+                requests += 1
+        except ApiError as exc:
+            log.info("instagram: no play count for %s: @%s's Reels tab failed: %s", code, handle, exc)
+            return None
+        if not found:
+            log.info("instagram: no play count for %s: %s", code, f"@{handle}'s Reels tab doesn't list it"
+                     if found is False else f"not among @{handle}'s {len(tab.plays)} newest reels")
+        elif tab.plays[code] is None:
+            log.info("instagram: no play count for %s: @%s's Reels tab lists it without one", code, handle)
+        return tab.plays.get(code)
+
+
 # --- routes ---------------------------------------------------------------------------
 
 
@@ -958,10 +1185,16 @@ def _no_pagination(value: str | None, name: str) -> None:
                            "yt-dlp never makes", code="pagination_unavailable")
 
 
-@sc_get(router, "/v1/instagram/post", source="yt-dlp InstagramIE (logged-out PostRootContentQuery / media info)",
-        notes="Mapped from the media InstagramIE parses (logged-out GraphQL, else the /p/ page). Anonymous "
-              "responses have no video_play_count/video_view_count (only the logged-in media/info item has them: "
-              f"{COOKIE_NOTE}); edge_media_to_parent_comment.edges holds the ~15 comments the logged-out query "
+@sc_get(router, "/v1/instagram/post", source="yt-dlp InstagramIE (logged-out PostRootContentQuery / media info) "
+        "+ the owner's logged-out Reels tab query (reel play counts)",
+        notes="Mapped from the media InstagramIE parses (logged-out GraphQL, else the /p/ page). The logged-out post "
+              "has no play or view count, so a reel's video_play_count (Instagram's own plays, as on user/reels) is "
+              "read from its owner's Reels tab, paged to the reel (up to 6 requests, ~800 reels deep; pages are "
+              "reused for 5 minutes, so an account's reels cost one pass). It is left out when the tab doesn't "
+              "list the reel within that, the tab can't be read, or include_play_count=false; feed videos, IGTV and "
+              "carousels are never on the tab and have none. video_view_count (the legacy 3-second count) comes "
+              f"only from the logged-in media/info item ({COOKIE_NOTE}). edge_media_to_parent_comment.edges holds "
+              "the ~15 comments the logged-out query "
               "returns. created_at, edge_media_to_tagged_user and edge_sidecar_to_children (carousels) included; "
               "a video child has its own has_audio and video_duration. region and trim are ignored; "
               "download_media=true returns 501. A bare shortcode, an instagr.am link and a share link "
@@ -974,6 +1207,9 @@ async def instagram_post(url: str = Query(...), region: str | None = None, trim:
         raise NotSupported("download_media (re-hosting media) is not supported; use the returned CDN URLs")
     product, media = await fetch_post(canonical)
     play_count = include_play_count is None or truthy(include_play_count)
+    if play_count and needs_tab_plays(product):
+        # the tab's play_count is Instagram's alone, as a logged-in item's ig_play_count is
+        product = {**product, "ig_play_count": await reel_play_count(product)}
     return {"data": {"xdt_shortcode_media": map_post(product, media, play_count=play_count)}}
 
 

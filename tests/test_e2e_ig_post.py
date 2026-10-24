@@ -94,6 +94,18 @@ def test_reel_conforms_and_matches_ytdlp(client):
 
 
 @pytest.mark.live
+def test_reel_play_count_comes_from_the_owners_reels_tab(client):
+    """The logged-out post has no count; the reel's owner's Reels tab is paged to it (REEL is ~220 reels down)."""
+    m = media(client, f"{IG}/reel/{REEL}/")
+    assert isinstance(m["video_play_count"], int) and m["video_play_count"] > m["edge_media_preview_like"]["count"]
+    assert "video_view_count" not in m  # the legacy 3-second count isn't invented
+    # a reel on the tab's first page has the count user/reels shows (both read the same tab)
+    newest = [r for r in ok(client, "/v1/instagram/user/reels", handle="jane")["items"] if r.get("play_count")][-1]
+    assert media(client, newest["code"])["video_play_count"] == pytest.approx(newest["play_count"], rel=0.01)
+    assert "video_play_count" not in media(client, REEL, include_play_count="false")
+
+
+@pytest.mark.live
 @pytest.mark.parametrize("url", [
     REEL,
     f"  {REEL}  ",
