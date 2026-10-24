@@ -368,8 +368,8 @@ def test_a_chunked_answer_is_read_whole():
 
 def test_ss1_counts_as_our_cursor_only_in_a_pagination_param(make, upstream):
     c = make()
-    assert c.get("/v1/tiktok/search/keyword", params={"query": "ss1.not-a-cursor"}).status_code == 200
-    assert c.get("/v1/tiktok/search/keyword", params={"query": "x", "cursor": "ss1.e30"}).status_code == 501
+    assert c.get("/v1/tiktok/search/top", params={"query": "ss1.not-a-cursor"}).status_code == 200
+    assert c.get("/v1/tiktok/search/top", params={"query": "x", "cursor": "ss1.e30"}).status_code == 501
     assert len(upstream.requests) == 1
 
 
