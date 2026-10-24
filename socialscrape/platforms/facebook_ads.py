@@ -6,6 +6,7 @@ import datetime
 import html as html_lib
 from html.parser import HTMLParser
 import json
+import logging
 import re
 import threading
 from typing import Any
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Query
 from yt_dlp.extractor.facebook import FacebookAdsIE
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.networking.impersonate import ImpersonateTarget
+from yt_dlp.utils import ExtractorError
 
 from .. import transcribe
 from ..errors import BadRequest, NotFound, UpstreamBlocked, UpstreamError, require_one
@@ -23,10 +25,12 @@ from ..ytdlp import with_ydl
 from . import _facebook_ads_map as M
 
 router = APIRouter()
+log = logging.getLogger("socialscrape.facebook_ads")
 P = "facebook"
 BASE = "https://www.facebook.com"
 SEARCH_DOC_ID = "24922295957467452"
 TYPEAHEAD_DOC_ID = "9755915494515334"
+DETAILS_DOC_ID = "25068828942793558"
 
 _DOC_ID_LOCK = threading.Lock()
 _DOC_IDS: dict[str, str] = {}
@@ -34,6 +38,7 @@ _OPERATION_NAMES = {
     "AdLibrarySearchPaginationQuery": "AdLibrarySearchPaginationQuery_facebookRelayOperation",
     "useAdLibraryTypeaheadSuggestionDataSourceQuery":
         "useAdLibraryTypeaheadSuggestionDataSourceQuery_facebookRelayOperation",
+    "AdLibraryV3AdDetailsQuery": "AdLibraryV3AdDetailsQuery_facebookRelayOperation",
 }
 
 _HEADERS = {
@@ -124,6 +129,20 @@ def _walk(value: Any):
             yield from _walk(child)
 
 
+_PRELOADER = re.compile(
+    r'AdLibraryFoundationRootQueryRelayPreloader_[^"]+","queryID":"[0-9]+","variables":(\{.*?\}),"queryName"')
+
+
+def _page_variables(html: str) -> dict[str, Any] | None:
+    """The variables of the Ad Library app's root query on this page, or None when the app didn't render."""
+    match = _PRELOADER.search(html)
+    try:
+        variables = json.loads(match.group(1)) if match else None
+    except ValueError:
+        return None
+    return variables if isinstance(variables, dict) else None
+
+
 def _archive(html: str, ident: str) -> dict[str, Any]:
     candidates = []
     for raw in re.findall(r"<script[^>]*data-sjs[^>]*>({.*?ScheduledServerJS.*?)</script>", html):
@@ -137,6 +156,11 @@ def _archive(html: str, ident: str) -> dict[str, Any]:
                 if isinstance(item, dict) and str(item.get("ad_archive_id")) == ident:
                     candidates.append(item)
     if not candidates:
+        # Meta answers an id it has no ad for with the Ad Library's own landing page (deeplinkAdID null), whose
+        # bundled config names arkose_captcha and google_recaptcha: that is a missing ad, not a challenge.
+        variables = _page_variables(html)
+        if variables is not None and str(variables.get("deeplinkAdID")) != ident:
+            raise NotFound("Facebook ad was not found", code="ad_not_found")
         if re.search(r"captcha|checkpoint|challenge|log in(?: to Facebook)?", html, re.I):
             raise UpstreamBlocked("Facebook blocked the Ad Library request")
         raise NotFound("Facebook ad was not found", code="ad_not_found")
@@ -256,7 +280,7 @@ def _graphql(ie: FacebookAdsIE, shell_url: str, page_html: str, ident: str, frie
 
 
 def _search_connection(html: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    query = re.search(r'AdLibraryFoundationRootQueryRelayPreloader_[^"]+","queryID":"[0-9]+","variables":(\{.*?\}),"queryName"', html)
+    query = _PRELOADER.search(html)
     marker = '"search_results_connection":'
     position = html.find(marker)
     if not query or position < 0:
@@ -387,11 +411,41 @@ def _fetch_search(ydl: Any, params: dict[str, Any], cursor: str | None) -> tuple
     return connection, ads
 
 
-async def _detail_archive(ident: str) -> dict[str, Any]:
-    def fetch(ydl: Any) -> dict[str, Any]:
+def _ad_details(ie: FacebookAdsIE, url: str, html: str, archive: dict[str, Any]) -> dict[str, Any] | None:
+    """The ad's AdLibraryV3AdDetailsQuery `ad_details` (what "See ad details" shows), or None when there is none.
+
+    Meta keeps regulated-delivery data out of the deep-link page: the payer/beneficiary and EU/UK/Brazil audience
+    and reach of an ad delivered under those rules (is_aaa_eligible), and the delivery shares of a political or
+    issue ad, come only from this query, asked as the page's own modal asks it. Other ads have none of it, so
+    they cost no second request. It only fills aaa_info, so a refusal leaves that null (unknown) and is logged
+    rather than failing the ad itself."""
+    political = "POLITICAL" in (archive.get("categories") or [])
+    eligible = bool(archive.get("is_aaa_eligible"))
+    if not (political or eligible):
+        return None
+    page = _page_variables(html) or {}
+    ident = str(archive.get("ad_archive_id") or "")
+    variables = {"adArchiveID": ident, "pageID": str(archive.get("page_id") or ""),
+                 "country": page.get("country") or "ALL", "sessionID": page.get("sessionID"), "source": None,
+                 "isAdNonPolitical": not political, "isAdNotAAAEligible": not eligible}
+    try:
+        result = _graphql(ie, url, html, ident, "AdLibraryV3AdDetailsQuery", DETAILS_DOC_ID, variables)
+    except (UpstreamBlocked, UpstreamError, ExtractorError) as exc:
+        log.warning("Facebook ad %s: details query failed, aaa_info left null (%s)", ident,
+                    getattr(exc, "message", None) or type(exc).__name__)
+        return None
+    details = ((result.get("data") or {}).get("ad_library_main") or {}).get("ad_details")
+    return details if isinstance(details, dict) else None
+
+
+async def _detail_archive(ident: str, *, details: bool = False) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """(the ad's deeplink_ad_archive, its ad_details when asked for and it has any)."""
+    def fetch(ydl: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
         ie = _ie(ydl)
         url = BASE + "/ads/library/?id=" + ident
-        return _archive(_page(ie, url, ident), ident)
+        html = _page(ie, url, ident)
+        archive = _archive(html, ident)
+        return archive, _ad_details(ie, url, html, archive) if details else None
     return await with_ydl(P, fetch, impersonate=ImpersonateTarget(client="chrome"), http_headers=_HEADERS)
 
 
@@ -408,8 +462,11 @@ def _input_id(id: str | None, url: str | None) -> str:
 _LONG = "true transcribes videos longer than 120 seconds too; without it they answer 400 transcription_too_long."
 
 
-@sc_get(router, "/v1/facebook/adLibrary/ad", source="Meta Ad Library SSR deeplink_ad_archive via yt-dlp FacebookAdsIE",
-        notes="Logged-out Meta archive data; trim is a conservative creative projection. Optional transcript uses local Whisper.")
+@sc_get(router, "/v1/facebook/adLibrary/ad",
+        source="Meta Ad Library SSR deeplink_ad_archive + AdLibraryV3AdDetailsQuery via yt-dlp FacebookAdsIE",
+        notes="Logged-out Meta archive data; trim is a conservative creative projection. aaa_info comes from the "
+              "ad-details query, asked only for EU/UK/Brazil-regulated or political ads, and is null otherwise "
+              "or if Meta refuses it. Optional transcript uses local Whisper.")
 async def facebook_ad(
     id: str | None = Query(None, description="Ad Library ad id (ad_archive_id); use this or url."),
     url: str | None = Query(None, description="Ad Library URL such as https://www.facebook.com/ads/library/?id=123."),
@@ -420,8 +477,8 @@ async def facebook_ad(
                              json_schema_extra={"enum": ["true", "false"]}),
 ) -> dict[str, Any]:
     ident = _input_id(id, url)
-    archive = await _detail_archive(ident)
-    result = M.detail(archive, trim=trim == "true")
+    archive, details = await _detail_archive(ident, details=True)
+    result = M.detail(archive, trim=trim == "true", details=details)
     if get_transcript == "true":
         media = M.video_url(archive)
         if not media:
@@ -442,7 +499,7 @@ async def facebook_ad_transcript(
     allow_long_transcription: str | None = Query(None, description=_LONG),
 ) -> dict[str, Any]:
     ident = _input_id(id, url)
-    archive = await _detail_archive(ident)
+    archive, _ = await _detail_archive(ident)
     canonical = f"{BASE}/ads/library?id={ident}"
     if not M.video_url(archive):
         return {"data": {"ad_id": ident, "url": canonical, "transcript": None, "transcript_available": False}}

@@ -1,0 +1,345 @@
+{
+ "_note": "AdLibraryV3AdDetailsQuery (doc 25068828942793558) answers recorded 2026-10-24, advertiser block and all but 3 EU countries dropped; page is the deep-link page's Relay preloader and LSD token for ad 1847168433318898.",
+ "page": "[\"AdLibraryFoundationRootQueryRelayPreloader_6adc339bb69ae5e29334452\",\"queryID\":\"26438337149177216\",\"variables\":{\"adType\":\"ALL\",\"activeStatus\":\"active\",\"audienceTimeframe\":\"LAST_7_DAYS\",\"bylines\":[],\"collationToken\":null,\"contentLanguages\":[],\"countries\":[\"US\"],\"country\":\"US\",\"deeplinkAdID\":1847168433318898,\"isAboutTab\":false,\"isAudienceTab\":false,\"isLandingPage\":false,\"isTargetedCountry\":false,\"hasDeeplinkAdID\":true,\"location\":null,\"mediaType\":\"all\",\"multiCountryFilterMode\":null,\"pageIDs\":[],\"potentialReachInput\":null,\"publisherPlatforms\":[],\"queryString\":\"\",\"regions\":null,\"searchType\":\"page\",\"sessionID\":\"70135ce7-6a00-4508-bb92-8a6912fe22da\",\"source\":null,\"sortData\":null,\"startDate\":null,\"fetchPageInfo\":true,\"fetchSharedDisclaimers\":true,\"viewAllPageID\":\"498534346687323\",\"v\":\"6d5075\"},\"queryName\":\"AdLibraryFoundationRootQuery\"}] [\"LSD\",[],{\"token\":\"AdRm47E8R1KS653C2pbZU87TkK0\"}]",
+ "eu": {
+  "archive": {
+   "ad_archive_id": "1847168433318898",
+   "page_id": "498534346687323",
+   "is_aaa_eligible": true,
+   "categories": [
+    "UNKNOWN"
+   ]
+  },
+  "response": {
+   "data": {
+    "ad_library_main": {
+     "ad_details": {
+      "aaa_info": {
+       "payer_beneficiary_data": [
+        {
+         "payer": "FigureO POD",
+         "beneficiary": "FigureO POD"
+        }
+       ],
+       "targets_eu": true,
+       "has_violating_payer_beneficiary": false,
+       "is_ad_taken_down": false
+      },
+      "violation_types": [],
+      "verified_voice_context": null,
+      "transparency_by_location": {
+       "br_transparency": null,
+       "eu_transparency": {
+        "targets_eu": true,
+        "location_audience": [
+         {
+          "name": "Africa",
+          "num_obfuscated": 0,
+          "type": "country_groups",
+          "excluded": false
+         },
+         {
+          "name": "Europe",
+          "num_obfuscated": 0,
+          "type": "country_groups",
+          "excluded": false
+         },
+         {
+          "name": "South America",
+          "num_obfuscated": 0,
+          "type": "country_groups",
+          "excluded": false
+         }
+        ],
+        "gender_audience": "All",
+        "age_audience": {
+         "min": 18,
+         "max": 65
+        },
+        "eu_total_reach": 20138,
+        "age_country_gender_reach_breakdown": [
+         {
+          "country": "YT",
+          "age_gender_breakdowns": [
+           {
+            "age_range": "45-54",
+            "male": 125,
+            "female": 82,
+            "unknown": null
+           },
+           {
+            "age_range": "35-44",
+            "male": 290,
+            "female": 187,
+            "unknown": 1
+           },
+           {
+            "age_range": "65+",
+            "male": 38,
+            "female": 25,
+            "unknown": 1
+           },
+           {
+            "age_range": "55-64",
+            "male": 62,
+            "female": 43,
+            "unknown": 1
+           },
+           {
+            "age_range": "18-24",
+            "male": 130,
+            "female": 142,
+            "unknown": null
+           },
+           {
+            "age_range": "25-34",
+            "male": 446,
+            "female": 314,
+            "unknown": 4
+           }
+          ]
+         },
+         {
+          "country": "BE",
+          "age_gender_breakdowns": [
+           {
+            "age_range": "55-64",
+            "male": 26,
+            "female": 17,
+            "unknown": null
+           },
+           {
+            "age_range": "45-54",
+            "male": 32,
+            "female": 14,
+            "unknown": 1
+           },
+           {
+            "age_range": "65+",
+            "male": 24,
+            "female": 10,
+            "unknown": null
+           },
+           {
+            "age_range": "25-34",
+            "male": 39,
+            "female": 12,
+            "unknown": null
+           },
+           {
+            "age_range": "18-24",
+            "male": 11,
+            "female": 2,
+            "unknown": 1
+           },
+           {
+            "age_range": "35-44",
+            "male": 62,
+            "female": 20,
+            "unknown": 2
+           }
+          ]
+         },
+         {
+          "country": "BG",
+          "age_gender_breakdowns": [
+           {
+            "age_range": "55-64",
+            "male": 67,
+            "female": 51,
+            "unknown": null
+           },
+           {
+            "age_range": "45-54",
+            "male": 91,
+            "female": 35,
+            "unknown": null
+           },
+           {
+            "age_range": "65+",
+            "male": 54,
+            "female": 104,
+            "unknown": null
+           },
+           {
+            "age_range": "25-34",
+            "male": 208,
+            "female": 35,
+            "unknown": null
+           },
+           {
+            "age_range": "18-24",
+            "male": 44,
+            "female": 23,
+            "unknown": 1
+           },
+           {
+            "age_range": "35-44",
+            "male": 160,
+            "female": 31,
+            "unknown": null
+           }
+          ]
+         }
+        ]
+       },
+       "uk_transparency": {
+        "location_audience": [
+         {
+          "name": "Europe",
+          "num_obfuscated": 0,
+          "type": "country_groups",
+          "excluded": false
+         }
+        ],
+        "gender_audience": "All",
+        "age_audience": {
+         "min": 18,
+         "max": 65
+        },
+        "total_reach": 219,
+        "age_country_gender_reach_breakdown": [
+         {
+          "country": "GB",
+          "age_gender_breakdowns": [
+           {
+            "age_range": "55-64",
+            "male": 11,
+            "female": 7,
+            "unknown": null
+           },
+           {
+            "age_range": "45-54",
+            "male": 26,
+            "female": 7,
+            "unknown": null
+           },
+           {
+            "age_range": "65+",
+            "male": 14,
+            "female": 7,
+            "unknown": null
+           },
+           {
+            "age_range": "25-34",
+            "male": 38,
+            "female": 23,
+            "unknown": 1
+           },
+           {
+            "age_range": "18-24",
+            "male": 13,
+            "female": 7,
+            "unknown": 1
+           },
+           {
+            "age_range": "35-44",
+            "male": 49,
+            "female": 15,
+            "unknown": null
+           }
+          ]
+         }
+        ]
+       }
+      },
+      "is_siep_advertiser_eligible_for_ai_disclosure": true,
+      "is_violating_eu_siep": false
+     }
+    }
+   },
+   "extensions": {
+    "server_metadata": {
+     "request_start_time_ms": 1792816130672,
+     "time_at_flush_ms": 1792816130818
+    },
+    "is_final": true
+   }
+  }
+ },
+ "political": {
+  "archive": {
+   "ad_archive_id": "29095636016697453",
+   "page_id": "179204028758675",
+   "is_aaa_eligible": false,
+   "categories": [
+    "POLITICAL"
+   ]
+  },
+  "response": {
+   "data": {
+    "ad_library_main": {
+     "ad_details": {
+      "insights": {
+       "age_gender_data": [
+        {
+         "age_range": "18-24",
+         "female": 0.13,
+         "male": 0.13,
+         "unknown": 0
+        },
+        {
+         "age_range": "25-34",
+         "female": 0.19,
+         "male": 0.22,
+         "unknown": 0
+        },
+        {
+         "age_range": "35-44",
+         "female": 0.16,
+         "male": 0.16,
+         "unknown": 0
+        }
+       ],
+       "currency_matched": true,
+       "location_data": [
+        {
+         "reach": 0,
+         "region": "Arizona"
+        },
+        {
+         "reach": 0,
+         "region": "Baja California"
+        },
+        {
+         "reach": 0,
+         "region": "Idaho"
+        },
+        {
+         "reach": 0,
+         "region": "Nevada"
+        },
+        {
+         "reach": 0.99,
+         "region": "California"
+        }
+       ],
+       "single_country": "US"
+      },
+      "violation_types": [],
+      "verified_voice_context": {
+       "types": [
+        "POLITICAL"
+       ],
+       "ad_library_all_geo_fin_serv_info": null
+      },
+      "transparency_by_location": {
+       "br_transparency": null,
+       "eu_transparency": null,
+       "uk_transparency": null
+      },
+      "is_siep_advertiser_eligible_for_ai_disclosure": true,
+      "is_violating_eu_siep": false
+     }
+    }
+   },
+   "extensions": {
+    "server_metadata": {
+     "request_start_time_ms": 1792816313172,
+     "time_at_flush_ms": 1792816313398
+    },
+    "is_final": true
+   }
+  }
+ }
+}

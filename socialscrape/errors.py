@@ -18,13 +18,15 @@ class ApiError(Exception):
     status = 500
     code = "server_error"
 
-    def __init__(self, message: str, *, status: int | None = None, code: str | None = None, **details: Any):
+    def __init__(self, message: str, *, status: int | None = None, code: str | None = None,
+                 retry_after: int | None = None, **details: Any):
         super().__init__(message)
         self.message = message
         if status is not None:
             self.status = status
         if code is not None:
             self.code = code
+        self.retry_after = retry_after  # seconds; sent as the Retry-After header, not in the body
         self.details = details
 
     def body(self) -> dict[str, Any]:
@@ -124,7 +126,9 @@ def require_one(**params: Any) -> None:
 
 
 async def api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
-    return LenientJSONResponse(exc.body(), status_code=exc.status)  # the message may be the platform's own text
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+    # The message may be the platform's own text.
+    return LenientJSONResponse(exc.body(), status_code=exc.status, headers=headers)
 
 
 # First element of a validation error's loc: where the parameter came from, not its name.

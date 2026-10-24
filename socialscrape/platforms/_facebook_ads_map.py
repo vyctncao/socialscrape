@@ -49,7 +49,43 @@ def trim_ad(ad: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in ad.items() if key in keep}
 
 
-def detail(ad: dict[str, Any], *, trim: bool = False) -> dict[str, Any]:
+def _rows(value: Any) -> list[dict[str, Any]]:
+    return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+
+def aaa_info(details: Any) -> dict[str, Any] | None:
+    """ScrapeCreators' aaa_info from AdLibraryV3AdDetailsQuery's ad_details, or None when Meta has none for the ad.
+
+    Meta's own aaa_info holds the payer/beneficiary rows. The audience and reach of regulated delivery sit apart,
+    under transparency_by_location: EU (DSA) data with eu_total_reach, else UK or Brazil data with total_reach
+    (absolute people counts either way) and the same location/age/gender audience fields, merged in as they are.
+    A political or issue ad's delivery comes as insights instead, normalized like ScrapeCreators to
+    location_audience rows with reach and one age_country_gender_reach_breakdown entry: those values are
+    fractional shares (0.08 is 8%), so they are copied, never scaled or filled in."""
+    if not isinstance(details, dict):
+        return None
+    out = dict(details["aaa_info"]) if isinstance(details.get("aaa_info"), dict) else {}
+    regional = details.get("transparency_by_location")
+    regional = regional if isinstance(regional, dict) else {}
+    region = next((regional[key] for key in ("eu_transparency", "uk_transparency", "br_transparency")
+                   if isinstance(regional.get(key), dict)), None)
+    insights = details.get("insights")
+    if region:
+        out.update(region)
+    elif isinstance(insights, dict):
+        locations = [{"name": row.get("region"), "reach": row.get("reach")}
+                     for row in _rows(insights.get("location_data"))]
+        ages = [{key: row.get(key) for key in ("age_range", "male", "female", "unknown")}
+                for row in _rows(insights.get("age_gender_data"))]
+        if locations:
+            out["location_audience"] = locations
+        if ages:
+            out["age_country_gender_reach_breakdown"] = [{"country": insights.get("single_country"),
+                                                          "age_gender_breakdowns": ages}]
+    return out or None
+
+
+def detail(ad: dict[str, Any], *, trim: bool = False, details: dict[str, Any] | None = None) -> dict[str, Any]:
     ident = str(ad.get("ad_archive_id") or "")
     snapshot = dict(ad.get("snapshot")) if isinstance(ad.get("snapshot"), dict) else {}
     if isinstance(snapshot.get("body"), dict):
@@ -60,6 +96,10 @@ def detail(ad: dict[str, Any], *, trim: bool = False) -> dict[str, Any]:
         snapshot["page_id"] = int(snapshot["page_id"])
     if snapshot.get("event") is None:
         snapshot["event"] = []
+    if isinstance(snapshot.get("images"), list):  # ScrapeCreators' detail has image_crops as an object, Meta a list
+        snapshot["images"] = [dict(image, image_crops={str(index): crop for index, crop in enumerate(
+            image["image_crops"])}) if isinstance(image, dict) and isinstance(image.get("image_crops"), list)
+            else image for image in snapshot["images"]]
     if trim:
         snapshot_keep = {
             "body", "title", "caption", "cta_text", "cta_type", "link_description", "link_url",
@@ -86,7 +126,7 @@ def detail(ad: dict[str, Any], *, trim: bool = False) -> dict[str, Any]:
         "url": f"https://www.facebook.com/ads/library?id={ident}",
         "startDateString": iso_date(ad.get("start_date")),
         "endDateString": iso_date(ad.get("end_date")),
-        "aaa_info": ad.get("aaa_info"),
+        "aaa_info": aaa_info(details) or ad.get("aaa_info"),
     }
 
 
