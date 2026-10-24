@@ -9,8 +9,11 @@ from __future__ import annotations
 import base64
 import copy
 import dataclasses
+import json
+import re
 import time
 import unicodedata
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -648,6 +651,7 @@ def stubbed(monkeypatch):
     monkeypatch.setattr(ig, "fetch_profile", fetch_profile)
     monkeypatch.setattr(ig, "fetch_topic", fetch_topic)
     monkeypatch.setattr(ig, "with_ydl", with_ydl)
+    monkeypatch.setattr(ig, "reel_play_count", lambda product: _async(None))  # reels_tab serves the real lookup
     return calls
 
 
@@ -1315,6 +1319,259 @@ def test_instagram_catalog_paths_are_routed(client):
         assert row["notes"], path
         assert row["status"] in ("implemented", "needs_setup") and row["source"], path
         assert path not in ig.UNSUPPORTED, path
+
+
+# --- reel play counts from the owner's Reels tab (recorded tab, offline) ------------------------
+
+TAB = json.loads((Path(__file__).parent / "fixtures" / "instagram" / "jane_reels_tab.json").read_text())
+TAB_PLAYS = {n["code"]: n["play_count"] for n in TAB["nodes"]}
+# the logged-out item's user carries the profile's Relay id (the fixture's USER has the pk there, as logged in)
+LOGGED_OUT_REEL = {**REEL, "user": {**USER, "id": TAB["user_id"]}}
+OLDEST = TAB["nodes"][-1]  # CFfEUF8Fy8o, 2020: the 579th reel
+REEL_PLAY_COUNT = ig.reel_play_count
+
+
+def _reel(node: dict[str, Any], **user: Any) -> dict[str, Any]:
+    return {**LOGGED_OUT_REEL, "code": node["code"], "pk": node["pk"], "user": {**LOGGED_OUT_REEL["user"], **user}}
+
+
+@pytest.fixture(autouse=True)
+def _fresh_reels_tabs(monkeypatch):
+    """Every test starts without read tabs or retired doc_ids, and pages without pausing."""
+    monkeypatch.setattr(ig, "_tabs", {})
+    monkeypatch.setattr(ig, "_tab_locks", {})
+    monkeypatch.setattr(ig, "_retired_docs", set())
+    monkeypatch.setattr(ig, "_TAB_PAUSE", 0)
+
+
+@pytest.fixture
+def reels_tab(monkeypatch):
+    """jane's recorded Reels tab (579 reels), served by both tab queries as Instagram pages it: the pagination query
+    by Relay id and any `first`, the tab's own query by username and 12 at a time, the /<handle>/reels/ page with the
+    first 12. `answers` are served (status, url, body) ahead of that; `queries` records (doc_id, variables)."""
+    nodes, root_doc = TAB["nodes"], re.search(r'"queryID":"([0-9]+)"', TAB["page_preloader"]).group(1)
+    state = SimpleNamespace(queries=[], pages=[], answers=[], retired=False)
+
+    def connection(after: str | None, first: int) -> dict[str, Any]:
+        start = int(after[1:]) if after else 0
+        chunk = nodes[start:start + first]
+        end = start + len(chunk)
+        return {"edges": [{"node": n, "cursor": f"c{start + i + 1}"} for i, n in enumerate(chunk)],
+                "page_info": {"end_cursor": f"c{end}", "has_next_page": end < len(nodes)}}
+
+    def answer(doc: str, variables: dict[str, Any]) -> tuple[int, str, str]:
+        if state.answers:
+            return state.answers.pop(0)
+        if doc == ig.REELS_TAB_DOC and not state.retired:
+            node = ({"__typename": "User", "polaris_clips_connection": connection(variables["after"],
+                                                                                   variables["first"])}
+                    if variables["id"] == TAB["user_id"] else None)
+            return 200, f"{ig.WEB}/api/graphql", json.dumps({"data": {"node": node}})
+        if doc == root_doc and variables["username"] == "jane":
+            user = {"pk": TAB["pk"], "id": TAB["user_id"],
+                    "polaris_clips_connection": connection(variables["after"], 12)}
+            return 200, f"{ig.WEB}/api/graphql", json.dumps({"data": {"xig_user_by_username": user}})
+        return 200, f"{ig.WEB}/api/graphql", json.dumps(TAB["doc_gone"])
+
+    async def with_ydl(platform, call, **opts):
+        handle, doc, name, variables, owner = call
+        state.queries.append((doc, variables))
+        return ig.tab_connection(*answer(doc, variables), owner)
+
+    async def fetch_profile(handle, tab=""):
+        state.pages.append(f"{handle}/{tab}")
+        user = {"pk": TAB["pk"], "id": TAB["user_id"], "username": "jane",
+                "polaris_clips_connection": connection(None, 12)}
+        return user, f'<script>{TAB["page_preloader"]}</script>'
+
+    monkeypatch.setattr(ig, "_tab_query_flow", lambda *args: args)
+    monkeypatch.setattr(ig, "with_ydl", with_ydl)
+    monkeypatch.setattr(ig, "fetch_profile", fetch_profile)
+    monkeypatch.setattr(ig, "reel_play_count", REEL_PLAY_COUNT)
+    return state
+
+
+def _play(product: dict[str, Any]) -> int | None:
+    import asyncio
+
+    return asyncio.run(ig.reel_play_count(product))
+
+
+def test_tab_connection_reads_recorded_answers_and_refusals():
+    url = f"{ig.WEB}/api/graphql"
+    root = TAB["root_after"]
+    connection = ig.tab_connection(200, url, json.dumps(root), "xig_user_by_username")
+    # the tab's own query, `after` the page's first 12: reels 13-24
+    assert [e["node"]["code"] for e in connection["edges"]] == [n["code"] for n in TAB["nodes"][12:24]]
+    assert ig.tab_connection(200, url, json.dumps(TAB["node_null"]), "node") is None  # an id Instagram doesn't know
+    with pytest.raises(ig._TabQueryGone):  # a retired doc_id: no other proxy would help
+        ig.tab_connection(200, url, json.dumps(TAB["doc_gone"]), "node")
+    page = "<!DOCTYPE html><html><head><title>Instagram</title></head><body></body></html>"
+    refusals = [
+        (429, url, ""),
+        (200, f"{ig.WEB}/accounts/login/?next=%2Fapi%2Fgraphql", page),
+        (200, url, page),  # also the answer to a form lsd that doesn't match X-FB-LSD
+        (200, url, "  "),
+        (200, url, '{"message":"Please wait a few minutes before you try again.","require_login":true,'
+                   '"status":"fail"}'),
+        (200, url, '{"errors":[{"message":"execution error","severity":"CRITICAL","code":1675004}]}'),
+        (200, url, '[]'),
+    ]
+    for status, at, body in refusals:
+        with pytest.raises(UpstreamBlocked):
+            ig.tab_connection(status, at, body, "node")
+    with pytest.raises(UpstreamError):  # a 5xx is asked again for fewer reels, not read as a block
+        ig.tab_connection(500, url, "", "node")
+
+
+def test_reels_tab_add_and_find():
+    tab = ig.ReelsTab("jane", TAB["user_id"])
+    first = {"edges": [{"node": n} for n in TAB["nodes"][:50]], "page_info": {"end_cursor": "c50",
+                                                                              "has_next_page": True}}
+    tab.add(first)
+    assert tab.plays["DQhKIRakcbY"] == 30888361 and tab.cursor == "c50" and tab.more
+    # the pinned reel (Nov 2025) sits ahead of its date, so it isn't part of the pk range read
+    assert TAB["nodes"][0]["clips_tab_pinned_user_ids"] and int(TAB["nodes"][0]["pk"]) < int(TAB["nodes"][49]["pk"])
+    assert tab.newest == int(TAB["nodes"][1]["pk"]) and tab.oldest == int(TAB["nodes"][49]["pk"])
+    assert tab.find("DLDXI0fylTC", int(REEL_PK)) is None  # older than the 50 read: may be further down
+    assert tab.find("Dezpkchv5fD", 0) is True
+    between = (int(TAB["nodes"][10]["pk"]) + int(TAB["nodes"][11]["pk"])) // 2
+    assert tab.find("NOTONTAB", between) is False  # newer than reels already read, so not on the tab
+    tab.add({"edges": [{"node": {"code": "BOOL", "pk": "1", "play_count": True}}, {"node": {"pk": "2"}}],
+             "page_info": {"end_cursor": None, "has_next_page": True}})
+    assert tab.plays["BOOL"] is None and not tab.more  # no cursor: nothing more to read
+    assert tab.find("ANYTHING", 0) is False
+
+
+def test_reel_play_count_pages_the_tab_to_an_old_reel(reels_tab):
+    # DLDXI0fylTC (June 2025) is jane's 218th reel: the newest 50, then 150 a request
+    assert _play(_reel({"code": REEL_CODE, "pk": REEL_PK})) == TAB_PLAYS[REEL_CODE] == 1070323
+    assert reels_tab.queries == [
+        (ig.REELS_TAB_DOC, {"after": None, "first": 50, "id": TAB["user_id"]}),
+        (ig.REELS_TAB_DOC, {"after": "c50", "first": 150, "id": TAB["user_id"]}),
+        (ig.REELS_TAB_DOC, {"after": "c200", "first": 150, "id": TAB["user_id"]}),
+    ] and reels_tab.pages == []
+    # the next lookup of the account continues where the tab stopped, to its first reel (2020)
+    assert _play(_reel(OLDEST)) == OLDEST["play_count"] == 108992
+    assert [v["after"] for _, v in reels_tab.queries[3:]] == ["c350", "c500"]
+    # and a reel already read costs nothing
+    reels_tab.queries.clear()
+    assert _play(_reel(TAB["nodes"][1])) == TAB["nodes"][1]["play_count"] and reels_tab.queries == []
+
+
+def test_reel_play_count_stops_once_past_the_reel(reels_tab):
+    """A reel the tab doesn't list (pk between two of the 50 newest) ends the lookup after one request; one older than
+    every reel ends with the tab."""
+    between = str((int(TAB["nodes"][10]["pk"]) + int(TAB["nodes"][11]["pk"])) // 2)
+    assert _play(_reel({"code": "NOTONTAB", "pk": between})) is None and len(reels_tab.queries) == 1
+    assert _play(_reel({"code": "OLDERTHANALL", "pk": "1"})) is None
+    assert len(reels_tab.queries) == 5 and ig._tabs[TAB["pk"]].more is False  # 50 + 4 x 150 >= 579
+
+
+def test_reel_play_count_request_budget_and_cache(reels_tab, monkeypatch):
+    monkeypatch.setattr(ig, "_TAB_REQUESTS", 2)
+    assert _play(_reel(OLDEST)) is None and len(reels_tab.queries) == 2  # bounded: 200 reels read
+    assert _play(_reel(OLDEST)) is None and len(reels_tab.queries) == 4  # continues from the cache
+    assert _play(_reel(OLDEST)) == 108992 and len(reels_tab.queries) == 5
+    # a reel newer than the newest read means the tab was read before it was posted: read again from the top
+    newer = {"code": "BRANDNEW", "pk": str(int(TAB["nodes"][1]["pk"]) + 1)}
+    assert _play(_reel(newer)) is None and reels_tab.queries[-1][1]["after"] is None
+    # and pages expire
+    monkeypatch.setattr(ig, "_TAB_TTL", -1)
+    assert _play(_reel(TAB["nodes"][3])) == TAB["nodes"][3]["play_count"]
+    assert reels_tab.queries[-1][1]["after"] is None
+    # only the _TAB_KEEP accounts read last are kept
+    monkeypatch.setattr(ig, "_TAB_TTL", 300.0)
+    monkeypatch.setattr(ig, "_TAB_KEEP", 1)
+    assert _play(_reel(TAB["nodes"][3], pk="1", id="17841400000000001")) is None  # another account
+    assert list(ig._tabs) == ["1"] and list(ig._tab_locks) == ["1"]
+
+
+def test_reel_play_count_without_relay_id_reads_the_tab_page(reels_tab):
+    """A logged-in item's user.id is the pk: the /<handle>/reels/ page gives the first 12 and the Relay id."""
+    assert _play(_reel({"code": REEL_CODE, "pk": REEL_PK}, id=JANE_PK)) == 1070323
+    assert reels_tab.pages == ["jane/reels"]
+    assert [v["after"] for _, v in reels_tab.queries] == ["c12", "c162"]
+    assert all(v["id"] == TAB["user_id"] for _, v in reels_tab.queries)
+
+
+def test_retired_doc_id_pages_with_the_tabs_own_query(reels_tab, caplog):
+    reels_tab.retired = True
+    code = TAB["nodes"][30]["code"]
+    with caplog.at_level("WARNING", logger="socialscrape.instagram"):
+        assert _play(_reel(TAB["nodes"][30])) == TAB_PLAYS[code]
+    assert "retired" in caplog.text and ig.REELS_TAB_DOC in ig._retired_docs
+    # the page's preloader names the tab's own query, which takes `after` but returns 12 a request
+    root_doc = re.search(r'"queryID":"([0-9]+)"', TAB["page_preloader"]).group(1)
+    assert reels_tab.pages == ["jane/reels"]
+    assert reels_tab.queries[1:] == [(root_doc, {"after": "c12", "first": 12, "username": "jane"}),
+                                     (root_doc, {"after": "c24", "first": 12, "username": "jane"})]
+    # a retired doc_id isn't asked again
+    reels_tab.queries.clear()
+    assert _play(_reel(TAB["nodes"][40])) == TAB["nodes"][40]["play_count"]
+    assert [doc for doc, _ in reels_tab.queries] == [root_doc]
+
+
+def test_reel_play_count_failures_leave_it_unknown(reels_tab):
+    url = f"{ig.WEB}/api/graphql"
+    reels_tab.answers = [(200, url, "<!DOCTYPE html><html></html>")]
+    assert _play(_reel({"code": REEL_CODE, "pk": REEL_PK})) is None and len(reels_tab.queries) == 1
+    # a 5xx on a 150-reel page is asked once more for 50, and paging goes on
+    ig._tabs.clear()
+    reels_tab.queries.clear()
+    first = {"edges": [{"node": n} for n in TAB["nodes"][:50]],
+             "page_info": {"end_cursor": "c50", "has_next_page": True}}
+    reels_tab.answers = [(200, url, json.dumps({"data": {"node": {"polaris_clips_connection": first}}})),
+                         (500, url, "")]
+    assert _play(_reel(TAB["nodes"][120])) == TAB["nodes"][120]["play_count"]
+    assert [v["first"] for _, v in reels_tab.queries] == [50, 150, 50, 150]
+    # an id Instagram doesn't know, and a reel the tab lists without a count
+    ig._tabs.clear()
+    assert _play(_reel({"code": REEL_CODE, "pk": REEL_PK}, id="17841400000000001", pk="1")) is None
+    reels_tab.answers = [(200, url, json.dumps({"data": {"node": {"polaris_clips_connection": {
+        "edges": [{"node": {"code": REEL_CODE, "pk": REEL_PK}}], "page_info": {"has_next_page": False}}}}}))]
+    assert _play(_reel({"code": REEL_CODE, "pk": REEL_PK}, pk="2")) is None
+    # no owner handle or shortcode to look it up by: no request
+    reels_tab.queries.clear()
+    assert _play({**LOGGED_OUT_REEL, "user": {}}) is None and _play({**LOGGED_OUT_REEL, "code": None}) is None
+    assert reels_tab.queries == []
+
+
+def test_needs_tab_plays():
+    assert ig.needs_tab_plays(LOGGED_OUT_REEL)
+    assert not ig.needs_tab_plays({**LOGGED_OUT_REEL, "ig_play_count": 7})  # a logged-in item has its own
+    assert not ig.needs_tab_plays({**LOGGED_OUT_REEL, "play_count": 7})
+    assert not ig.needs_tab_plays({**LOGGED_OUT_REEL, "product_type": "feed"})  # feed videos aren't on the tab
+    assert not ig.needs_tab_plays({**LOGGED_OUT_REEL, "product_type": "igtv"})
+    assert not ig.needs_tab_plays(CAROUSEL) and not ig.needs_tab_plays({**LOGGED_OUT_REEL, "media_type": 1})
+
+
+def test_post_route_fills_reel_play_count(client, stubbed, reels_tab, monkeypatch):
+    async def fetch_post(url):
+        return (copy.deepcopy(CAROUSEL), None) if CAROUSEL_CODE in url else (copy.deepcopy(LOGGED_OUT_REEL), REEL_MEDIA)
+
+    monkeypatch.setattr(ig, "fetch_post", fetch_post)
+    for params in ({}, {"include_play_count": "true"}):
+        body = client.get("/v1/instagram/post", params={"url": REEL_CODE, **params}).json()
+        m = body["data"]["xdt_shortcode_media"]
+        assert m["video_play_count"] == 1070323 and "video_view_count" not in m  # no 3-second count is invented
+        assert_conforms(body, "/v1/instagram/post", min_coverage=0.5)
+    assert len(reels_tab.queries) == 3  # the second request reused the tab
+    m = client.get("/v1/instagram/post", params={"url": REEL_CODE, "include_play_count": "false"}).json()
+    assert "video_play_count" not in m["data"]["xdt_shortcode_media"] and len(reels_tab.queries) == 3
+    # a carousel isn't on the tab, and a logged-in item keeps its own Instagram-only count
+    assert "video_play_count" not in client.get("/v1/instagram/post", params={"url": CAROUSEL_CODE}).json()[
+        "data"]["xdt_shortcode_media"]
+    monkeypatch.setattr(ig, "fetch_post", lambda url: _async(({**REEL, "play_count": 10, "ig_play_count": 7}, None)))
+    assert client.get("/v1/instagram/post", params={"url": REEL_CODE}).json()["data"]["xdt_shortcode_media"][
+        "video_play_count"] == 7
+    assert len(reels_tab.queries) == 3
+    # a tab Instagram refuses leaves the count out; the post is still answered
+    ig._tabs.clear()
+    reels_tab.answers = [(429, f"{ig.WEB}/api/graphql", "")]
+    monkeypatch.setattr(ig, "fetch_post", fetch_post)
+    r = client.get("/v1/instagram/post", params={"url": REEL_CODE})
+    assert r.status_code == 200 and "video_play_count" not in r.json()["data"]["xdt_shortcode_media"]
 
 
 # --- live (anonymous, shared IP: one request per URL, spaced out) -----------------------------
