@@ -1403,6 +1403,22 @@ def test_missing_whisper_backend_is_reported(env, monkeypatch):
                      "transcription_disabled")
 
 
+def test_faster_whisper_decodes_audio_with_the_installed_pyav(tmp_path):
+    # faster-whisper 1.2.1 opens every file with av.open(metadata_errors=...), which PyAV 19 removed: each
+    # transcription was a 500 transcription_failed in the image (pyproject's whisper extra caps av).
+    import struct
+    import wave
+
+    audio = pytest.importorskip("faster_whisper.audio")
+    path = tmp_path / "silence.wav"
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(16000)
+        out.writeframes(struct.pack("<h", 0) * 1600)
+    assert len(audio.decode_audio(str(path))) == 1600
+
+
 def test_whisper_failure_is_an_envelope(env, monkeypatch):
     import asyncio
 
