@@ -7,7 +7,7 @@
 
 A self-hosted, [ScrapeCreators](https://docs.scrapecreators.com)-compatible API for **YouTube, TikTok, Instagram, and the Facebook, TikTok, and Google ad libraries**, built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
-It uses ScrapeCreators' paths, query parameters, `x-api-key` header and response shapes, so most existing clients only need a new base URL. Each endpoint either returns real data from yt-dlp or answers `501` with the reason it can't. **51 of 74** cataloged endpoints are implemented, including all 10 ad-library operations (12 HTTP operations when the two Facebook POST variants are counted).
+It uses ScrapeCreators' paths, query parameters, `x-api-key` header and response shapes, so most existing clients only need a new base URL. Each endpoint either returns real data from yt-dlp or answers `501` with the reason it can't. **53 of 74** cataloged endpoints are implemented, including all 10 ad-library operations (12 HTTP operations when the two Facebook POST variants are counted).
 
 ## Quick start
 
