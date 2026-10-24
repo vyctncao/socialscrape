@@ -1,11 +1,13 @@
+import io
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from yt_dlp.extractor.tiktok import TikTokBaseIE
-from yt_dlp.networking import Request
-from yt_dlp.networking.exceptions import ProxyError
+from yt_dlp.networking import Request, Response
+from yt_dlp.networking.exceptions import HTTPError, ProxyError
 from yt_dlp.utils import ExtractorError
 
 from socialscrape.catalog import CATALOG
@@ -29,6 +31,20 @@ COLLECTION = "https://www.tiktok.com/@kibblemaster808/collection/Want-to-go-7665
 MISSING_COLLECTION = "https://www.tiktok.com/@kibblemaster808/collection/x-7000000000000000001"
 
 TT_PATHS = [e["path"] for e in CATALOG if e["path"].split("/")[2] == "tiktok"]
+
+# Recorded TikTok answers (tests/fixtures/tiktok): item_list.json is @stoolpresidente's creator item_list first page
+# (3 of its 15 posts, video trimmed), embed_profile.html its /embed/@stoolpresidente page (the Frontity state, 3 of
+# 10 posts), both 2026-10-24. waf_challenge.html is SlardarWAF's "Please wait..." page as yt-dlp's solver reads it
+# (built: a server IP's copy wasn't recorded), solvable. _BLOCK_PAGE is Akamai's denial page, which TikTok's CDN
+# (X-Akamai-Request-ID) sends a blocked client.
+FIXTURES = Path(__file__).parent / "fixtures" / "tiktok"
+_FEED = json.loads((FIXTURES / "item_list.json").read_text())
+_EMBED_PAGE = (FIXTURES / "embed_profile.html").read_text()
+_WAF_PAGE = (FIXTURES / "waf_challenge.html").read_text()
+_BLOCK_PAGE = ('<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don\'t have '
+               'permission to access "http&#58;&#47;&#47;www&#46;tiktok&#46;com&#47;api&#47;creator&#47;item&#95;'
+               'list&#47;" on this server.<P>\nReference&#32;&#35;18&#46;5f3c1002&#46;1792816100&#46;2c1b6a3\n'
+               '</BODY>\n</HTML>\n')
 
 
 def ok(client, path, **params):
@@ -527,14 +543,24 @@ def test_feed_page_last_page_has_no_cursor():
     assert [it["id"] for it in items] == ["1700000001", "1700000000"] and cursor is None
 
 
-def test_feed_page_status_codes():
-    # tiktok-status-10102: item_list's statusCode 10102 (USER_NOT_LOGIN) was a 500; a retry soon after works
-    for status, error in ((10102, UpstreamBlocked), (10000, UpstreamBlocked), (10222, Forbidden),
-                          (10221, NotFound), (10202, NotFound), (10201, UpstreamError), (12345, UpstreamError)):
-        feed = _FakeFeed([])
-        feed._download_json = lambda *args, **kwargs: {"statusCode": status, "status_code": status, "status_msg": ""}
+def test_feed_page_status_codes(monkeypatch):
+    # tiktok-status-10102: item_list's statusCode 10102 (USER_NOT_LOGIN) was a 500; a retry soon after works, so a
+    # refusal is asked again (twice) before it is a 503
+    monkeypatch.setattr(tiktok, "_RETRY_DELAY", 0)
+    for status, error, asks in ((10102, UpstreamBlocked, 3), (10000, UpstreamBlocked, 3), (10222, Forbidden, 1),
+                                (10221, NotFound, 1), (10202, NotFound, 1), (10201, UpstreamError, 1),
+                                (12345, UpstreamError, 1)):
+        feed, asked = _FakeFeed([]), []
+        feed._download_json = lambda *args, **kwargs: asked.append(1) or {
+            "statusCode": status, "status_code": status, "status_msg": ""}
         with pytest.raises(error):
             tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US")
+        assert len(asked) == asks, status
+    feed, answers = _FakeFeed([]), [{"statusCode": 10102}, {"statusCode": 0, "hasMorePrevious": False,
+                                                            "itemList": [{"id": "5", "createTime": 1_699_999_999}]}]
+    feed._download_json = lambda *args, **kwargs: answers.pop(0)
+    assert tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US") == ([{"id": "5", "createTime": 1_699_999_999}],
+                                                                           None)
 
 
 def test_offset():
@@ -673,7 +699,12 @@ def test_music_page_retries_an_empty_body(fake_ydl):
     assert tiktok._music_page(ydl, "555", 20)["aweme_list"] == [{"aweme_id": "1"}]
     assert [q["cursor"] for q in ie.queries] == [20, 20]
     ydl.ies["TikTokSound"] = _FakeSound(empty, empty)
-    with pytest.raises(ExtractorError):
+    with pytest.raises(UpstreamBlocked, match="an empty body instead of JSON, twice"):
+        tiktok._music_page(ydl, "555", 0)
+    # tiktok-discovery: a block page (not empty) was a 500 "Failed to parse JSON" on /v1/tiktok/profile/region
+    page = ExtractorError("Failed to parse JSON", cause=json.JSONDecodeError("Expecting value", _BLOCK_PAGE, 0))
+    ydl.ies["TikTokSound"] = _FakeSound(empty, page)
+    with pytest.raises(UpstreamBlocked, match=r'an HTML page \("Access Denied"\) instead of JSON'):
         tiktok._music_page(ydl, "555", 0)
     ydl.ies["TikTokSound"] = ie = _FakeSound(ExtractorError("HTTP Error 403"))
     with pytest.raises(ExtractorError):
@@ -873,8 +904,10 @@ def test_profile_videos_route(client, fake_ydl, monkeypatch):
     assert fetched == ["someone"]  # the second page reuses the cached secUid
     ydl.ies["TikTokUser"].times = []
     ydl.ies["TikTokUser"]._download_json = lambda *args, **kwargs: {"statusCode": 10102, "status_code": 10102}
+    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: [])  # the embed page lists nothing either
     r = client.get("/v3/tiktok/profile/videos", params={"handle": "someone"})
     assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+    assert r.json()["message"] == "TikTok refused the anonymous request (status 10102); retry later"
 
 
 def test_profile_region_route(client, fake_ydl, monkeypatch):
@@ -1171,11 +1204,23 @@ def test_user_live_route_solves_the_live_pages_js_challenge(client, fake_ydl, mo
     assert ie.fetched == ["https://www.tiktok.com/@weathernewslive/live"] * 2
     assert ie.solved == 1 and ie.cookiejar.cookies == {"_waftokenid"}  # the challenge cookies don't outlive it
 
+    # tiktok-discovery: a live page that stays a challenge was a 503; the profile page and room/info still answer
     ydl.ies["TikTokLive"] = live = _FakeLive({"weathernewslive": _live_state("weathernewslive", 2)}, waf=1,
-                                             stays=True)
+                                             stays=True, room={"data": {"status": 2}})
+    body = ok(client, "/v1/tiktok/user/live", handle="weathernewslive")
+    assert body["is_live"] is True and "liveRoom" not in body and body["liveRoomUserInfo"]["roomId"] == "77"
+    assert live.fetched == ["https://www.tiktok.com/@weathernewslive/live"] * 2 + [tiktok._ROOM_INFO]
+    assert live.cookiejar.cookies == set()
+
+    def blocked(ydl, name):
+        raise UpstreamBlocked("TikTok kept answering with its JS challenge (a bot check); retry later")
+
+    monkeypatch.setattr(tiktok, "_user_page", blocked)  # the profile page too: then it is a 503
+    ydl.ies["TikTokLive"] = live = _FakeLive({}, waf=1, stays=True, room={"data": {"status": 2}})
     r = client.get("/v1/tiktok/user/live", params={"handle": "weathernewslive"})
     assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
-    assert tiktok._ROOM_INFO not in live.fetched and live.cookiejar.cookies == set()
+    assert tiktok._ROOM_INFO not in live.fetched
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: _user_info(name, roomId="77"))
 
     # tiktok-live-bad-handle-503: a page with universal data but no SIGI state (what a handle TikTok's router
     # rejects gets, e.g. a-b) is no challenge: the profile page and room/info answer, as without the challenge
@@ -1384,6 +1429,216 @@ def test_routes_answer_responses_of_another_shape(client, fake_ydl, monkeypatch)
     ydl.ies["TikTokLive"] = _FakeLive({"someone": state})
     body = ok(client, "/v1/tiktok/user/live", handle="someone")
     assert body["is_live"] is True and "liveRoom" not in body and "followerCount" not in body["liveRoomUserInfo"]
+
+
+# --- offline: throttled and bot-checked TikTok answers (tiktok-discovery) ----------------------------------------
+# Production (a server IP, every platform at once) got /v3/tiktok/profile/videos, /v1/tiktok/collection/videos and
+# /v1/tiktok/profile/region as 500 "Failed to parse JSON" while the same calls pass from a residential IP: TikTok's
+# /api/ endpoints answered with something other than JSON while its pages still loaded. These feed those answers to
+# yt-dlp's real extractors (only _download_webpage_handle is replaced) through the real with_ydl.
+
+def _post_page(item: dict) -> str:
+    """A TikTok post page as TikTokIE._extract_web_data_and_status reads it: just its universal data."""
+    data = {"__DEFAULT_SCOPE__": {"webapp.video-detail": {"statusCode": 0, "itemInfo": {"itemStruct": item}}}}
+    return f'<html><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">{json.dumps(data)}</script>'
+
+
+def _http(status: int) -> ExtractorError:
+    response = Response(io.BytesIO(b""), "https://www.tiktok.com/api/x", {}, status=status)
+    return ExtractorError(f"Unable to download JSON metadata: HTTP Error {status}", cause=HTTPError(response))
+
+
+class _Net:
+    """TikTok as yt-dlp's TikTok extractors download it: `routes` maps a URL prefix to its answers, given in turn
+    (the last one repeats); an exception is raised. `asked` records each URL (sans query) with the names of the
+    cookies yt-dlp would send to it."""
+
+    def __init__(self, monkeypatch, routes: dict[str, list]):
+        self.routes, self.asked = {k: list(v) for k, v in routes.items()}, []
+
+        def download(ie, url, video_id, note=None, errnote=None, fatal=True, encoding=None, data=None, headers={},
+                     query={}, expected_status=None, impersonate=None, require_impersonation=False):
+            self.asked.append((url, set(ie._get_cookies(url))))
+            answers = next(v for k, v in self.routes.items() if url.startswith(k))
+            answer = answers.pop(0) if len(answers) > 1 else answers[0]
+            if isinstance(answer, Exception):
+                raise answer
+            return answer, SimpleNamespace(url=url, extensions={}, headers={}, status=200)
+
+        monkeypatch.setattr(TikTokBaseIE, "_download_webpage_handle", download)
+
+    def urls(self, prefix: str = "") -> list[str]:
+        return [url for url, _ in self.asked if url.startswith(prefix)]
+
+
+_ITEM_LIST = "https://www.tiktok.com/api/creator/item_list/"
+_COLLECTION_API = "https://www.tiktok.com/api/collection/item_list/"
+_STOOL_EMBED = "https://www.tiktok.com/embed/@stoolpresidente"
+_STOOL_POSTS = {f"https://www.tiktok.com/@stoolpresidente/video/{it['id']}": [_post_page(it)]
+                for it in _FEED["itemList"]}
+
+
+@pytest.fixture
+def real_ydl(monkeypatch):
+    """The real with_ydl and yt-dlp extractors; no waiting between asks; a stand-in user page for @stoolpresidente."""
+    monkeypatch.setattr(tiktok, "_RETRY_DELAY", 0)
+    monkeypatch.setattr(tiktok, "_profiles", {})
+    author = _FEED["itemList"][0]["author"]
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: {
+        "user": {"id": author["id"], "uniqueId": author["uniqueId"], "secUid": author["secUid"],
+                 "nickname": author["nickname"]}, "stats": {"videoCount": 2577}, "statusCode": 0})
+
+
+def test_web_api_gets_past_throttled_and_bot_checked_answers(monkeypatch):
+    import yt_dlp
+    from socialscrape.ytdlp import base_options
+
+    slept = []
+    monkeypatch.setattr(tiktok.time, "sleep", slept.append)
+    ok_json, refused = json.dumps({"statusCode": 0, "itemList": []}), json.dumps({"statusCode": 10102})
+
+    def ask(*answers):
+        ask.net = _Net(monkeypatch, {_ITEM_LIST: list(answers)})
+        slept.clear()
+        with yt_dlp.YoutubeDL(base_options("tiktok")) as ydl:
+            ie = ydl.get_info_extractor("TikTokUser")
+            try:
+                return tiktok._web_api(ie, _ITEM_LIST, "h", "Downloading video list", {"secUid": "s"}, "video list")
+            finally:  # the challenge's cookies don't outlive the ask they were solved for
+                assert not {"_wafchallengeid", "waforiginalreid"} & {c.name for c in ie.cookiejar}
+
+    # throttled (empty), then JSON: asked again after 1.5 s
+    assert ask("", ok_json) == {"statusCode": 0, "itemList": []} and slept == [1.5]
+    # SlardarWAF's challenge in place of JSON: solved by yt-dlp, asked again with its cookies, which are then dropped
+    assert ask(_WAF_PAGE, ok_json)["statusCode"] == 0 and slept == []
+    assert [cookies for _, cookies in ask.net.asked] == [set(), {"_wafchallengeid", "waforiginalreid"}]
+    # a refusal of the anonymous request is asked again; the last one is TikTok's answer for _status_error
+    assert ask(refused, ok_json)["statusCode"] == 0 and slept == [1.5]
+    assert ask(refused)["statusCode"] == 10102 and slept == [1.5, 3.0] and len(ask.net.asked) == 3
+    # what never turns into JSON is a 503 naming what came back (3 asks, backing off), never a 500
+    for answers, what in (([""], "an empty body"), ([_BLOCK_PAGE], 'an HTML page ("Access Denied")'),
+                          (["{\"itemList\": [{\"id\""], "a 19-character body"),
+                          ([_WAF_PAGE], 'its JS challenge page, then an HTML page ("Please wait...")'),
+                          ([_http(429)], "HTTP 429"), ([_http(503)], "HTTP 503")):
+        with pytest.raises(UpstreamBlocked) as exc:
+            ask(*answers)
+        assert f"TikTok answered the video list request with {what} instead of JSON, 3 times" in exc.value.message
+        assert slept == [1.5, 3.0] and len(ask.net.urls(_ITEM_LIST)) == 3 * (2 if answers == [_WAF_PAGE] else 1)
+    # other HTTP errors are yt-dlp's (with_ydl translates them), asked once
+    with pytest.raises(ExtractorError, match="HTTP Error 404"):
+        ask(_http(404))
+    assert len(ask.net.asked) == 1 and slept == []
+
+
+def test_profile_videos_from_a_bot_checked_item_list(client, real_ydl, monkeypatch):
+    # tiktok-discovery: the challenge in place of item_list's JSON is solved, and the recorded page served
+    net = _Net(monkeypatch, {_ITEM_LIST: [_WAF_PAGE, json.dumps(_FEED)]})
+    body = ok(client, "/v3/tiktok/profile/videos", handle="stoolpresidente", sort_by="latest")
+    assert [a["aweme_id"] for a in body["aweme_list"]] == [it["id"] for it in _FEED["itemList"]]
+    assert body["aweme_list"][0]["statistics"]["digg_count"] == 4958 and body["has_more"] is True
+    assert net.urls() == [_ITEM_LIST, _ITEM_LIST]
+    assert_conforms(body, "/v3/tiktok/profile/videos")
+
+
+def test_profile_videos_fall_back_to_the_embed_page(client, real_ydl, monkeypatch):
+    # tiktok-discovery: item_list still not JSON after 3 asks: the embed page's posts, read from their own pages
+    net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: [_EMBED_PAGE], **_STOOL_POSTS})
+    body = ok(client, "/v3/tiktok/profile/videos", handle="stoolpresidente", sort_by="latest")
+    feed = [tiktok.M.aweme(it) for it in _FEED["itemList"]]
+    assert body["aweme_list"] == feed  # the post objects item_list itself serves: dates, likes, comments
+    assert [(a["create_time"], a["statistics"]["play_count"], a["statistics"]["comment_count"])
+            for a in body["aweme_list"]][0] == (1792725755, 86800, 467)
+    assert body["has_more"] is True and body["max_cursor"] == 1792620444 * 1000 - 1
+    assert net.urls() == [_ITEM_LIST] * 3 + [_STOOL_EMBED, *_STOOL_POSTS]
+    assert_conforms(body, "/v3/tiktok/profile/videos")
+
+    # the next page asks item_list again; the embed has nothing older than the cursor (its posts aren't read again)
+    net = _Net(monkeypatch, {_ITEM_LIST: [""], _STOOL_EMBED: [_EMBED_PAGE], **_STOOL_POSTS})
+    r = client.get("/v3/tiktok/profile/videos", params={"handle": "stoolpresidente",
+                                                        "max_cursor": str(body["max_cursor"])})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+    assert "video list request with an empty body instead of JSON, 3 times" in r.json()["message"]
+    assert net.urls() == [_ITEM_LIST] * 3 + [_STOOL_EMBED, list(_STOOL_POSTS)[-1]]  # uploaded before the cursor
+
+    # the embed page blocked too: item_list's 503, not a 500
+    net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: [_WAF_PAGE]})
+    r = client.get("/v3/tiktok/profile/videos", params={"handle": "stoolpresidente"})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+    assert 'with an HTML page ("Access Denied") instead of JSON' in r.json()["message"]
+
+
+def test_embed_feed_page_leaves_a_pinned_post_for_item_lists_date_order(monkeypatch):
+    now = 1_792_800_000
+    posts = {"1": now - 400 * 86_400, "2": now - 60, "3": now - 120, "4": now - 7200}  # "1": pinned, a year old
+    gone = NotFound("TikTok post not available (status 10204)")
+    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: list(posts) + ["5"])
+
+    def load_post(ydl, url):
+        aweme_id = url.rsplit("/", 1)[1]
+        if aweme_id == "5":
+            raise gone  # removed since the embed listed it: skipped
+        return None, {"id": aweme_id, "createTime": posts[aweme_id]}
+
+    monkeypatch.setattr(tiktok, "_load_post", load_post)
+    items, cursor = tiktok._embed_feed_page(None, "h", now * 1000, 50)
+    assert [it["id"] for it in items] == ["2", "3", "4"] and cursor == (now - 7200) * 1000 - 1
+    assert tiktok._embed_feed_page(None, "h", now * 1000, 3)[1] is None  # every post served: the last page
+    assert tiktok._embed_feed_page(None, "h", now * 1000, 4)[1] == cursor  # the pinned one is still to come
+    items, _ = tiktok._embed_feed_page(None, "h", (now - 100) * 1000, None)
+    assert [it["id"] for it in items] == ["3", "4"]
+    assert tiktok._embed_feed_page(None, "h", (now - 400 * 86_400 - 1) * 1000, None) is None
+
+
+def test_profile_region_from_a_blocked_item_list(client, real_ydl, monkeypatch):
+    # tiktok-discovery: /v1/tiktok/profile/region was a 500 "Failed to parse JSON"; also at /v1/tiktok/profile-region
+    looked_up = []
+
+    def music_page(ydl, mid, cursor):
+        looked_up.append(mid)
+        return {"aweme_list": [{"aweme_id": "1", "author": {"uid": _FEED["itemList"][0]["author"]["id"],
+                                                            "region": "US"}}]}
+
+    monkeypatch.setattr(tiktok, "_music_page", music_page)
+    net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: [_EMBED_PAGE], **_STOOL_POSTS})
+    r = client.get("/v1/tiktok/profile-region", params={"handle": "stoolpresidente"}, follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/v1/tiktok/profile/region?handle=stoolpresidente"
+    body = ok(client, "/v1/tiktok/profile-region", handle="stoolpresidente")
+    assert (body["handle"], body["region"]) == ("stoolpresidente", "US")
+    assert looked_up == [_FEED["itemList"][0]["music"]["id"]]
+    assert net.urls() == [_ITEM_LIST] * 3 + [_STOOL_EMBED, *list(_STOOL_POSTS)[:2]]  # read until two use its sound
+    assert_conforms(body, "/v1/tiktok/profile/region")
+
+
+def test_collection_from_throttled_and_bot_checked_answers(client, real_ydl, monkeypatch):
+    # tiktok-discovery: /v1/tiktok/collection/videos was a 500 "Failed to parse JSON"
+    page = json.dumps({"statusCode": 0, "hasMore": True, "cursor": 30, "itemList": _FEED["itemList"][:1]})
+    net = _Net(monkeypatch, {_COLLECTION_API: ["", _WAF_PAGE, page]})
+    body = ok(client, "/v1/tiktok/collection/videos", url=COLLECTION)
+    assert [v["id"] for v in body["videos"]] == [_FEED["itemList"][0]["id"]] and body["max_cursor"] == "30"
+    assert len(net.urls(_COLLECTION_API)) == 3
+    assert_conforms(body, "/v1/tiktok/collection/videos")
+    for answer in ("", _BLOCK_PAGE, "<html><body>captcha</body></html>"):
+        _Net(monkeypatch, {_COLLECTION_API: [answer]})
+        r = client.get("/v1/tiktok/collection/videos", params={"url": COLLECTION})
+        assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+        assert "collection's video list request" in r.json()["message"]
+
+
+def test_user_live_answers_from_the_profile_when_the_live_page_is_blocked(client, real_ydl, monkeypatch):
+    # tiktok-discovery: /v1/tiktok/user/live was a 503 "bot check" while the profile page and room/info still answer
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: _user_info(name, roomId="77"))
+    room = "https://webcast.tiktok.com/webcast/room/info"
+    net = _Net(monkeypatch, {"https://www.tiktok.com/@someone/live": [_WAF_PAGE],
+                             room: [_BLOCK_PAGE, json.dumps({"data": {"status": 2}})]})
+    body = ok(client, "/v1/tiktok/user/live", handle="someone")
+    assert body["is_live"] is True and "liveRoom" not in body and body["liveRoomUserInfo"]["uniqueId"] == "someone"
+    assert net.urls() == ["https://www.tiktok.com/@someone/live"] * 2 + [room] * 2
+    assert_conforms(body, "/v1/tiktok/user/live")
+    # room/info never answering is a 503, not a guessed is_live: false
+    _Net(monkeypatch, {"https://www.tiktok.com/@someone/live": [_WAF_PAGE], room: [_BLOCK_PAGE]})
+    r = client.get("/v1/tiktok/user/live", params={"handle": "someone"})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+    assert "live room info request" in r.json()["message"]
 
 
 # --- live -------------------------------------------------------------------------
@@ -1635,6 +1890,63 @@ def test_popular_creators_ranks_a_regional_recommended_feed(client, monkeypatch)
     assert [creator["user_id"] for creator in body["creators"]] == ["10", "20"]
     assert body["creators"][0]["items"][0]["item_id"] == "1"
     assert body["pagination"] == {"has_more": False, "page": 1, "size": 2, "total": 2}
+
+
+def test_popular_creators_need_a_signed_in_feed(client, monkeypatch):
+    # tiktok-discovery: without a feed source this was a 500 "TikTok's regional recommended feed is unavailable".
+    # TikTok serves the regional feed only to a signed-in account (anonymous web/app feeds answer empty, Creative
+    # Center's chart answers 40101 "no permission"), so it is a 501 setup error, as /v1/tiktok/get-trending-feed is
+    from socialscrape import fallback
+    from socialscrape.platforms import tiktok_private
+
+    asked = []
+
+    async def ask_path(app, path, params):
+        asked.append(path)
+        return None, None, "disabled"
+
+    monkeypatch.setattr(fallback, "ask_path", ask_path)
+    r = client.get("/v1/tiktok/creators/popular", params={"creatorCountry": "US"})
+    assert (r.status_code, r.json()["error"]) == (501, "platform_auth_required"), r.text
+    assert "TikTok account cookies" in r.json()["message"] and asked == ["/v1/tiktok/get-trending-feed"]
+    r = client.get("/v1/tiktok/creators/popular", headers={fallback.HEADER: "off"})
+    assert (r.status_code, r.json()["error"]) == (501, "platform_auth_required") and len(asked) == 1  # never asked
+    row = next(r for r in client.get("/meta/coverage").json()["endpoints"]
+               if r["path"] == "/v1/tiktok/creators/popular")
+    assert row["status"] == "needs_setup"
+    for bad in ("1k-10k", "10M", "x"):
+        r = client.get("/v1/tiktok/creators/popular", params={"followerCount": bad})
+        assert (r.status_code, r.json()["error"]) == (400, "bad_request"), bad
+    assert len(asked) == 1  # refused before any feed is asked for
+
+    # with saved TikTok cookies the account's own feed is read (here: as get-trending-feed returns it)
+    regions = []
+
+    async def trending(region, trim=None):
+        regions.append(region)
+        return {"aweme_list": [
+            {"aweme_id": str(i), "create_time": 1_792_000_000 + i, "url": f"https://www.tiktok.com/@{h}/video/{i}",
+             "author": {"uid": uid, "unique_id": h, "nickname": h.title()},
+             "statistics": {"play_count": views, "digg_count": likes}}
+            for i, (uid, h, views, likes) in enumerate([("1", "big", 1_000, 10), ("2", "mid", 9_000, 900),
+                                                        ("2", "mid", 1_000, 100), ("3", "gone", 50, 1)])]}
+
+    async def with_ydl(platform, fn, **opts):
+        handle = next((cell.cell_contents for cell in fn.__closure__ or () if isinstance(cell.cell_contents, str)), "")
+        if handle == "gone":
+            raise NotFound("TikTok user not found (status 10221)")
+        return {"stats": {"followerCount": {"big": 20_000_000, "mid": 5_000_000}[handle], "heartCount": 7}}
+
+    monkeypatch.setattr(tiktok_private, "trending", trending)
+    monkeypatch.setattr(tiktok, "with_ydl", with_ydl)
+    body = ok(client, "/v1/tiktok/creators/popular", creatorCountry="gb", followerCount="10M+")
+    assert regions == ["GB"] and [c["user_id"] for c in body["creators"]] == ["1"] and len(asked) == 1
+    body = ok(client, "/v1/tiktok/creators/popular", sortBy="avg_views")
+    assert [c["user_id"] for c in body["creators"]] == ["2", "1", "3"]  # 5000 mean views, 1000, 50
+    unknown = body["creators"][2]  # its profile didn't load: no counts rather than the sample's sums
+    assert "follower_cnt" not in unknown and "liked_cnt" not in unknown and unknown["items"][0]["vv"] == 50
+    assert ok(client, "/v1/tiktok/creators/popular", followerCount="1M-10M")["creators"][0]["user_id"] == "2"
+    assert_conforms(body, "/v1/tiktok/creators/popular")
 
 
 def test_user_live_retries_one_transient_block(client, monkeypatch):

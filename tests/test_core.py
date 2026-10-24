@@ -2178,6 +2178,7 @@ def test_stratton_method_and_legacy_route_compatibility(client, monkeypatch):
         "/v1/tiktok/followers?handle=nasa": "/v1/tiktok/user/followers?handle=nasa",
         "/v1/tiktok/profile/following?handle=nasa": "/v1/tiktok/user/following?handle=nasa",
         "/v1/tiktok/profile/audience-demographics?handle=nasa": "/v1/tiktok/user/audience?handle=nasa",
+        "/v1/tiktok/profile-region?handle=nasa": "/v1/tiktok/profile/region?handle=nasa",
     }
     for alias, canonical in aliases.items():
         response = client.get(alias, follow_redirects=False)
