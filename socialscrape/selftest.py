@@ -164,9 +164,10 @@ def tests() -> list[dict[str, Any]]:
     for row in coverage():
         preset = PRESETS[row["path"]]
         implemented = row["status"] == "implemented"
+        needs_setup = row["status"] == "needs_setup"
         out.append({
             "path": row["path"], "platform": row["platform"], "summary": row["summary"], "implemented": implemented,
-            "reason": None if implemented else row["notes"], "params": preset.params, "expect": list(preset.expect),
+            "needs_setup": needs_setup, "reason": None if implemented else row["notes"], "params": preset.params, "expect": list(preset.expect),
             "derive": [{"param": name, "source": source, "pick": pick}
                        for name, (source, pick) in preset.derive.items()],
             "note": preset.note,
@@ -182,14 +183,6 @@ def install_routes(app) -> None:
     @router.get("/portal/api/endpoint-tests")
     async def endpoint_tests(request: Request):
         _require(request)
-        fallback_status = fallback.describe(app)
-        rows = tests()
-        for row in rows:
-            row["operational"] = row["implemented"] or bool(
-                fallback_status and "unsupported" in fallback_status["triggers"]
-                and row["platform"] in fallback_status["platforms"]
-            )
-            row["provider"] = "local" if row["implemented"] else "scrapecreators" if row["operational"] else None
-        return {"fallback": fallback_status, "tests": rows}
+        return {"fallback": fallback.describe(app), "tests": tests()}
 
     app.include_router(router)

@@ -790,27 +790,4 @@ async def popular_creators(
 _NO_EXTRACTOR = "yt-dlp has no TikTok extractor that calls"
 
 UNSUPPORTED = {
-    "/v1/tiktok/video/comments": "yt-dlp's TikTok extractors don't extract comments; TikTok's "
-                                 "/api/comment/list/ is never called by yt-dlp.",
-    "/v1/tiktok/video/comment/replies": "yt-dlp's TikTok extractors don't extract comments or replies; "
-                                        "/api/comment/list/reply/ is never called by yt-dlp.",
-    "/v1/tiktok/user/audience": "Audience demographics are creator-analytics data; " + _NO_EXTRACTOR + " it.",
-    "/v1/tiktok/user/following": "Following lists come from /api/user/list/; " + _NO_EXTRACTOR + " it.",
-    "/v1/tiktok/user/followers": "Follower lists come from /api/user/list/; " + _NO_EXTRACTOR + " it.",
-    "/v1/tiktok/search/suggestions": "yt-dlp has no TikTok search extractor (search suggestions are never "
-                                     "fetched).",
-    "/v1/tiktok/search/hashtag": "yt-dlp has no TikTok search; TikTokTagIE (marked broken) lists a tag's feed via "
-                                 "the app API challenge/aweme, which returned an empty body anonymously "
-                                 "(probed 2026-10-13).",
-    "/v1/tiktok/search/keyword": "yt-dlp has no TikTok search extractor (/api/search/item/ is never called).",
-    "/v1/tiktok/search/top": "yt-dlp has no TikTok search extractor (/api/search/general/ is never called).",
-    "/v1/tiktok/get-trending-feed": "The For You/trending feed (/api/recommend/item_list/) is never called by "
-                                    "yt-dlp.",
-    "/v1/tiktok/shop/search": "TikTok Shop is not touched by any yt-dlp extractor.",
-    "/v1/tiktok/shop/products": "TikTok Shop is not touched by any yt-dlp extractor.",
-    "/v1/tiktok/product": "TikTok Shop product pages are not touched by any yt-dlp extractor.",
-    "/v1/tiktok/shop/product/reviews": "TikTok Shop reviews are not touched by any yt-dlp extractor.",
-    "/v1/tiktok/user/showcase": "The profile Shop showcase is TikTok Shop data; " + _NO_EXTRACTOR + " it.",
-    "/v1/tiktok/ad-library/search": "TikTok's Ad Library (library.tiktok.com) has no yt-dlp extractor.",
-    "/v1/tiktok/ad-library/ad": "TikTok's Ad Library (library.tiktok.com) has no yt-dlp extractor.",
 }

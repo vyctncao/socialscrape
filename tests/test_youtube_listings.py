@@ -1738,3 +1738,12 @@ def test_channel_about_parses_numeric_video_count_from_text():
         "metadata": {"channelMetadataRenderer": {"externalId": "UCx", "title": "X"}}}
     body = parse.channel_about(data)
     assert body["videoCount"] == 1009 and body["videoCountText"] == "1,009 videos"
+
+
+def test_trending_shorts_composes_current_short_search(client, monkeypatch):
+    from socialscrape.platforms import youtube_listings
+    async def search(*args, **kwargs):
+        assert args == ("shorts",) and kwargs == {"sortBy": "popular", "kind": "shorts"}
+        return {"shorts": [{"id": "abc", "title": "Short"}], "continuationToken": "next"}
+    monkeypatch.setattr(youtube_listings, "youtube_search", search)
+    assert client.get("/v1/youtube/shorts/trending").json()["shorts"] == [{"id": "abc", "title": "Short"}]

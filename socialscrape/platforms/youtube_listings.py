@@ -733,6 +733,14 @@ async def youtube_search(query: str = Query(...),
                                                 x=client if client != "web" else None, s=seen.dump())}
 
 
+@sc_get(router, "/v1/youtube/shorts/trending", source=f"{_SRC} (current Shorts search discovery)",
+        notes="YouTube retired its official Trending page. This returns current popular Shorts discovered by "
+              "YouTube search, not an official global trending chart.")
+async def youtube_trending_shorts() -> dict[str, Any]:
+    result = await youtube_search("shorts", sortBy="popular", kind="shorts")
+    return {"shorts": result.get("shorts", [])}
+
+
 @sc_get(router, "/v1/youtube/search/hashtag", source=f"{_SRC} (/hashtag/<tag> browse tabs + continuations)",
         notes="The tag is matched in YouTube's canonical form (NFKC short of the superscripts, Roman numerals, "
               "Thai SARA AM and Hangul compatibility jamo YouTube keeps, lower case, final sigma as σ, ZWNJ/ZWJ "

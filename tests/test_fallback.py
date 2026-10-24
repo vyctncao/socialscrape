@@ -462,10 +462,10 @@ def test_owner_settings_are_encrypted_never_returned_and_apply_at_once(portal, u
 def test_history_and_usage_mark_answers_scrapecreators_served(portal):
     owner, _, _ = portal()
     owner.get(UNSUPPORTED, params={"url": "x"})
-    owner.get("/v1/youtube/shorts/trending")  # served too: every 501 falls back by default
+    owner.get("/v1/youtube/shorts/trending")  # direct local route
     history = owner.get("/portal/api/history").json()["requests"]
-    assert [bool(row["fallback"]) for row in history] == [True, True]
-    assert owner.get("/portal/api/usage").json()["fallback_count"] == 2
+    assert [bool(row["fallback"]) for row in history] == [False, True]
+    assert owner.get("/portal/api/usage").json()["fallback_count"] == 1
 
 
 @pytest.mark.parametrize("body", [

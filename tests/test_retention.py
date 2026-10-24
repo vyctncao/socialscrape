@@ -86,5 +86,6 @@ def test_a_failed_history_write_still_answers_the_request(app_env, monkeypatch):
         raise sqlite3.OperationalError("database or disk is full")
 
     monkeypatch.setattr(PortalStore, "record_request", disk_full)
-    response = TestClient(create_app()).get("/v1/youtube/shorts/trending", headers={"x-api-key": "test-key"})
-    assert calls and response.status_code == 501 and response.json()["error"] == "not_supported"
+    response = TestClient(create_app()).get("/v1/tiktok/video/comments", params={"url": "x"},
+                                                 headers={"x-api-key": "test-key"})
+    assert calls and response.status_code == 501 and response.json()["error"] == "platform_auth_required"

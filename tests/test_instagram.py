@@ -1313,12 +1313,8 @@ def test_instagram_catalog_paths_are_routed(client):
         assert path in paths, path
         row = rows[path]
         assert row["notes"], path
-        if row["status"] == "implemented":
-            assert row["source"], path
-        else:
-            assert path in ig.UNSUPPORTED, path
-            r = client.get(path)
-            assert r.status_code == 501 and r.json()["error"] == "not_supported", path
+        assert row["status"] in ("implemented", "needs_setup") and row["source"], path
+        assert path not in ig.UNSUPPORTED, path
 
 
 # --- live (anonymous, shared IP: one request per URL, spaced out) -----------------------------
@@ -1521,3 +1517,23 @@ def test_feed_mappers_expose_normalized_thumbnail_and_date_aliases():
     item = ig.map_user_posts(user)["items"][0]
     assert item["thumbnail_url"] == item["display_uri"] == "https://img"
     assert item["taken_at"] == item["taken_at_timestamp"] == 1700000000
+
+
+def test_private_instagram_routes_need_a_saved_account(client):
+    requests = [
+        ("/v1/instagram/basic-profile", {"userId": "1"}),
+        ("/v1/instagram/search/profiles", {"query": "nasa"}),
+        ("/v1/instagram/post/comment/replies", {"url": "https://www.instagram.com/reel/DLDXI0fylTC/", "comment_id": "1"}),
+        ("/v1/instagram/user/tagged-posts", {"user_id": "1"}),
+        ("/v1/instagram/audio/reels", {"audio_id": "1"}),
+    ]
+    for path, params in requests:
+        response = client.get(path, params=params)
+        assert response.status_code == 501 and response.json()["error"] == "platform_auth_required"
+
+
+def test_public_embed_and_trending_routes_are_registered(client, monkeypatch):
+    async def with_ydl(platform, fn, **opts):
+        return "<article>embed</article>", "https://www.instagram.com/nasa/embed/"
+    monkeypatch.setattr(ig, "with_ydl", with_ydl)
+    assert client.get("/v1/instagram/user/embed", params={"handle": "nasa"}).json()["html"].startswith("<article")

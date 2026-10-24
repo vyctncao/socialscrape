@@ -11,7 +11,7 @@ import math
 import os
 import re
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable
 from urllib.parse import urlsplit
@@ -117,6 +117,9 @@ class Settings:
     # none | faster-whisper | mlx-whisper
     transcribe_backend: str
     whisper_model: str
+    # Official TikTok API credentials for products ordinary account cookies cannot access.
+    tiktok_research_token: str | None = field(repr=False)
+    tiktok_shop_token: str | None = field(repr=False)
 
     def cookie_file(self, platform: str) -> str | None:
         return self.cookie_files.get(platform)
@@ -146,4 +149,6 @@ def get_settings() -> Settings:
         cookies_from_browser=_env("SOCIALSCRAPE_COOKIES_FROM_BROWSER"),
         transcribe_backend=backend,
         whisper_model=_env("SOCIALSCRAPE_WHISPER_MODEL", "small") or "small",
+        tiktok_research_token=_env("SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN"),
+        tiktok_shop_token=_env("SOCIALSCRAPE_TIKTOK_SHOP_ACCESS_TOKEN"),
     )

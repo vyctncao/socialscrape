@@ -984,19 +984,11 @@ def test_bad_input_is_400(client, path, params):
     assert r.json()["success"] is False
 
 
-@pytest.mark.parametrize("path", ["/v1/youtube/shorts/trending"])
-def test_unsupported_paths_explain_why(client, path):
-    r = client.get(path)
-    assert r.status_code == 501 and r.json()["error"] == "not_supported"
-    row = next(e for e in client.get("/meta/coverage").json()["endpoints"] if e["path"] == path)
-    assert row["notes"] == M.UNSUPPORTED[path]
-
-
 def test_my_paths_are_routed(client):
     paths = client.app.openapi()["paths"]
     for path in ("/v1/youtube/video", "/v1/youtube/video/transcript", "/v1/youtube/video/comments",
                  "/v1/youtube/video/comment/replies", "/v1/youtube/video/sponsors", "/v1/youtube/community-post",
-                 "/v1/youtube/search/typeahead", *M.UNSUPPORTED):
+                 "/v1/youtube/search/typeahead", "/v1/youtube/shorts/trending", *M.UNSUPPORTED):
         assert path in paths, path
 
 

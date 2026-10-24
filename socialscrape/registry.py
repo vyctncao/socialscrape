@@ -40,6 +40,7 @@ log = logging.getLogger("socialscrape.registry")
 class RouteInfo:
     source: str
     notes: str | None = None
+    status: str = "implemented"
 
 
 IMPLEMENTED: dict[str, RouteInfo] = {}
@@ -64,7 +65,8 @@ def envelope(payload: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "credits_charged": 0, **payload}
 
 
-def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = None, **route_kwargs: Any):
+def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = None,
+           status: str = "implemented", **route_kwargs: Any):
     """Register a GET route whose handler returns the response payload dict."""
 
     def decorate(fn: Callable[..., Awaitable[dict[str, Any]]]):
@@ -86,7 +88,7 @@ def sc_get(router: APIRouter, path: str, *, source: str, notes: str | None = Non
         router.add_api_route(path, handler, methods=["GET"], summary=route_kwargs.pop("summary", None)
                              or _summary(path), dependencies=[Security(_api_key), Depends(_cache_max_age)],
                              responses=responses, **route_kwargs)
-        IMPLEMENTED[path] = RouteInfo(source, notes)
+        IMPLEMENTED[path] = RouteInfo(source, notes, status)
         return fn
 
     return decorate
@@ -127,7 +129,7 @@ def coverage() -> list[dict[str, Any]]:
             "path": path,
             "platform": path.split("/")[2],
             "summary": entry["summary"],
-            "status": "implemented" if info else "not_supported",
+            "status": info.status if info else "not_supported",
             "source": info.source if info else None,
             "notes": (info.notes if info else UNSUPPORTED_REASONS.get(path)),
         })

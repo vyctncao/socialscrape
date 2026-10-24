@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 import yt_dlp
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Query, Request
 from yt_dlp.extractor.instagram import InstagramBaseIE, InstagramIE, InstagramStoryIE, _id_to_pk
 from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
@@ -1044,11 +1044,14 @@ async def instagram_profile(handle: str = Query(...), trim: str | None = None) -
 
 
 @router.post("/v1/instagram/profile", summary="Profile (POST compatibility)", include_in_schema=True)
-async def instagram_profile_post(payload: dict[str, Any] = Body(...)) -> Any:
-    handle = payload.get("handle")
-    if not isinstance(handle, str) or not handle.strip():
+async def instagram_profile_post(request: Request) -> Any:
+    try:
+        payload = await request.json()
+    except ValueError:
+        raise BadRequest("Send a JSON object with handle") from None
+    if not isinstance(payload, dict) or not isinstance(payload.get("handle"), str) or not payload["handle"].strip():
         raise BadRequest("handle is required")
-    return {"success": True, "credits_charged": 0, **await instagram_profile(handle, payload.get("trim"))}
+    return {"success": True, "credits_charged": 0, **await instagram_profile(payload["handle"], payload.get("trim"))}
 
 
 @sc_get(router, "/v1/instagram/profile/post-count", source="yt-dlp InstagramUserIE profile page (og:description)",
@@ -1255,25 +1258,22 @@ async def search_instagram(request: Request, query: str = Query(..., min_length=
                      "rank_token": None, "users": users}}
 
 
+@sc_get(router, "/v1/instagram/user/embed", source="public Instagram profile embed page",
+        notes="Returns Instagram's public profile embed HTML. The caller embeds or sanitizes it according to context.")
+async def instagram_user_embed(handle: str = Query(...)) -> dict[str, Any]:
+    name = clean_handle(handle)
+    html, final_url = await with_ydl(PLATFORM, _page_flow("InstagramUser", f"{WEB}/{name}/embed/", name))
+    if InstagramBaseIE._is_login_redirect(final_url):
+        raise UpstreamBlocked(_LOGIN_WALL)
+    return {"html": html}
+
+
+@sc_get(router, "/v1/instagram/reels/trending", source="public Instagram Popular reels composition",
+        notes="Current reels surfaced by Instagram's public Popular topic; not an official global ranking.")
+async def instagram_reels_trending() -> dict[str, Any]:
+    data, _ = await fetch_topic("reels")
+    return {"reels": [map_hashtag_post(node) for node in topic_nodes(data) if _is_video_node(node)]}
+
+
 UNSUPPORTED = {
-    "/v1/instagram/basic-profile": (
-        "Looks a profile up by numeric user id; no yt-dlp Instagram extractor resolves a user id (InstagramUserIE "
-        "and InstagramStoryIE start from a username)."),
-    "/v1/instagram/user/tagged-posts": (
-        "The tagged tab is a separate logged-in query; no yt-dlp extractor fetches it and the logged-out profile "
-        "page only embeds the posts tab."),
-    "/v1/instagram/search/profiles": (
-        "Profile search needs Instagram's top search API, which no yt-dlp extractor calls."),
-    "/v1/instagram/audio/reels": (
-        "Reels-by-audio comes from Instagram's clips/music API; InstagramIE explicitly excludes /reels/audio/ URLs "
-        "and no extractor calls that API."),
-    "/v1/instagram/reels/trending": (
-        "ScrapeCreators builds this from the topics Instagram currently features on its /popular/ index, a page "
-        "no yt-dlp extractor fetches (InstagramTagIE only opens one known tag), and filters reels by post date, "
-        "which the Popular pages don't carry (one InstagramIE extraction per reel)."),
-    "/v1/instagram/post/comment/replies": (
-        "Replies come from Instagram's child_comments API, which yt-dlp never calls; the logged-out post query "
-        "it uses returns no reply threads."),
-    "/v1/instagram/user/embed": (
-        "The profile embed page (/<handle>/embed/) is not fetched by any yt-dlp extractor."),
 }

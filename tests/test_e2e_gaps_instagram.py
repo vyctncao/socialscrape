@@ -62,15 +62,7 @@ IMPLEMENTED = [
     (TRANSCRIPT, {"url": REEL}),
 ]
 NOT_TRANSCRIPT = [e for e in IMPLEMENTED if e[0] not in (TRANSCRIPT, SEARCH)]
-UNSUPPORTED = [
-    "/v1/instagram/basic-profile",
-    "/v1/instagram/user/tagged-posts",
-    "/v1/instagram/search/profiles",
-    "/v1/instagram/audio/reels",
-    "/v1/instagram/reels/trending",
-    "/v1/instagram/post/comment/replies",
-    "/v1/instagram/user/embed",
-]
+UNSUPPORTED = []
 HAS_MLX = importlib.util.find_spec("mlx_whisper") is not None
 # A cookies.txt with an invalid (expired-looking) Instagram session: what an operator has once a session dies.
 FAKE_SESSION = (
@@ -241,12 +233,11 @@ def test_unsupported_route_envelope(client, path):
     assert p.status_code == 405 and p.headers["allow"] == "GET" and p.json()["error"] == "method_not_allowed"
 
 
-def test_coverage_lists_thirteen_implemented_and_seven_unsupported(client):
-    entries = client.get("/meta/coverage").json()
-    entries = entries.get("endpoints", entries) if isinstance(entries, dict) else entries
-    mine = {e["path"]: e["status"] for e in entries if e["platform"] == "instagram"}
-    assert sorted(p for p, s in mine.items() if s == "not_supported") == sorted(UNSUPPORTED)
-    assert sorted(p for p, s in mine.items() if s == "implemented") == sorted(p for p, _ in IMPLEMENTED)
+def test_instagram_coverage_has_no_unsupported_routes(client):
+    entries = client.get("/meta/coverage").json()["endpoints"]
+    mine = [entry for entry in entries if entry["platform"] == "instagram"]
+    assert len(mine) == 20 and not [entry for entry in mine if entry["status"] == "not_supported"]
+    assert all(entry["source"] and entry["notes"] for entry in mine)
 
 
 def test_unknown_instagram_path_and_wrong_method(client):
@@ -265,7 +256,6 @@ def test_api_keys_guard_every_instagram_route():
             assert c.get(path, params={**params, "x-api-key": "k1"}).status_code == 401, path
         r = c.get(POST, params={"url": "a.b"}, headers={"x-api-key": "k2"})
         assert r.status_code == 400 and r.json()["error"] == "unsupported_url"
-        assert c.get(UNSUPPORTED[0], headers={"x-api-key": "k1"}).status_code == 501
         assert c.get("/meta/coverage").status_code == 200
 
 
@@ -321,7 +311,6 @@ def test_unusable_cookie_file_is_cookies_error(tmp_path, content, problem):
             body = r.json()
             assert r.status_code == 500 and body["error"] == "cookies_error", (p, body)
             assert str(tmp_path) not in body["message"]
-        assert c.get(UNSUPPORTED[0]).status_code == 501
 
 
 @pytest.mark.live

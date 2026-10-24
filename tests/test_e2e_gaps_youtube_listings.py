@@ -207,13 +207,10 @@ def test_auth_on_listing_cursor_and_501_routes(tmp_path):
         assert c.get("/meta/coverage").status_code == 200 and c.get("/health").json()["auth"] is True
 
 
-def test_501_routes_with_cache_max_age(client, tmp_path):
-    """A bad cache_max_age is a 400 on the 501 routes too, with the cache off (the conftest default) or on."""
+def test_trending_shorts_validates_cache_max_age(client, tmp_path):
     path = f"{YT}/shorts/trending"
     err(client, path, 400, "bad_request", skip_blocked=False, cache_max_age="abc")
-    assert client.get(path, params={"cache_max_age": "7d"}).json()["error"] == "not_supported"
     with app_with({}, tmp_path) as c:
-        assert c.get(path, params={"cache_max_age": "7d"}).status_code == 501
         err(c, path, 400, "bad_request", skip_blocked=False, cache_max_age="abc")
 
 
