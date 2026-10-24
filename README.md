@@ -91,7 +91,7 @@ Configuration is through environment variables (the `socialscrape` command takes
   | `500` | Unclassified upstream error (`upstream_error`) or timeout (`timeout`), an unusable server setting (`cookies_error`, `config_error`, or `cookies_rejected` when Instagram logs the configured session out), a failing Whisper model (`transcription_failed`), or an internal error (`server_error`; the traceback is in the server log) |
   | `501` | Endpoint not supported (`not_supported`, with the reason), or transcription off (`transcription_disabled`) or not installed (`transcription_unavailable`) |
   | `502` | No answer from the platform: `proxy_error` through a proxy (socket timeouts included), otherwise `network_error`. Retryable; details are in the server log |
-  | `503` | The platform rate-limited or bot-checked us (`upstream_blocked`). Retry later or use a proxy |
+  | `503` | The platform rate-limited or bot-checked us (`upstream_blocked`). Retry later or use a proxy; a `Retry-After` header, when present, says how many seconds this server will wait before asking the platform again |
 
   The OpenAPI spec lists the ones each operation can return, with the envelope as the `ErrorResponse` schema.
 
@@ -185,7 +185,7 @@ The other 8 return 501: basic-profile by id, tagged posts, top search, profile s
 |---|---|---|
 | Facebook Ad Library | `/v1/facebook/adLibrary/ad`, `/ad/transcript`, `/search/ads`, `/company/ads`, `/search/companies` | Detail, transcript, keyword/company search, company lookup, filters, and opaque pagination. Search and company ads accept either GET query parameters or a POST JSON object, which is useful for long cursors. |
 | TikTok Ad Library | `/v1/tiktok/ad-library/search`, `/ad` | Searches the Commercial Content Library and reads Creative Center Top Ad details, with a library fallback for non-Top Ads. |
-| Google Ad Library | `/v1/google/company/ads`, `/v1/google/ad`, `/v1/google/adLibrary/advertisers/search` | Searches Ads Transparency Center creatives and advertisers and optionally hydrates company results with creative details. |
+| Google Ad Library | `/v1/google/company/ads`, `/v1/google/ad`, `/v1/google/adLibrary/advertisers/search` | Searches Ads Transparency Center creatives and advertisers and optionally hydrates company results with creative details. Each call is one RPC, plus one fetch per distinct ad preview; a preview that can't be fetched leaves only that variation's copy (`headline`, `description`, `destinationUrl`) `null`. |
 
 Ad-library traffic uses the same ordered proxy/account pools as the other platforms. Configure Facebook and Google with `SOCIALSCRAPE_COOKIES_FACEBOOK` and `SOCIALSCRAPE_COOKIES_GOOGLE`, or add encrypted proxy and cookie entries under **Settings → Proxies & accounts**. Public ad-library surfaces can work anonymously, but suitable egress may still be necessary when Meta, TikTok, or Google rate-limits a server IP.
 
@@ -194,7 +194,7 @@ Ad-library traffic uses the same ordered proxy/account pools as the other platfo
 ## Caveats
 
 - **Approximate values.** Some values are YouTube's display text, not exact figures: relative times (`"3 weeks ago"`) turned into dates, and abbreviated counts (`"2.5K"`). The notes say where.
-- **Rate limits.** Every platform throttles, and the ad libraries quickly: Google answers a burst from one IP with its "sorry" CAPTCHA page for a while, and Meta can block an IP after a few dozen Ad Library requests. Use `SOCIALSCRAPE_PROXY` or the per-platform proxy pools (residential works best) and `cache_max_age`. Blocks surface as `503`.
+- **Rate limits.** Every platform throttles, and the ad libraries quickly: Google answers a burst from one IP with its "sorry" CAPTCHA page for a while, and Meta can block an IP after a few dozen Ad Library requests. Use `SOCIALSCRAPE_PROXY` or the per-platform proxy pools (residential works best) and `cache_max_age`. Blocks surface as `503`. After Google refuses an egress (HTTP 429 or a redirect to `google.com/sorry`), the Google routes leave that IP or proxy alone for a cooling window of 60 seconds that doubles, up to 15 minutes, while Google keeps refusing (or Google's own `Retry-After`, if longer): calls inside it answer `503 upstream_blocked` with a `Retry-After` header and no request, so a burst can't keep the flag fresh, and with a Google proxy pool the next proxy is tried. A clean answer ends the window.
 - **Cookies.** Optional. They unlock login-gated paths (e.g. Instagram comments via `media/<pk>/comments/`), but those paths were **not verified** here, since only anonymous access was tested. Never use your personal account. An Instagram session that has been logged out answers `500 cookies_rejected` (replace the file); the files are never written. Check `/health` `cookie_errors` after changing one.
 - **TikTok sound API.** `/v2/tiktok/video` (app path), `/profile/region` and `/song*` rely on the app API behind `TikTokSoundIE`, which yt-dlp marks as broken. They work today but could stop without notice.
 - **No JS runtime needed.** YouTube stream URLs would need a JS runtime (deno), but no endpoint returns them, so metadata, comments and captions all work without one.
