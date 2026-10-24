@@ -23,10 +23,10 @@ from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import DownloadError, ExtractorError, get_first, traverse_obj
 
 from .. import subtitles
-from ..errors import ApiError, BadRequest, Forbidden, NotFound, UpstreamBlocked
+from ..errors import ApiError, BadRequest, Forbidden, NotFound, UpstreamBlocked, UpstreamError
 from ..registry import sc_get
 from ..util import clock
-from ..ytdlp import translate_error, with_ydl, youtube_agegated
+from ..ytdlp import not_json, translate_error, with_ydl, youtube_agegated
 from . import _youtube_videos_parse as P
 
 router = APIRouter()
@@ -194,10 +194,58 @@ def ensure_playable(player_responses: list[dict[str, Any]], info: dict[str, Any]
         raise err
 
 
+class _WatchAnswers:
+    """What the requests of one watch-page extraction got: the HTTP error statuses (yt-dlp reports a refused watch
+    page or player request as a warning only) and what came back instead of data from the InnerTube API (youtubei/v1)
+    or as the watch page (an empty body)."""
+
+    def __init__(self, ydl: yt_dlp.YoutubeDL, ie: Any) -> None:
+        self.statuses: list[int] = []
+        self.not_data: list[str] = []
+        download, urlopen = ie._download_webpage_handle, ydl.urlopen
+
+        def recording_download(*args: Any, **kwargs: Any) -> Any:
+            res = download(*args, **kwargs)
+            if res and isinstance(res[0], str):
+                body, url = res[0], str(getattr(res[1], "url", "") or "")
+                if not body.strip() or ("/youtubei/" in url and body.lstrip()[:1] not in ("{", "[")):
+                    self.not_data.append(not_json(body))
+            return res
+
+        def recording_urlopen(req: Any) -> Any:
+            try:
+                return urlopen(req)
+            except HTTPError as exc:
+                self.statuses.append(exc.status)
+                raise
+
+        ie._download_webpage_handle = recording_download
+        ydl.urlopen = recording_urlopen
+
+    def block(self) -> UpstreamBlocked | None:
+        if 429 in self.statuses:
+            return UpstreamBlocked("YouTube rate-limited the watch page and player requests (HTTP 429); retry later "
+                                   "or use a proxy")
+        if self.not_data:
+            return UpstreamBlocked(f"YouTube answered the watch page or player request with {self.not_data[0]} "
+                                   "instead of data, as it does for an IP it is throttling; retry later or use a proxy")
+        return None
+
+
 def extract_watch(ydl: yt_dlp.YoutubeDL, vid: str, *, process: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
-    """(info as extract_info returns it, raw watch-page data) for an available video."""
+    """(info as extract_info returns it, raw watch-page data) for an available video.
+
+    YouTube rate-limits an IP with HTTP 429 (or empty answers) on the watch page and every player request. yt-dlp
+    logs each as a warning and then fails with a bare "Failed to extract any player response" (a 500 upstream_error);
+    with such answers recorded, that unclassified failure is the 503 upstream_blocked it is."""
     raw = capture_watch_data(ydl)
-    info = ydl.extract_info(watch_url(vid), download=False, process=process)
+    answers = _WatchAnswers(ydl, ydl.get_info_extractor("Youtube"))
+    try:
+        info = ydl.extract_info(watch_url(vid), download=False, process=process)
+    except (DownloadError, ExtractorError) as exc:
+        if type(translate_error(exc)) is UpstreamError and (blocked := answers.block()):
+            raise blocked from exc
+        raise
     if not info:
         raise NotFound("No data returned for this video")
     ensure_available(raw["player_responses"])
@@ -317,7 +365,14 @@ async def search_typeahead(query: str = Query(..., min_length=1)) -> dict[str, A
         url = "https://suggestqueries.google.com/complete/search?" + urlencode({"client": "firefox", "ds": "yt",
                                                                                 "q": query})
         with ydl.urlopen(Request(url)) as response:
-            return json.loads(response.read().decode("utf-8"))
+            body = response.read().decode("utf-8", "replace")
+        try:
+            return json.loads(body)
+        except (ValueError, RecursionError):
+            if not body.strip() or body.lstrip().startswith("<"):  # throttled, or a consent/"sorry" page
+                raise UpstreamBlocked(f"Google answered the suggestion request with {not_json(body)} instead of "
+                                      "JSON; retry later") from None
+            raise UpstreamError("Google returned malformed suggestion data") from None
     answer = await with_ydl("youtube", fetch)
     suggestions = answer[1] if isinstance(answer, list) and len(answer) > 1 and isinstance(answer[1], list) else []
     return {"data": {"query": query, "suggestions": [

@@ -21,8 +21,9 @@ from yt_dlp.utils import ExtractorError
 from ..cursor import decode_cursor, encode_cursor
 from ..errors import ApiError, BadRequest, NotFound, UpstreamBlocked, UpstreamError
 from ..registry import sc_get
-from ..ytdlp import with_ydl
+from ..ytdlp import not_json, with_ydl
 from . import tiktok_official
+from .tiktok import _undecodable
 
 router = APIRouter()
 P = "tiktok"
@@ -124,11 +125,17 @@ def _is_blocked(exc: BaseException) -> bool:
 
 
 def _download_json(ie: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    """`ie._download_json`, its blocks a 503: HTTP 421/429, a "system busy"/challenge answer, and any body that isn't
+    JSON (an empty one, Akamai's "Access Denied" page, a cut-off answer), which yt-dlp reports as "Failed to parse
+    JSON" (a 500 before)."""
     try:
         response = ie._download_json(*args, **kwargs)
     except ExtractorError as exc:
         if _is_blocked(exc):
             raise UpstreamBlocked("TikTok blocked the Ad Library request; retry later or use another proxy") from exc
+        if (body := _undecodable(exc)) is not None:
+            raise UpstreamBlocked(f"TikTok answered the Ad Library request with {not_json(body)} instead of JSON, as "
+                                  "it does for an IP it is blocking; retry later or use another proxy") from exc
         raise
     if not isinstance(response, dict):
         raise UpstreamError("TikTok returned malformed ad data")

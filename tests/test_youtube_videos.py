@@ -508,6 +508,54 @@ def test_translated_track_throttle_yields_no_transcript(monkeypatch):
         M.download_transcript(None, info, original=True)  # a real track: the 429 is reported
 
 
+_DENIED = b"<html><head><title>Access Denied</title></head><body>blocked</body></html>"
+
+
+@pytest.mark.parametrize("answer,what", [
+    ("429", "(HTTP 429)"), ("empty", "an empty body instead of data"),
+    ("html", 'an HTML page ("Access Denied") instead of data')])
+def test_watch_routes_turn_a_rate_limited_ip_into_503(client, monkeypatch, answer, what):
+    """verify-load yt-all-429 / yt-all-empty: YouTube answering the watch page, youtubei/v1/next and /player with 429
+    (or empty bodies) made yt-dlp fail with a bare "Failed to extract any player response": a 500 upstream_error on
+    /v1/youtube/video, /video/transcript and /video/sponsors. yt-dlp's real YoutubeIE runs here, offline."""
+    import io
+
+    from yt_dlp.networking import Response
+    from yt_dlp.networking.exceptions import HTTPError
+
+    asked = []
+
+    def urlopen(self, req):
+        url = getattr(req, "url", str(req))
+        asked.append(url.split("?")[0])
+        if answer == "429":
+            raise HTTPError(Response(io.BytesIO(b"<html><title>Too Many Requests</title></html>"), url, {},
+                                     status=429))
+        return Response(io.BytesIO(b"" if answer == "empty" else _DENIED), url, {"Content-Type": "text/html"},
+                        status=200)
+
+    monkeypatch.setattr(yt_dlp.YoutubeDL, "urlopen", urlopen)
+    for path in ("/v1/youtube/video", "/v1/youtube/video/transcript", "/v1/youtube/video/sponsors"):
+        asked.clear()
+        r = client.get(path, params={"url": watch(ZOO)}, headers={"x-socialscrape-fallback": "off"})
+        assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), (path, r.text)
+        assert what in r.json()["message"] and "youtubei/v1/player" in "".join(asked)
+    # the suggestion service: an empty or HTML answer was an unhandled JSONDecodeError (500 server_error)
+    r = client.get("/v1/youtube/search/typeahead", params={"query": "mr"}, headers={"x-socialscrape-fallback": "off"})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+
+
+def test_typeahead_answer_of_another_shape_is_500(client, monkeypatch):
+    import io
+
+    from yt_dlp.networking import Response
+
+    monkeypatch.setattr(yt_dlp.YoutubeDL, "urlopen", lambda self, req: Response(
+        io.BytesIO(b'["mr", ["mr beast"'), req.url, {}, status=200))
+    r = client.get("/v1/youtube/search/typeahead", params={"query": "mr"}, headers={"x-socialscrape-fallback": "off"})
+    assert (r.status_code, r.json()["error"]) == (500, "upstream_error"), r.text
+
+
 def ui_tab(lang: str) -> YoutubeTabIE:
     """A YoutubeTab extractor asking YouTube for UI language `lang`, as the routes' language= does."""
     return yt_dlp.YoutubeDL({"quiet": True, **M.ui_language_args(lang)}).get_info_extractor("YoutubeTab")

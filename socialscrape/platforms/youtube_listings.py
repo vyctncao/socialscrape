@@ -18,6 +18,7 @@ import base64
 import binascii
 import copy
 import hashlib
+import json
 import logging
 import re
 import threading
@@ -40,7 +41,7 @@ from ..errors import (ApiError, BadRequest, Forbidden, NotFound, NotSupported, U
                       require_one)
 from ..registry import sc_get
 from ..util import truthy
-from ..ytdlp import translate_error, with_ydl
+from ..ytdlp import not_json, translate_error, with_ydl
 from . import _youtube_listings_parse as p
 
 log = logging.getLogger("socialscrape.youtube")
@@ -563,6 +564,9 @@ def _reel_answer(ie: Any, vid: str) -> dict[str, Any]:
                 _rest_mask("refused the field mask (HTTP 400)")
                 continue
             error = translate_error(exc)
+            doc = exc.cause.doc if isinstance(exc.cause, json.JSONDecodeError) else None
+            if isinstance(doc, str) and doc.strip():  # an error page for this one item: asked once more, then null
+                error = UpstreamError(f"YouTube answered the Shorts player request with {not_json(doc)}")
             if retried or isinstance(error, (UpstreamBlocked, Forbidden, NotFound)) or (status or 500) < 500:
                 raise error from exc
             retried = True

@@ -294,6 +294,18 @@ def test_error_translation():
     except ExtractorError as e:
         assert translate_error(e).status == 503
 
+    # verify-load: a web page where JSON belongs (InnerTube answering Akamai's "Access Denied") was a 500 "Failed to
+    # parse JSON"; it is a block, named by the page's title. A body that is neither stays a 500.
+    for body, status in (("<html><head><title>Access Denied</title></head><body>blocked</body></html>", 503),
+                         ("  <!DOCTYPE html><html><body>x</body></html>", 503), ('{"a": [1', 500)):
+        try:
+            InfoExtractor(YoutubeDL({"quiet": True}))._parse_json(body, "x")
+        except ExtractorError as e:
+            err = translate_error(e)
+            assert err.status == status, body
+            if body.startswith("<html>"):
+                assert 'an HTML page ("Access Denied") instead of data' in err.message
+
 
 def test_pick_track():
     subs = {"en": [{}], "de": [{}]}

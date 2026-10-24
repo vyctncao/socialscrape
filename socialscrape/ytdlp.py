@@ -632,6 +632,21 @@ def _without_proxy(message: str) -> str:
     return message
 
 
+_PAGE_TITLE = re.compile(r"<title[^>]*>([^<]{1,60})", re.I)
+
+
+def not_json(body: str) -> str:
+    """What a body that isn't JSON is, for a 503's message: throttled answers are empty, bot checks and block pages
+    an HTML page (TikTok's SlardarWAF challenge is titled "Please wait...", Akamai's denial "Access Denied")."""
+    text = body.strip()
+    if not text:
+        return "an empty body"
+    if text.startswith("<"):
+        title = _PAGE_TITLE.search(text[:4096])
+        return f'an HTML page ("{title.group(1).strip()}")' if title and title.group(1).strip() else "an HTML page"
+    return f"a {len(text)}-character body"  # a cut-off answer, or text
+
+
 def translate_error(exc: BaseException) -> ApiError:
     root = _root(exc)
     outer = exc.exc_info[1] if isinstance(exc, DownloadError) and exc.exc_info else exc
@@ -647,9 +662,14 @@ def translate_error(exc: BaseException) -> ApiError:
     if isinstance(outer, CookieLoadError) or isinstance(root, CookieLoadError):
         # Checked before _FORBIDDEN, which would read "failed to load cookies" as login-gated content.
         return Misconfigured("The server's cookies for this platform could not be loaded", code="cookies_error")
-    if isinstance(root, json.JSONDecodeError) and not root.doc.strip():
-        # Platforms answer throttled API calls with an empty 200 body.
-        return UpstreamBlocked("The platform returned an empty response; try again later")
+    if isinstance(root, json.JSONDecodeError) and isinstance(root.doc, str):
+        # Platforms answer throttled API calls with an empty 200 body, and blocked ones with a web page (a bot check,
+        # a CDN's denial) where the JSON belongs: yt-dlp's "Failed to parse JSON" for either is a block, not a 500.
+        if not root.doc.strip():
+            return UpstreamBlocked("The platform returned an empty response; try again later")
+        if root.doc.lstrip().startswith("<"):
+            return UpstreamBlocked(f"The platform answered with {not_json(root.doc)} instead of data, as it does "
+                                   "for requests it is blocking or bot-checking; try again later")
     if isinstance(root, HTTPError):
         status = root.status
         if status == 429:

@@ -291,6 +291,22 @@ def test_bootstrap_block_is_classified(client, install):
     assert response.status_code == 503 and response.json()["error"] == "upstream_blocked"
 
 
+@pytest.mark.parametrize("body,what", [
+    ("<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>denied</BODY></HTML>", 'an HTML page ("Access Denied")'),
+    ("", "an empty body"), ('{"code": 0, "data": [', "a 21-character body")])
+def test_an_answer_that_isnt_json_is_a_block(client, install, body, what):
+    """verify-load tiktok-all-html: Akamai's denial page in place of the Ad Library's JSON was a 500 "Failed to parse
+    JSON" on both ad-library routes, the failure class _web_api removed for TikTok's /api/ calls."""
+    error = ExtractorError("Failed to parse JSON", cause=json.JSONDecodeError("Expecting value", body, 0))
+    install({"/location": LOCATION, "support-regions": bootstrap(), "/search": error})
+    response = client.get(SEARCH, params={"query": "x"})
+    assert (response.status_code, response.json()["error"]) == (503, "upstream_blocked"), response.text
+    assert f"Ad Library request with {what} instead of JSON" in response.json()["message"]
+    install({"v2/detail": error})
+    response = client.get(AD, params={"ad_id": "7679096403545178120"})
+    assert (response.status_code, response.json()["error"]) == (503, "upstream_blocked"), response.text
+
+
 def test_malformed_upstream_is_classified(client, install):
     install({"/location": LOCATION, "support-regions": bootstrap(), "/search": {"code": 0, "data": {}}})
     response = client.get(SEARCH, params={"query": "x"})

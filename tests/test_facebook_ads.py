@@ -52,10 +52,26 @@ def test_archive_parser_and_not_found():
     archive = json.loads(DETAIL_FIXTURE.read_text())["archive"]
     html = '<script data-sjs>' + json.dumps({"ScheduledServerJS": {"deeplink_ad_archive": archive}}) + "</script>"
     assert F._archive(html, archive["ad_archive_id"])["page_name"] == "Sukeban World"
-    with pytest.raises(NotFound):
-        F._archive(html, "999")
+    with pytest.raises(NotFound):  # the app's landing page (deeplinkAdID null) is Meta's answer for an unknown id
+        F._archive(html + MISSING_FIXTURE.read_text(), "999")
     with pytest.raises(UpstreamBlocked):
         F._archive("<title>Log in to Facebook</title>", "999")
+
+
+@pytest.mark.parametrize("page", ["", "  \n", "<html><head><title>Facebook</title></head><body>Sorry, something went "
+                                  "wrong.</body></html>"])
+def test_a_page_without_the_ad_library_app_is_a_block(page):
+    """verify-load fb-all-empty / facebook-all-html: an empty 200 or a block page without the words captcha/checkpoint/
+    log in was a 404 ad_not_found (Stratton reads that as a missing ad), and a 500 on the search routes."""
+    for read in (lambda: F._archive(page, "1046730950862281"), lambda: F._search_connection(page),
+                 lambda: F._lsd(page)):
+        with pytest.raises(UpstreamBlocked, match="without its app data"):
+            read()
+    # with the app rendered, a page without its token stays a 500 (the recorded landing page carries none)
+    app = MISSING_FIXTURE.read_text()
+    assert '"LSD"' not in app and F._PRELOADER.search(app)
+    with pytest.raises(UpstreamError):
+        F._lsd(app)
 
 
 def test_missing_ad_landing_page_is_404_not_a_block():

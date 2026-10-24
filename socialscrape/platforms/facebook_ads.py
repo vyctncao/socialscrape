@@ -143,6 +143,10 @@ def _page_variables(html: str) -> dict[str, Any] | None:
     return variables if isinstance(variables, dict) else None
 
 
+_UNRENDERED = ("Facebook answered the Ad Library page without its app data (an empty or block page, as it serves an IP "
+               "it is throttling); retry later")
+
+
 def _archive(html: str, ident: str) -> dict[str, Any]:
     candidates = []
     for raw in re.findall(r"<script[^>]*data-sjs[^>]*>({.*?ScheduledServerJS.*?)</script>", html):
@@ -161,6 +165,8 @@ def _archive(html: str, ident: str) -> dict[str, Any]:
         variables = _page_variables(html)
         if variables is not None and str(variables.get("deeplinkAdID")) != ident:
             raise NotFound("Facebook ad was not found", code="ad_not_found")
+        if variables is None:  # the app didn't render at all (an empty body, a block page): nothing says it's missing
+            raise UpstreamBlocked(_UNRENDERED)
         if re.search(r"captcha|checkpoint|challenge|log in(?: to Facebook)?", html, re.I):
             raise UpstreamBlocked("Facebook blocked the Ad Library request")
         raise NotFound("Facebook ad was not found", code="ad_not_found")
@@ -170,6 +176,8 @@ def _archive(html: str, ident: str) -> dict[str, Any]:
 def _lsd(html: str) -> str:
     match = re.search(r'"LSD",\[\],\{"token":"([^"]+)', html)
     if not match:
+        if not _PRELOADER.search(html):
+            raise UpstreamBlocked(_UNRENDERED)
         raise UpstreamError("Facebook did not return its Ad Library request token")
     return match.group(1)
 
@@ -286,6 +294,8 @@ def _search_connection(html: str) -> tuple[dict[str, Any], dict[str, Any]]:
     if not query or position < 0:
         if re.search(r"captcha|checkpoint|log in", html, re.I):
             raise UpstreamBlocked("Facebook blocked the Ad Library request")
+        if not query:
+            raise UpstreamBlocked(_UNRENDERED)
         raise UpstreamError("Facebook returned malformed Ad Library search data")
     try:
         variables = json.loads(query.group(1))
@@ -466,7 +476,9 @@ _LONG = "true transcribes videos longer than 120 seconds too; without it they an
         source="Meta Ad Library SSR deeplink_ad_archive + AdLibraryV3AdDetailsQuery via yt-dlp FacebookAdsIE",
         notes="Logged-out Meta archive data; trim is a conservative creative projection. aaa_info comes from the "
               "ad-details query, asked only for EU/UK/Brazil-regulated or political ads, and is null otherwise "
-              "or if Meta refuses it. Optional transcript uses local Whisper.")
+              "or if Meta refuses it. Optional transcript uses local Whisper. 404 ad_not_found only when Meta "
+              "answers with its Ad Library landing page (its answer for an unknown id); a page without the Ad "
+              "Library app (empty, or a block page) is a 503 upstream_blocked.")
 async def facebook_ad(
     id: str | None = Query(None, description="Ad Library ad id (ad_archive_id); use this or url."),
     url: str | None = Query(None, description="Ad Library URL such as https://www.facebook.com/ads/library/?id=123."),
