@@ -34,3 +34,13 @@ def mlx_client():
     with app_with({"SOCIALSCRAPE_TRANSCRIBE": "mlx-whisper", "SOCIALSCRAPE_WHISPER_MODEL": "small"},
                   raise_errors=False) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _fresh_platform_memory(monkeypatch):
+    """Each test starts with what the platforms keep per process empty: TikTok's item_list cooling windows and
+    remembered region lookups."""
+    from socialscrape.platforms import tiktok
+
+    monkeypatch.setattr(tiktok, "_cooling", {})
+    monkeypatch.setattr(tiktok, "_regions", {})

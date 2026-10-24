@@ -139,7 +139,8 @@ def test_keyword_search_maps_a_recorded_page(client, answer):
     assert first["music"]["id_str"] == "7690819041476446996" and first["music"]["play_url"]["url_list"]
     for key in ("is_ad", "region", "desc_language"):  # not on keyword-page items
         assert key not in first
-    assert "custom_verify" not in first["author"] and "verification_type" not in first["author"]
+    # the web author's verified flag (false here) is the app's verification_type, which Stratton reads
+    assert first["author"]["verification_type"] == 0 and "custom_verify" not in first["author"]
 
 
 def test_the_last_page_has_no_cursor_and_repeats_are_dropped(client, answer):
@@ -236,8 +237,10 @@ def test_a_hashtag_without_a_page_needs_the_signed_in_search(client, answer):
 
 # --- failure shapes ----------------------------------------------------------------
 
-@pytest.mark.parametrize("blocked", ["", "   ", CHALLENGE])
+@pytest.mark.parametrize("blocked", ["", "   ", CHALLENGE, '{"statusCode":0,"videoList":[{"id":"7699'])
 def test_an_empty_body_or_a_challenge_page_is_asked_once_more(client, answer, blocked):
+    """Each is how TikTok answers a throttled IP: the cut-off body too (a 500 "malformed data" on the first ask
+    before)."""
     ie = answer(blocked, PAGE)
     assert len(ok(client, KEYWORD, query="travel")["search_item_list"]) == 3 and len(ie.queries) == 2
     ie = answer(blocked, blocked)
@@ -259,7 +262,7 @@ def test_http_refusals_are_asked_once_more_then_are_503(client, answer, status):
 def test_other_failures_keep_their_meaning():
     for answer_, error in ((INVALID, UpstreamError), ('{"statusCode": 10000}', UpstreamBlocked),
                            ('{"statusCode": 0, "videoList": {}}', UpstreamError), ("[]", UpstreamError),
-                           ('{"statusCode": 0, "videoList": [', UpstreamError), (NO_PAGE, S.NoKeywordPage)):
+                           (NO_PAGE, S.NoKeywordPage)):
         ie = FakeIE(answer_)
         with pytest.raises(error):
             S.keyword_posts(FakeYdl(ie), "travel", "US", 0)

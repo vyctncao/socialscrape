@@ -125,9 +125,9 @@ def _session(key: tuple[str, str], value: str | None = None) -> str | None:
 def _kap_json(ie: Any, keyword: str, region: str, offset: int, session: str | None) -> dict[str, Any]:
     """One /api/seo/kap/video_list/ answer.
 
-    TikTok throttles with an empty HTTP 200 body, a WAF challenge page or an HTTP 403/429/5xx: each is asked once
-    more, _RETRY_DELAY later, then is a 503 upstream_blocked (with_ydl moves on to the next configured proxy).
-    JSON of another shape is a 500.
+    TikTok throttles with an empty HTTP 200 body, a WAF challenge page, a cut-off body that isn't JSON or an HTTP
+    403/429/5xx: each is asked once more, _RETRY_DELAY later, then is a 503 upstream_blocked (with_ydl moves on to
+    the next configured proxy). Valid JSON of another shape is a 500.
     """
     query = {**_KAP_QUERY, "keyword": keyword, "count": _PAGE, "offset": offset, "region": region}
     if session:
@@ -151,8 +151,9 @@ def _kap_json(ie: Any, keyword: str, region: str, offset: int, session: str | No
             continue
         try:
             resp = json.loads(text)
-        except ValueError:
-            resp = None
+        except (ValueError, RecursionError):  # cut off mid-answer, as throttled answers are (or nested too deep)
+            problem = f"a {len(text)}-character body that isn't JSON"
+            continue
         if not isinstance(resp, dict):
             raise UpstreamError("TikTok returned malformed keyword search data")
         return resp
@@ -219,12 +220,14 @@ async def _signed_in(reason: str) -> None:
 _NOTES = ("Logged out, from TikTok's public keyword page for the {what} (tiktok.com/discover/<keyword>, its "
           "/api/seo/kap/video_list/): TikTok's own search wants request signatures. The {what} is spelled as those "
           "pages are ('Skincare routine' -> skincare-routine). Posts are TikTok web items re-keyed to the app shape "
-          "(statistics are TikTok's web rounding, 1600000; author.follower_count comes with them; music carries "
-          "play_url), 30 per request, ~60-90 per keyword; region (default US) picks the market's ranking. cursor is "
+          "(statistics are TikTok's web rounding, 1600000; comment_count is absent for a post with comments turned "
+          "off, whose web count reads 0; author.follower_count comes with them, and a verified author carries "
+          "verification_type 1 and custom_verify; music carries play_url), 30 per request, ~60-90 per keyword; "
+          "region (default US) picks the market's ranking. cursor is "
           "the offset to pass back, and is omitted on the last page. A keyword TikTok has no page for (fitness, "
           "skincare) answers 501 platform_auth_required{filters}: only the signed-in app API (TikTok account "
-          "cookies) searches those. An empty body, a challenge page or HTTP 403/429/5xx is asked once more, then is "
-          "a 503 upstream_blocked.")
+          "cookies) searches those. An empty body, a challenge page, a cut-off body or HTTP 403/429/5xx is asked "
+          "once more, then is a 503 upstream_blocked.")
 
 
 @sc_get(router, "/v1/tiktok/search/keyword",

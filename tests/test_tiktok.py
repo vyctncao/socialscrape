@@ -304,6 +304,31 @@ def test_counts_survive_int32_overflow():
     assert "play_count" not in M.statistics(_web_item(stats={"playCount": -1894967296}, statsV2={}))
 
 
+def test_comments_turned_off_leave_the_count_unknown():
+    """@xrisit/video/7684746443122412833 has comments turned off: its web item (itemCommentStatus 3) reports
+    commentCount 0 and statsV2 '0', its app aweme comment_count 167. The 0 is hidden, not a count."""
+    off = _web_item(itemCommentStatus=3, stats={"playCount": 8300000, "diggCount": 203300, "commentCount": 0},
+                    statsV2={"commentCount": "0", "diggCount": "203300"})
+    s = M.statistics(off)
+    assert "comment_count" not in s and s["digg_count"] == 203300 and s["play_count"] == 8300000
+    assert "comment_count" not in M.aweme(off)["statistics"]
+    # comments open (0, or no status at all): a 0 is a real 0, and a count shown while they are off is kept
+    assert M.statistics(_web_item(itemCommentStatus=0, stats={"commentCount": 0}, statsV2={}))["comment_count"] == 0
+    assert M.statistics(_web_item(stats={"commentCount": 0}, statsV2={}))["comment_count"] == 0
+    assert M.statistics(_web_item(itemCommentStatus=3, stats={"commentCount": 12}, statsV2={}))["comment_count"] == 12
+    # the recorded item_list (itemCommentStatus 0) keeps its counts
+    assert [M.statistics(it)["comment_count"] for it in _FEED["itemList"]] == [467, 162, 106]
+
+
+def test_verified_authors_carry_the_app_badge():
+    """Stratton reads creator.verified from author.custom_verify / verification_type, which the web author lacks."""
+    a = M.author(_FEED["itemList"][0])  # stoolpresidente: author.verified true
+    assert (a["verification_type"], a["custom_verify"]) == (1, "Verified account")
+    plain = M.author(_web_item(author={**_web_item()["author"], "verified": False}))
+    assert plain["verification_type"] == 0 and "custom_verify" not in plain
+    assert "verification_type" not in M.author(_web_item()) and "custom_verify" not in M.author(_web_item())
+
+
 def test_app_detail():
     app = {"aweme_id": "7300000000000000001", "create_time": 1700000000, "is_ads": True,
            "author": {"uid": "42", "unique_id": "someone", "follower_count": 0, "total_favorited": 0,
@@ -553,9 +578,11 @@ def test_feed_page_status_codes(monkeypatch):
         feed, asked = _FakeFeed([]), []
         feed._download_json = lambda *args, **kwargs: asked.append(1) or {
             "statusCode": status, "status_code": status, "status_msg": ""}
+        tiktok._cooling.clear()  # a refusal starts a cooling window (test_item_list_cools_down_after_a_block)
         with pytest.raises(error):
             tiktok._feed_page(feed, "sec", "h", 1_700_000_000_000, "US")
         assert len(asked) == asks, status
+    tiktok._cooling.clear()
     feed, answers = _FakeFeed([]), [{"statusCode": 10102}, {"statusCode": 0, "hasMorePrevious": False,
                                                             "itemList": [{"id": "5", "createTime": 1_699_999_999}]}]
     feed._download_json = lambda *args, **kwargs: answers.pop(0)
@@ -911,6 +938,7 @@ def test_profile_videos_route(client, fake_ydl, monkeypatch):
 
 
 def test_profile_region_route(client, fake_ydl, monkeypatch):
+    monkeypatch.setattr(tiktok, "_REGION_TTL", 0.0)  # each call looks the region up again
     ydl, calls = fake_ydl
     now = int(time.time())
     own = {"music": {"id": "555", "original": True, "authorName": "Some One"}}
@@ -934,6 +962,7 @@ def test_profile_region_app_api_failure_is_retryable(client, monkeypatch):
     items = [{"id": "8", "createTime": 1_700_000_000, **own}, {"id": "9", "createTime": 1_699_999_000,
                                                                  "music": {**own["music"], "id": "556"}}]
     monkeypatch.setattr(tiktok, "_profiles", {})
+    monkeypatch.setattr(tiktok, "_REGION_TTL", 0.0)  # each call looks the region up again
     monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: _user_info(name))
     monkeypatch.setattr(tiktok, "_feed_page", lambda ie, sec_uid, display, cursor, region: (items, None))
     answers, looked_up = {}, []
@@ -1552,7 +1581,17 @@ def test_profile_videos_fall_back_to_the_embed_page(client, real_ydl, monkeypatc
     assert net.urls() == [_ITEM_LIST] * 3 + [_STOOL_EMBED, *_STOOL_POSTS]
     assert_conforms(body, "/v3/tiktok/profile/videos")
 
-    # the next page asks item_list again; the embed has nothing older than the cursor (its posts aren't read again)
+    # the next page, within item_list's cooling window: straight to the embed, which has nothing older than the
+    # cursor (only the post uploaded before it is read again)
+    net = _Net(monkeypatch, {_ITEM_LIST: [""], _STOOL_EMBED: [_EMBED_PAGE], **_STOOL_POSTS})
+    r = client.get("/v3/tiktok/profile/videos", params={"handle": "stoolpresidente",
+                                                        "max_cursor": str(body["max_cursor"])})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
+    assert "not asking again until it cools down" in r.json()["message"] and int(r.headers["Retry-After"]) <= 60
+    assert net.urls() == [_STOOL_EMBED, list(_STOOL_POSTS)[-1]]
+
+    # once the window is over item_list is asked again
+    tiktok._cooling.clear()
     net = _Net(monkeypatch, {_ITEM_LIST: [""], _STOOL_EMBED: [_EMBED_PAGE], **_STOOL_POSTS})
     r = client.get("/v3/tiktok/profile/videos", params={"handle": "stoolpresidente",
                                                         "max_cursor": str(body["max_cursor"])})
@@ -1561,32 +1600,154 @@ def test_profile_videos_fall_back_to_the_embed_page(client, real_ydl, monkeypatc
     assert net.urls() == [_ITEM_LIST] * 3 + [_STOOL_EMBED, list(_STOOL_POSTS)[-1]]  # uploaded before the cursor
 
     # the embed page blocked too: item_list's 503, not a 500
+    tiktok._cooling.clear()
     net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: [_WAF_PAGE]})
     r = client.get("/v3/tiktok/profile/videos", params={"handle": "stoolpresidente"})
     assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked"), r.text
     assert 'with an HTML page ("Access Denied") instead of JSON' in r.json()["message"]
 
 
-def test_embed_feed_page_leaves_a_pinned_post_for_item_lists_date_order(monkeypatch):
-    now = 1_792_800_000
-    posts = {"1": now - 400 * 86_400, "2": now - 60, "3": now - 120, "4": now - 7200}  # "1": pinned, a year old
-    gone = NotFound("TikTok post not available (status 10204)")
-    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: list(posts) + ["5"])
+def _embed_posts(monkeypatch, posts: dict[str, int], answers: dict[str, Exception] | None = None) -> list[str]:
+    """The embed page lists `posts` (id -> createTime) in that order; reading one raises its `answers` entry. Returns
+    the list of ids read, in order."""
+    read = []
+    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: list(posts))
 
     def load_post(ydl, url):
         aweme_id = url.rsplit("/", 1)[1]
-        if aweme_id == "5":
-            raise gone  # removed since the embed listed it: skipped
+        read.append(aweme_id)
+        if aweme_id in (answers or {}):
+            raise answers[aweme_id]
         return None, {"id": aweme_id, "createTime": posts[aweme_id]}
 
     monkeypatch.setattr(tiktok, "_load_post", load_post)
+    return read
+
+
+def _tid(created: int, n: int = 1) -> str:
+    """A real-shaped post id: its top 32 bits are its upload time."""
+    return str(created << 32 | n)
+
+
+def test_embed_feed_page_leaves_a_pinned_post_for_item_lists_date_order(monkeypatch):
+    now = 1_792_800_000
+    pinned, a, b, c = _tid(now - 400 * 86_400), _tid(now - 60), _tid(now - 120), _tid(now - 7200)
+    gone = _tid(now - 9000)
+    posts = {pinned: now - 400 * 86_400, a: now - 60, b: now - 120, c: now - 7200, gone: now - 9000}
+    read = _embed_posts(monkeypatch, posts, {gone: NotFound("TikTok post not available (status 10201)")})
     items, cursor = tiktok._embed_feed_page(None, "h", now * 1000, 50)
-    assert [it["id"] for it in items] == ["2", "3", "4"] and cursor == (now - 7200) * 1000 - 1
+    assert [it["id"] for it in items] == [a, b, c] and cursor == (now - 7200) * 1000 - 1
+    assert read == [pinned, a, b, c, gone]  # the removed one is passed over
     assert tiktok._embed_feed_page(None, "h", now * 1000, 3)[1] is None  # every post served: the last page
     assert tiktok._embed_feed_page(None, "h", now * 1000, 4)[1] == cursor  # the pinned one is still to come
     items, _ = tiktok._embed_feed_page(None, "h", (now - 100) * 1000, None)
-    assert [it["id"] for it in items] == ["3", "4"]
+    assert [it["id"] for it in items] == [b, c]
+    # verify-merged: the next page, item_list still blocked, served the pinned post alone and set max_cursor 400 days
+    # back, past the ~46 posts in between. Out of date order over the whole list (the posts newer than the cursor at
+    # their upload time, unread), it is left for item_list.
+    read.clear()
+    assert tiktok._embed_feed_page(None, "h", cursor, 50) is None and read == [pinned, gone]
     assert tiktok._embed_feed_page(None, "h", (now - 400 * 86_400 - 1) * 1000, None) is None
+
+
+def test_embed_feed_page_serves_a_pinned_post_within_its_run(monkeypatch):
+    """A pinned post dated among the embed's own posts is served in its date place (paging past it would skip it)."""
+    now = 1_792_800_000
+    a, b, pinned, c = _tid(now - 60), _tid(now - 120), _tid(now - 150), _tid(now - 200)
+    _embed_posts(monkeypatch, {pinned: now - 150, a: now - 60, b: now - 120, c: now - 200})
+    items, cursor = tiktok._embed_feed_page(None, "h", now * 1000, 9)
+    assert [it["id"] for it in items] == [a, b, pinned, c] and cursor == (now - 200) * 1000 - 1
+    assert tiktok._embed_feed_page(None, "h", now * 1000, 4)[1] is None
+
+
+def test_embed_feed_page_ends_before_a_post_it_couldnt_read(monkeypatch):
+    """verify-load tt-embed-10204: a listed post answering 10204 (as TikTok answers a throttled IP) was skipped and
+    max_cursor set below it, so no page ever returned it. The page now ends before it."""
+    now = 1_792_800_000
+    a, b, x, c = _tid(now - 60), _tid(now - 120), _tid(now - 180), _tid(now - 240)
+    posts = {a: now - 60, b: now - 120, x: now - 180, c: now - 240}
+    for failure in (tiktok._Unavailable("TikTok post not available (status 10204)"),
+                    UpstreamBlocked("TikTok kept answering with its JS challenge (a bot check); retry later")):
+        read = _embed_posts(monkeypatch, posts, {x: failure})
+        items, cursor = tiktok._embed_feed_page(None, "h", now * 1000, 4)  # videoCount says this is everything
+        assert [it["id"] for it in items] == [a, b] and cursor == (now - 120) * 1000 - 1 and read == [a, b, x]
+        assert (int(x) >> 32) * 1000 <= cursor  # the next page asks for it again
+        # the first post unreadable: nothing to serve, so the caller's 503 stands
+        read = _embed_posts(monkeypatch, posts, {a: failure})
+        assert tiktok._embed_feed_page(None, "h", now * 1000, 4) is None and read == [a]
+
+
+def test_embed_feed_page_stops_at_its_deadline(monkeypatch):
+    now = 1_792_800_000
+    a, b, c = _tid(now - 60), _tid(now - 120), _tid(now - 180)
+    read = _embed_posts(monkeypatch, {a: now - 60, b: now - 120, c: now - 180})
+    clock = iter([0.0, 10.0, 31.0])
+    monkeypatch.setattr(tiktok.time, "monotonic", lambda: next(clock))
+    items, cursor = tiktok._embed_feed_page(None, "h", now * 1000, 3, deadline=30.0)
+    assert [it["id"] for it in items] == [a, b] and cursor == (now - 120) * 1000 - 1 and read == [a, b]
+
+
+def test_embed_own_sound_posts_pass_over_unreadable_posts(monkeypatch):
+    now = 1_792_800_000
+    own = {"music": {"id": "555", "original": True, "authorName": "Some One"}}
+    a, b, c = _tid(now - 60), _tid(now - 120), _tid(now - 180)
+    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: [a, b, c])
+
+    def load_post(ydl, url):
+        aweme_id = url.rsplit("/", 1)[1]
+        if aweme_id in failing:
+            raise tiktok._Unavailable("TikTok post not available (status 10204)")
+        return None, {"id": aweme_id, "createTime": now, **own}
+
+    monkeypatch.setattr(tiktok, "_load_post", load_post)
+    prof = {"nickname": "Some One"}
+    failing = {a}
+    assert [it["id"] for it in tiktok._embed_own_sound_posts(None, "h", prof)] == [b, c]
+    failing = {a, b, c}  # none read: the 503 stands rather than a 404 region_unavailable
+    assert tiktok._embed_own_sound_posts(None, "h", prof) is None
+
+
+def test_item_list_cools_down_after_a_block(monkeypatch):
+    """verify-load: every call under a blocked item_list repeated 3 asks and 4.5 s of backoff before the embed page."""
+    monkeypatch.setattr(tiktok, "_RETRY_DELAY", 0)
+    clock = [1000.0]
+    monkeypatch.setattr(tiktok.time, "monotonic", lambda: clock[0])
+    asked = []
+
+    def ie(answer, proxy=None):
+        feed = _FakeFeed([])
+        feed._downloader = SimpleNamespace(params={"proxy": proxy} if proxy else {})
+
+        def download_json(*args, **kwargs):
+            asked.append(proxy)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        feed._download_json = download_json
+        return feed
+
+    empty = ExtractorError("Failed to parse JSON", cause=json.JSONDecodeError("Expecting value", "", 0))
+    with pytest.raises(UpstreamBlocked, match="instead of JSON, 3 times"):
+        tiktok._feed_page(ie(empty), "sec", "h", 1_700_000_000_000, "US")
+    assert len(asked) == 3
+    with pytest.raises(UpstreamBlocked, match="until it cools down") as exc:  # within the window: not asked
+        tiktok._feed_page(ie({"statusCode": 0, "itemList": []}), "sec", "h", 1_700_000_000_000, "US")
+    assert len(asked) == 3 and exc.value.retry_after == 60
+    # another proxy has its own window
+    assert tiktok._feed_page(ie({"statusCode": 0, "itemList": []}, "http://p2:8080"), "sec", "h",
+                             1_700_000_000_000, "US") == ([], None)
+    # blocked again right after the window: twice as long; a JSON answer later ends it
+    clock[0] += 61
+    with pytest.raises(UpstreamBlocked, match="instead of JSON"):
+        tiktok._feed_page(ie(empty), "sec", "h", 1_700_000_000_000, "US")
+    assert tiktok._cooling[""][1] == 120
+    clock[0] += 121
+    assert tiktok._feed_page(ie({"statusCode": 0, "itemList": []}), "sec", "h", 1_700_000_000_000, "US") == ([], None)
+    assert "" not in tiktok._cooling
+    # TikTok still refusing the anonymous request after 3 asks cools down too
+    with pytest.raises(UpstreamBlocked, match="status 10102"):
+        tiktok._feed_page(ie({"statusCode": 10102}), "sec", "h", 1_700_000_000_000, "US")
+    assert tiktok._cooling[""][1] == 60
 
 
 def test_profile_region_from_a_blocked_item_list(client, real_ydl, monkeypatch):
@@ -1607,6 +1768,49 @@ def test_profile_region_from_a_blocked_item_list(client, real_ydl, monkeypatch):
     assert looked_up == [_FEED["itemList"][0]["music"]["id"]]
     assert net.urls() == [_ITEM_LIST] * 3 + [_STOOL_EMBED, *list(_STOOL_POSTS)[:2]]  # read until two use its sound
     assert_conforms(body, "/v1/tiktok/profile/region")
+
+
+def test_profile_videos_page_ends_before_a_post_answering_10204(client, real_ydl, monkeypatch):
+    """verify-load tt-embed-10204: item_list blocked and the embed's third post answering 10204 (twice, as a
+    throttled IP gets it) gave 200 without that post and a max_cursor below it."""
+    unavailable = _post_page({}).replace('"statusCode": 0', '"statusCode": 10204')
+    third = list(_STOOL_POSTS)[2]
+    net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: [_EMBED_PAGE], **_STOOL_POSTS,
+                             third: [unavailable]})
+    body = ok(client, "/v3/tiktok/profile/videos", handle="stoolpresidente")
+    assert [a["aweme_id"] for a in body["aweme_list"]] == [it["id"] for it in _FEED["itemList"][:2]]
+    created = _FEED["itemList"][1]["createTime"]
+    assert body["has_more"] is True and body["max_cursor"] == int(created) * 1000 - 1
+    missing = third.rsplit("/", 1)[1]
+    assert (int(missing) >> 32) * 1000 <= body["max_cursor"]  # the next page asks for it again
+    assert net.urls(third) == [third, third]  # _load_post's one retry, then the page ends
+
+
+def test_profile_region_answers_are_reused_briefly(client, real_ydl, monkeypatch):
+    """verify-consumer: Stratton retries /v1/tiktok/profile/region's failure at /v1/tiktok/profile-region at once,
+    which repeated every TikTok request (5-10 more) into a throttled IP. The handle's answer is reused for 90 s."""
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": []})
+    for embed, status, code in (([_WAF_PAGE], 503, "upstream_blocked"), ([_EMBED_PAGE], 404, "region_unavailable")):
+        tiktok._regions.clear()
+        tiktok._cooling.clear()
+        net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: embed, **_STOOL_POSTS})
+        r = client.get("/v1/tiktok/profile/region", params={"handle": "stoolpresidente"})
+        assert (r.status_code, r.json()["error"]) == (status, code), r.text
+        asked = len(net.asked)
+        again = client.get("/v1/tiktok/profile-region", params={"handle": "StoolPresidente"})
+        assert (again.status_code, again.json()["error"], again.json()["message"]) == (
+            status, code, r.json()["message"])
+        assert len(net.asked) == asked  # answered without asking TikTok
+        if status == 503:
+            assert 0 < int(again.headers["Retry-After"]) <= 90
+    tiktok._regions.clear()
+    tiktok._cooling.clear()
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": [
+        {"aweme_id": "1", "author": {"uid": _FEED["itemList"][0]["author"]["id"], "region": "US"}}]})
+    net = _Net(monkeypatch, {_ITEM_LIST: [json.dumps(_FEED)]})
+    assert ok(client, "/v1/tiktok/profile/region", handle="stoolpresidente")["region"] == "US"
+    assert ok(client, "/v1/tiktok/profile-region", handle="stoolpresidente")["region"] == "US"
+    assert net.urls() == [_ITEM_LIST]
 
 
 def test_collection_from_throttled_and_bot_checked_answers(client, real_ydl, monkeypatch):
@@ -1949,20 +2153,19 @@ def test_popular_creators_need_a_signed_in_feed(client, monkeypatch):
     assert_conforms(body, "/v1/tiktok/creators/popular")
 
 
-def test_user_live_retries_one_transient_block(client, monkeypatch):
+def test_user_live_doesnt_repeat_a_blocked_pass(client, monkeypatch):
+    """_web_api asks room/info 3 times itself: the route's own retry of the whole pass made that 6 (2N passes with N
+    proxies, as with_ydl already moves through them)."""
     calls = 0
+
     async def with_ydl(platform, fn, **opts):
         nonlocal calls
         calls += 1
-        if calls == 1:
-            raise UpstreamBlocked("challenge")
-        return {"is_live": False, "liveRoomUserInfo": {"uniqueId": "someone"}}
-    async def no_wait(delay):
-        assert delay == tiktok._RETRY_DELAY
+        raise UpstreamBlocked("TikTok answered the live room info request with an empty body instead of JSON, 3 times")
+
     monkeypatch.setattr(tiktok, "with_ydl", with_ydl)
-    monkeypatch.setattr(tiktok.asyncio, "sleep", no_wait)
-    body = client.get("/v1/tiktok/user/live", params={"handle": "someone"}).json()
-    assert body["is_live"] is False and calls == 2
+    r = client.get("/v1/tiktok/user/live", params={"handle": "someone"})
+    assert (r.status_code, r.json()["error"]) == (503, "upstream_blocked") and calls == 1
 
 
 def test_private_tiktok_routes_need_saved_account_cookies(client):

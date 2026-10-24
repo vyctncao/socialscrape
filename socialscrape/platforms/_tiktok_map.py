@@ -225,11 +225,17 @@ def video(item: dict[str, Any], *, with_captions: bool) -> dict[str, Any]:
 
 
 def statistics(item: dict[str, Any]) -> dict[str, Any]:
+    """Web stats -> app statistics. A post whose comments are turned off (itemCommentStatus not 0: 3 on
+    @xrisit/video/7684746443122412833, whose app aweme has comment_count 167 and item_comment_settings 3) reports
+    commentCount 0 on the web: the count is hidden, not 0, so it is left out."""
     s, s2 = item.get("stats") or {}, item.get("statsV2") or {}
+    comments = exact_count(s2, s, "commentCount")
+    if comments == 0 and item.get("itemCommentStatus") not in (None, 0):
+        comments = None
     return compact({
         "aweme_id": str(item["id"]),
         "collect_count": exact_count(s2, s, "collectCount"),
-        "comment_count": exact_count(s2, s, "commentCount"),
+        "comment_count": comments,
         "digg_count": exact_count(s2, s, "diggCount"),
         "play_count": exact_count(s2, s, "playCount"),
         "repost_count": exact_count(s2, s, "repostCount"),
@@ -262,11 +268,20 @@ def exact_stats(stats: dict[str, Any] | None, stats_v2: dict[str, Any] | None) -
             if isinstance(v, int) and not isinstance(v, bool) else v for k, v in stats.items()}
 
 
+# The app's badge for a verified account, as /v2/tiktok/video's app aweme carries it for a verified creator
+# (stoolpresidente: verification_type 1, custom_verify "Verified account"); the web author has only `verified`.
+_VERIFIED = {"verification_type": 1, "custom_verify": "Verified account"}
+
+
 def author(item: dict[str, Any]) -> dict[str, Any]:
+    """Web author + authorStats -> app author. The web `verified` flag becomes the app's verification_type (1 with
+    custom_verify "Verified account", 0 when false); without the flag both are left out."""
     a = obj(item.get("author"))
     st, st2 = item.get("authorStats") or {}, item.get("authorStatsV2") or {}
-    secret = a.get("secret")
+    secret, verified = a.get("secret"), a.get("verified")
+    badge = _VERIFIED if verified is True else {"verification_type": 0} if verified is False else {}
     return compact({
+        **badge,
         "uid": a.get("id") or None,
         "unique_id": a.get("uniqueId") or None,
         "nickname": a.get("nickname"),
