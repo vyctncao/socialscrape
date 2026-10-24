@@ -33,6 +33,7 @@ _CC = "https://ads.tiktok.com/creative_radar_api/v1"
 _CC_SECRET = "A7B&9z#1G6$2K@8M!3"
 _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36"
 _ID = re.compile(r"[0-9]{1,25}")
+_RETRY_DELAY = 1.5
 
 
 def _ad_id(value: str | None) -> str:
@@ -74,8 +75,17 @@ def _lib_headers(token: str | None = None) -> dict[str, str]:
 
 
 def _bootstrap(ie: Any) -> tuple[str, list[str]]:
+    """(X-CCL-STR token, regions), asked for as library.tiktok.com/ads asks on load: /api/v1/location, then
+    /api/v1/support-regions.
+
+    The library only honors a config_str minted after the client's location call: one asked for on its own is
+    refused by /api/v1/search with HTTP 421 "system busy", from a browser tab too, while the same request with a
+    token minted after /location (or one copied out of a browser tab) answers. Minting another token also voids
+    the one before it, so concurrent searches can void each other's (_search asks once more).
+    """
+    _download_json(ie, f"{_LIB}/api/v1/location", "location", headers=_lib_headers(), impersonate=True)
     response = _download_json(ie, f"{_LIB}/api/v1/support-regions", "regions", query={"lang": "en-US"},
-                              headers=_lib_headers())
+                              headers=_lib_headers(), impersonate=True)
     if not isinstance(response.get("config_str"), str) or not isinstance(response.get("regions"), list):
         raise UpstreamError("TikTok Ad Library returned malformed bootstrap data")
     regions = [str(item["code"]) for item in response["regions"]
@@ -85,17 +95,32 @@ def _bootstrap(ie: Any) -> tuple[str, list[str]]:
     return response["config_str"], regions
 
 
-def _is_blocked(exc: BaseException) -> bool:
+def _http_status(exc: BaseException) -> int | None:
+    """The status of the HTTPError in `exc`'s cause chain, if any."""
     seen: set[int] = set()
     while id(exc) not in seen:
         seen.add(id(exc))
-        if isinstance(exc, HTTPError) and exc.status in (421, 429):
-            return True
+        if isinstance(exc, HTTPError):
+            return exc.status
         cause = getattr(exc, "cause", None) or exc.__cause__ or exc.__context__
         if not isinstance(cause, BaseException):
             break
         exc = cause
-    return bool(re.search(r"system busy|challenge|captcha|rate.?limit", str(exc), re.I))
+    return None
+
+
+def _is_blocked(exc: BaseException) -> bool:
+    if _http_status(exc) in (421, 429):
+        return True
+    root = exc
+    seen: set[int] = set()
+    while id(root) not in seen:
+        seen.add(id(root))
+        cause = getattr(root, "cause", None) or root.__cause__ or root.__context__
+        if not isinstance(cause, BaseException):
+            break
+        root = cause
+    return bool(re.search(r"system busy|challenge|captcha|rate.?limit", str(root), re.I))
 
 
 def _download_json(ie: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -113,7 +138,7 @@ def _download_json(ie: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
 def _search(ydl: Any, query: str, advertiser_name: str, adv_biz_ids: str,
             cursor: str | None) -> dict[str, Any]:
     ie = ydl.get_info_extractor("TikTok")
-    token, regions = _bootstrap(ie)
+    token, _ = _bootstrap(ie)  # its regions are what region=all searches: the web app's "All countries"
     matches: list[dict[str, Any]] = []
     resolved: str | None = None
     term, query_type = query or advertiser_name, "1"
@@ -147,13 +172,23 @@ def _search(ydl: Any, query: str, advertiser_name: str, adv_biz_ids: str,
     body = {"query": term, "query_type": query_type, "adv_biz_ids": adv_biz_ids, "order": "last_shown_date,desc",
             "offset": offset, "search_id": search_id, "limit": 12, "ad_type": 0, "ad_status": 0,
             "ages": ["all"], "ad_reach": ["all"], "gender": "ALL"}
-    response = _download_json(
-        ie, f"{_LIB}/api/v1/search", "ad search", data=json.dumps(body).encode(),
-        query={"region": ",".join(regions), "type": 1, "start_time": now - 30 * 86_400, "end_time": now},
-        headers=_lib_headers(token), impersonate=True)
+    for attempt in range(2):
+        try:
+            response = _download_json(
+                ie, f"{_LIB}/api/v1/search", "ad search", data=json.dumps(body).encode(),
+                query={"region": "all", "type": 1, "start_time": now - 30 * 86_400, "end_time": now},
+                headers=_lib_headers(token), impersonate=True)
+            break
+        except UpstreamBlocked as exc:  # 421: a token another request voided; a fresh one is asked for once
+            if attempt or _http_status(exc) != 421:
+                raise
+            time.sleep(_RETRY_DELAY)
+            token, _ = _bootstrap(ie)
     if response.get("code") not in (None, 0):
         raise UpstreamBlocked(f"TikTok Ad Library refused the search (code {response.get('code')})")
     raw_ads = response.get("data")
+    if raw_ads is None:  # left out when nothing matched: {"total": 0, "has_more": false, "search_id": .., "code": 0}
+        raw_ads = []
     if not isinstance(raw_ads, list):
         raise UpstreamError("TikTok Ad Library returned malformed search results")
     ads = []
@@ -214,10 +249,33 @@ def _creative_ad(ie: Any, ident: str) -> dict[str, Any] | None:
             "recommended_for_you": [item for item in materials if isinstance(item, dict)]}
 
 
+def _http_body(exc: BaseException) -> str:
+    """The start of the body of the HTTPError in `exc`'s cause chain ('' when there is none or it can't be read)."""
+    seen: set[int] = set()
+    while id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, HTTPError):
+            try:
+                return exc.response.read(512).decode("utf-8", "replace")
+            except Exception:  # closed or already read
+                return ""
+        cause = getattr(exc, "cause", None) or exc.__cause__ or exc.__context__
+        if not isinstance(cause, BaseException):
+            break
+        exc = cause
+    return ""
+
+
 def _library_ad(ie: Any, ident: str) -> dict[str, Any]:
     token, _ = _bootstrap(ie)
-    response = _download_json(ie, f"{_LIB}/api/v1/items/{ident}/details", "ad detail",
-                              query={"lang": "en-US"}, headers=_lib_headers(token), impersonate=True)
+    try:
+        response = _download_json(ie, f"{_LIB}/api/v1/items/{ident}/details", "ad detail",
+                                  query={"lang": "en-US"}, headers=_lib_headers(token), impersonate=True)
+    except ExtractorError as exc:
+        # An id the library doesn't have (never was, or aged out) is answered HTTP 425 with the body "not found"
+        if _http_status(exc) == 425 and "not found" in _http_body(exc).lower():
+            raise NotFound("TikTok ad not found") from exc
+        raise
     if response.get("code") in (40000, 40004, 404) or response.get("data") is None:
         raise NotFound("TikTok ad not found")
     data = response.get("data")
@@ -235,14 +293,15 @@ def _library_ad(ie: Any, ident: str) -> dict[str, Any]:
         if isinstance(location_data, list) else []
     if not countries and isinstance(targeting.get("countries"), list):
         countries = [item for item in targeting["countries"] if isinstance(item, str)]
+    # The library has no engagement, cost or CTR figures and no video size: those stay null, not 0.
     return {"ad_title": str(ad.get("title") or ""), "brand_name": str(advertiser.get("name") or ""),
-            "comment": 0, "cost": 0, "country_code": countries, "ctr": 0.0,
+            "comment": None, "cost": None, "country_code": countries, "ctr": None,
             "favorite": False, "has_summary": False, "highlight_text": "", "id": str(ad.get("id") or ident),
-            "industry_key": "", "is_search": False, "keyword_list": None, "landing_page": "", "like": 0,
+            "industry_key": "", "is_search": False, "keyword_list": None, "landing_page": "", "like": None,
             "objective_key": str(ad.get("advertising_objective") or ""), "objectives": [], "pattern_label": [],
-            "share": 0, "source": "TikTok Commercial Content Library", "source_key": 0,
-            "video_info": {"vid": "", "duration": 0.0, "cover": str(video.get("cover_img") or ""),
-                           "video_url": {"720p": str(video.get("video_url") or "")}, "width": 0, "height": 0},
+            "share": None, "source": "TikTok Commercial Content Library", "source_key": None,
+            "video_info": {"vid": "", "duration": None, "cover": str(video.get("cover_img") or ""),
+                           "video_url": {"720p": str(video.get("video_url") or "")}, "width": None, "height": None},
             "voice_over": False,
             "creative_center_url": f"https://ads.tiktok.com/business/creativecenter/topads/{ident}/pc/en",
             "detail_analysis": None, "interactive_time_analysis": {}, "recommended_for_you": []}
@@ -258,9 +317,11 @@ def _ad(ydl: Any, ident: str) -> dict[str, Any]:
 @sc_get(router, "/v1/tiktok/ad-library/search",
         source="TikTok Commercial Content Library API, or the official Commercial Content API with a research token",
         notes=("With SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN (research.adlib.basic) the official API answers. "
-               "Without it, TikTok currently rejects non-browser CCL search traffic with HTTP 421 system busy. Its frontend "
-               "only forwards the opaque support-regions config_str as X-CCL-STR; TLS/browser attestation appears "
-               "to be enforced upstream. Configure the ScrapeCreators fallback to serve this route when blocked."))
+               "Without it, the public library answers as its web app asks it: /api/v1/location, then "
+               "/api/v1/support-regions for the X-CCL-STR token, then /api/v1/search over the last 30 days of all "
+               "regions (12 ads a page; no match is an empty ads list). A token minted without the location call "
+               "first is refused with HTTP 421 system busy; a 421 is asked once more with a fresh token, then (like "
+               "429) is a 503 upstream_blocked."))
 async def tiktok_ad_library_search(
     query: str | None = Query(None, description=(
         "General ad search. Provide either query or advertiser_name, not both.")),
@@ -279,8 +340,7 @@ async def tiktok_ad_library_search(
 
 @sc_get(router, "/v1/tiktok/ad-library/ad", source="TikTok Creative Center and Commercial Content Library APIs",
         notes=("Creative Center details fall back to the official Commercial Content API with a research token, "
-               "else to the public Commercial Content Library, for non-Top Ads. "
-               "TikTok currently rejects that CCL-only detail request from non-browser clients with HTTP 421."))
+               "else to the public Commercial Content Library (bootstrapped as the search is), for non-Top Ads."))
 async def tiktok_ad_library_ad(
     ad_id: str = Query(..., description=(
         "Creative Center Top Ads material ID or URL, or a public Ads Library ad ID or detail URL.")),

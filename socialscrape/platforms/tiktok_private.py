@@ -1,4 +1,4 @@
-"""TikTok mobile API routes requiring a signed-in TikTok cookie account."""
+"""TikTok mobile API routes requiring a signed-in TikTok cookie account (keyword and hashtag search: tiktok_search)."""
 from __future__ import annotations
 
 from typing import Any
@@ -123,28 +123,13 @@ async def trending(region: str = Query(...), trim: str | None = None):
     return {"aweme_list": M.objs(data.get("aweme_list"))}
 
 
-async def _search(path: str, query: str, cursor: str | None, region: str | None):
+async def _search(path: str, query: str, cursor: str | None, region: str | None, **extra: Any):
+    """The app's search `path` with saved cookies. /v1/tiktok/search/keyword and /hashtag (tiktok_search) come here
+    only for what TikTok's public keyword pages can't answer."""
     data = await with_ydl(P, _app(path, query, {"keyword": query, "cursor": cursor or "0", "count": "20",
-                                                      "region": (region or "US").upper()}), extractor_args=_APP_API)
+                                                **extra, "region": (region or "US").upper()}),
+                          extractor_args=_APP_API)
     return data
-
-
-@sc_get(router, "/v1/tiktok/search/hashtag", source="TikTok mobile challenge/search API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in TikTok cookie account configured in Platform settings.")
-async def search_hashtag(hashtag: str = Query(...), region: str | None = None, cursor: str | None = None,
-                         trim: str | None = None):
-    data = await _search("challenge/search", hashtag.lstrip("#"), cursor, region)
-    return {"aweme_list": M.objs(data.get("aweme_list") or data.get("item_list")),
-            "cursor": str(data.get("cursor") or "0"), "has_more": bool(data.get("has_more"))}
-
-
-@sc_get(router, "/v1/tiktok/search/keyword", source="TikTok mobile search/item/full API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in TikTok cookie account configured in Platform settings.")
-async def search_keyword(query: str = Query(...), date_posted: str | None = None, sort_by: str | None = None,
-                         region: str | None = None, cursor: str | None = None, trim: str | None = None):
-    data = await _search("search/item/full", query, cursor, region)
-    return {"search_item_list": M.objs(data.get("data") or data.get("item_list") or data.get("search_item_list")),
-            "cursor": str(data.get("cursor") or "0"), "has_more": bool(data.get("has_more"))}
 
 
 @sc_get(router, "/v1/tiktok/search/top", source="TikTok mobile search/general/full API with saved cookies",

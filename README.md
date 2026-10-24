@@ -148,7 +148,7 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 | ~~`/v1/youtube/shorts/trending`~~ | YouTube removed Trending, and no extractor calls the Shorts feed. |
 | ~~`/v1/youtube/search/typeahead`~~ | Suggestions come from Google's suggest API, which no extractor calls. |
 
-### TikTok: 14 / 29
+### TikTok: 16 / 29
 
 | Endpoint | Notes |
 |---|---|
@@ -160,8 +160,9 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 | `/v1/tiktok/user/live`, `/v1/tiktok/live` | Live room data. `user/live` passes TikTok's live-page JS challenge with yt-dlp's solver; a live page it can't pass is answered from the profile page and `room/info` (`is_live` without `liveRoom`), and only when those fail too is it a `503 upstream_blocked`. A `room/info` answer that isn't JSON is retried, then a 503, never a guessed `is_live`. |
 | `/v1/tiktok/song`, `/v1/tiktok/song/videos` | App API, `cursor` paging. `clipId` is the sound's id, the address of its page (`tiktok.com/music/<title>-<id>`) or a short link to it (`vm.tiktok.com/<code>`). Counts past int32 are the app's pinned 2147483597. |
 | `/v1/tiktok/collection/videos` | Public collections, 30 per page. Only TikTok's statusCode 100001 (removed or non-public) is a 404; a private one (10216/10222) is a 403, a refusal of anonymous requests a 503, an unknown code a 500. An empty body or JS challenge page in place of JSON is handled as on `/v3/tiktok/profile/videos`, then a `503 upstream_blocked` (the collection's page has no items to fall back on). |
+| `/v1/tiktok/search/keyword`, `/v1/tiktok/search/hashtag` | Logged out, from TikTok's public keyword pages (`tiktok.com/discover/<keyword>`, their `/api/seo/kap/video_list/`): TikTok's own web and app search answer an anonymous request with an empty body (they want request signatures). The query is spelled as those pages are (`Skincare routine` → `skincare-routine`); posts are TikTok web items in the app shape (web-rounded counts, `author.follower_count`, `music.play_url`), 30 per request and ~60–90 per keyword, ranked for `region` (default US). `cursor` is an offset, omitted on the last page. Hashtag search keeps only posts carrying the tag. A keyword TikTok made no page for (`fitness`, `skincare`; TikTok answers status_code 4), and `date_posted`/`sort_by` other than `all-time`/`relevance`, are `501 platform_auth_required`: only the signed-in app API (TikTok account cookies) searches those. An empty body, a challenge page or HTTP 403/429/5xx is asked once more, then is a retryable `503 upstream_blocked`. |
 
-The other 15 return 501: comments and replies, followers and following, audience, the remaining search endpoints, trending, popular creators, Shop, and showcase. Popular creators ranks the creators in TikTok's regional recommended feed, which TikTok serves only to a signed-in account (Creative Center's creator chart now needs a TikTok One login), so it works with TikTok account cookies in Platform settings and is otherwise `501 platform_auth_required`. The TikTok Ad Library search and detail operations use TikTok's public Commercial Content Library and Creative Center surfaces.
+The other 13 return 501: comments and replies, followers and following, audience, top search and suggestions, trending, popular creators, Shop, and showcase. Popular creators ranks the creators in TikTok's regional recommended feed, which TikTok serves only to a signed-in account (Creative Center's creator chart now needs a TikTok One login), so it works with TikTok account cookies in Platform settings and is otherwise `501 platform_auth_required`. The TikTok Ad Library search and detail operations use TikTok's public Commercial Content Library and Creative Center surfaces.
 
 ### Instagram: 12 / 20
 
@@ -186,7 +187,7 @@ Instagram turns away anonymous API calls it is throttling with an empty body, a 
 | Library | Endpoints | Notes |
 |---|---|---|
 | Facebook Ad Library | `/v1/facebook/adLibrary/ad`, `/ad/transcript`, `/search/ads`, `/company/ads`, `/search/companies` | Detail, transcript, keyword/company search, company lookup, filters, and opaque pagination. Search and company ads accept either GET query parameters or a POST JSON object, which is useful for long cursors. |
-| TikTok Ad Library | `/v1/tiktok/ad-library/search`, `/ad` | Searches the Commercial Content Library and reads Creative Center Top Ad details, with a library fallback for non-Top Ads. |
+| TikTok Ad Library | `/v1/tiktok/ad-library/search`, `/ad` | Searches the Commercial Content Library and reads Creative Center Top Ad details, with a library fallback for non-Top Ads. The library is asked as its web app asks on load: `/api/v1/location`, then `/api/v1/support-regions` for the `X-CCL-STR` token, then the search (all regions, last 30 days). A token minted without the location call is refused with HTTP 421 `system busy`, and minting one voids the one before, so a 421 gets one fresh token before it is a `503`. Library-only details have no engagement, cost or video-size figures: those are null. |
 | Google Ad Library | `/v1/google/company/ads`, `/v1/google/ad`, `/v1/google/adLibrary/advertisers/search` | Searches Ads Transparency Center creatives and advertisers and optionally hydrates company results with creative details. |
 
 Ad-library traffic uses the same ordered proxy/account pools as the other platforms. Configure Facebook and Google with `SOCIALSCRAPE_COOKIES_FACEBOOK` and `SOCIALSCRAPE_COOKIES_GOOGLE`, or add encrypted proxy and cookie entries under **Settings → Proxies & accounts**. Public ad-library surfaces can work anonymously, but suitable egress may still be necessary when Meta, TikTok, or Google rate-limits a server IP.

@@ -1980,14 +1980,13 @@ def test_private_tiktok_routes_need_saved_account_cookies(client):
 
 
 def test_all_credential_gated_tiktok_routes_are_registered(client):
+    # search/keyword and /hashtag answer from TikTok's public keyword pages first (tests/test_tiktok_search.py)
     expected = {
         "/v1/tiktok/video/comments": "platform_auth_required",
         "/v1/tiktok/video/comment/replies": "platform_auth_required",
         "/v1/tiktok/user/followers": "platform_auth_required",
         "/v1/tiktok/user/following": "platform_auth_required",
         "/v1/tiktok/search/suggestions": "platform_auth_required",
-        "/v1/tiktok/search/hashtag": "platform_auth_required",
-        "/v1/tiktok/search/keyword": "platform_auth_required",
         "/v1/tiktok/search/top": "platform_auth_required",
         "/v1/tiktok/get-trending-feed": "platform_auth_required",
         "/v1/tiktok/user/audience": "platform_oauth_required",

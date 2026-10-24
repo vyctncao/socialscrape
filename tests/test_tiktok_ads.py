@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import io
 import json
 
 import pytest
 from fastapi.testclient import TestClient
+from yt_dlp.networking import Response
+from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError
 
 from socialscrape.main import create_app
@@ -24,6 +27,8 @@ class FakeIE:
         self.calls.append((url, kwargs))
         for suffix, response in self.responses.items():
             if url.endswith(suffix):
+                if isinstance(response, list):  # one answer per call
+                    response = response.pop(0)
                 if isinstance(response, BaseException):
                     raise response
                 return response
@@ -63,6 +68,9 @@ def bootstrap():
     return {"config_str": "token", "regions": [{"code": "DE"}, {"code": "GB"}]}
 
 
+LOCATION = {"region": {"code": "US", "name": "United States"}, "code": 0}  # recorded /api/v1/location answer
+
+
 def search_page(has_more=True):
     return {"code": 0, "total": 7, "has_more": has_more, "search_id": "native-search",
             "data": [{"id": "1879780091329538", "name": "GYMSHARK LTD", "audit_status": "1", "type": "2",
@@ -85,7 +93,7 @@ def creative_detail():
 
 
 def test_query_search_maps_results_and_cursor(client, install):
-    ie = install({"support-regions": bootstrap(), "/search": search_page()})
+    ie = install({"/location": LOCATION, "support-regions": bootstrap(), "/search": search_page()})
     response = client.get(SEARCH, params={"query": "running shoes"})
     assert response.status_code == 200, response.text
     body = response.json()
@@ -95,12 +103,56 @@ def test_query_search_maps_results_and_cursor(client, install):
     request = next(call for call in ie.calls if "/search" in call[0])
     sent = json.loads(request[1]["data"])
     assert sent["query_type"] == "1" and sent["offset"] == 0
-    assert request[1]["query"]["region"] == "DE,GB"
+    assert request[1]["query"]["region"] == "all" and request[1]["headers"]["X-CCL-STR"] == "token"
+    # the web app's load order: TikTok refuses a token minted without the location call first
+    assert [url.rsplit("/", 1)[-1] for url, _ in ie.calls] == ["location", "support-regions", "search"]
+    assert all(kwargs["impersonate"] for _, kwargs in ie.calls)
+
+
+def http_error(status: int, body: bytes = b"system busy") -> ExtractorError:
+    response = Response(io.BytesIO(body), "https://library.tiktok.com/api/v1/search", {}, status=status)
+    return ExtractorError(f"HTTP Error {status}", cause=HTTPError(response))
+
+
+def test_a_voided_token_is_replaced_once(client, install, monkeypatch):
+    # Minting a token voids the one before it, so a concurrent search can void ours: TikTok answers 421 system busy
+    monkeypatch.setattr(tiktok_ads, "_RETRY_DELAY", 0)
+    ie = install({"/location": LOCATION, "support-regions": [bootstrap(), {**bootstrap(), "config_str": "fresh"}],
+                  "/search": [http_error(421), search_page()]})
+    response = client.get(SEARCH, params={"query": "nike"})
+    assert response.status_code == 200, response.text
+    assert [url.rsplit("/", 1)[-1] for url, _ in ie.calls] == [
+        "location", "support-regions", "search", "location", "support-regions", "search"]
+    assert [kw["headers"]["X-CCL-STR"] for url, kw in ie.calls if url.endswith("/search")] == ["token", "fresh"]
+    ie = install({"/location": LOCATION, "support-regions": bootstrap(), "/search": [http_error(421)] * 2})
+    response = client.get(SEARCH, params={"query": "nike"})
+    assert (response.status_code, response.json()["error"]) == (503, "upstream_blocked")
+    assert sum(url.endswith("/search") for url, _ in ie.calls) == 2
+    ie = install({"/location": LOCATION, "support-regions": bootstrap(), "/search": [http_error(429)]})
+    response = client.get(SEARCH, params={"query": "nike"})
+    assert (response.status_code, response.json()["error"]) == (503, "upstream_blocked")
+    assert sum(url.endswith("/search") for url, _ in ie.calls) == 1  # only a voided token is worth a new one
+
+
+def test_no_match_is_an_empty_page(client, install):
+    # recorded: what /api/v1/search answers when nothing matched (no "data" at all)
+    empty = {"total": 0, "has_more": False, "search_id": "eyJuZXh0X2N1cnNvciI6MTJ9", "code": 0}
+    install({"/location": LOCATION, "support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {"adv_names": [
+        {"name": "NIKE COM SRL", "ids": "7587573238117498896"}]}}, "/search": empty})
+    body = client.get(SEARCH, params={"advertiser_name": "Nike"}).json()
+    assert body["ads"] == [] and body["total"] == 0 and body["has_more"] is False and body["cursor"] is None
+    assert body["resolved_advertiser_name"] == "NIKE COM SRL"
+
+
+def test_a_location_block_is_classified(client, install):
+    install({"/location": ExtractorError("HTTP Error 429", cause=http_error(429).cause)})
+    response = client.get(SEARCH, params={"query": "x"})
+    assert response.status_code == 503 and response.json()["error"] == "upstream_blocked"
 
 
 def test_advertiser_search_resolves_and_paginates(client, install):
-    ie = install({"support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {"adv_names": [
-        {"name": "GYMSHARK LTD", "ids": "7647240890083328016"}]}}, "/search": search_page()})
+    ie = install({"/location": LOCATION, "support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {
+        "adv_names": [{"name": "GYMSHARK LTD", "ids": "7647240890083328016"}]}}, "/search": search_page()})
     first = client.get(SEARCH, params={"advertiser_name": "Gymshark"}).json()
     second = client.get(SEARCH, params={"advertiser_name": "Gymshark", "cursor": first["cursor"]})
     assert second.status_code == 200, second.text
@@ -112,8 +164,8 @@ def test_advertiser_search_resolves_and_paginates(client, install):
 
 
 def test_pinned_advertiser_must_resolve(client, install):
-    ie = install({"support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {"adv_names": [
-        {"name": "OTHER", "ids": "999"}]}}, "/search": search_page()})
+    ie = install({"/location": LOCATION, "support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {
+        "adv_names": [{"name": "OTHER", "ids": "999"}]}}, "/search": search_page()})
     response = client.get(SEARCH, params={"advertiser_name": "Gymshark", "adv_biz_ids": "7078923208527618049"})
     assert response.status_code == 400
     assert "was not found" in response.json()["message"]
@@ -121,7 +173,7 @@ def test_pinned_advertiser_must_resolve(client, install):
 
 
 def test_cursor_is_bound_to_search(client, install):
-    install({"support-regions": bootstrap(), "/search": search_page()})
+    install({"/location": LOCATION, "support-regions": bootstrap(), "/search": search_page()})
     cursor = encode_cursor({"search_id": "attacker", "offset": 1})
     response = client.get(SEARCH, params={"query": "x", "cursor": cursor})
     assert response.status_code == 400 and response.json()["error"] == "bad_cursor"
@@ -135,7 +187,8 @@ def test_cursor_is_bound_to_search(client, install):
     ({"query": "x", "cursor": "bad"}, "Invalid cursor"),
 ])
 def test_search_validation(client, install, params, message):
-    install({"support-regions": bootstrap(), "/search": search_page(), "/suggestion": {"data": {"adv_names": []}}})
+    install({"/location": LOCATION, "support-regions": bootstrap(), "/search": search_page(),
+             "/suggestion": {"data": {"adv_names": []}}})
     response = client.get(SEARCH, params=params)
     assert response.status_code == 400
     assert message in response.json()["message"]
@@ -173,13 +226,17 @@ def test_non_top_ad_falls_back_to_library(client, install):
                 "advertising_objective": "TRAFFIC", "videos": [{"video_url": "https://cdn/video",
                 "cover_img": "https://cdn/cover"}]}, "advertiser": {"name": "Advertiser"},
                 "targeting": {"location": {"data": [{"region": "DE"}]}}}}
-    install({"v2/detail": {"code": 40004}, "support-regions": bootstrap(), "/details": library})
+    install({"v2/detail": {"code": 40004}, "/location": LOCATION, "support-regions": bootstrap(), "/details": library})
     response = client.get(AD, params={"ad_id": "1879780091329538"})
     assert response.status_code == 200, response.text
     body = response.json()
     assert_conforms(body, AD, min_coverage=0.38)
     assert body["ad_title"] == "Library ad" and body["country_code"] == ["DE"]
     assert body["recommended_for_you"] == []
+    # the library has no engagement, cost or video-size figures: unknown, not 0
+    assert [body[k] for k in ("comment", "cost", "ctr", "like", "share")] == [None] * 5
+    assert [body["video_info"][k] for k in ("duration", "width", "height")] == [None] * 3
+    assert body["video_info"]["cover"] == "https://cdn/cover"
 
 
 @pytest.mark.parametrize("ad_id", ["", "abc", "-1", "1.2", "1" * 26])
@@ -199,15 +256,26 @@ def test_optional_creative_calls_do_not_hide_detail(client, install):
 
 
 def test_library_missing_ad_is_404(client, install):
-    install({"v2/detail": {"code": 40004}, "support-regions": bootstrap(),
+    install({"v2/detail": {"code": 40004}, "/location": LOCATION, "support-regions": bootstrap(),
              "/details": {"code": 404, "data": None}})
     response = client.get(AD, params={"ad_id": "1000000000000000000"})
     assert response.status_code == 404 and response.json()["error"] == "not_found"
 
 
+def test_library_425_not_found_is_404(client, install):
+    # recorded: the library answers an id it doesn't have (never was, or aged out) with HTTP 425 "not found"
+    install({"v2/detail": {"code": 40004}, "/location": LOCATION, "support-regions": bootstrap(),
+             "/details": http_error(425, b"not found")})
+    response = client.get(AD, params={"ad_id": "1000000000000000000"})
+    assert (response.status_code, response.json()["error"]) == (404, "not_found")
+    install({"v2/detail": {"code": 40004}, "/location": LOCATION, "support-regions": bootstrap(),
+             "/details": http_error(425, b"slow down")})
+    assert client.get(AD, params={"ad_id": "1000000000000000000"}).status_code == 500  # any other 425 isn't
+
+
 @pytest.mark.parametrize("responses,params", [
-    ({"support-regions": {"config_str": "token", "regions": None}}, {"query": "x"}),
-    ({"support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {"adv_names": None}}},
+    ({"/location": LOCATION, "support-regions": {"config_str": "token", "regions": None}}, {"query": "x"}),
+    ({"/location": LOCATION, "support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {"adv_names": None}}},
      {"advertiser_name": "x"}),
 ])
 def test_nullable_upstream_collections_are_classified(client, install, responses, params):
@@ -218,13 +286,13 @@ def test_nullable_upstream_collections_are_classified(client, install, responses
 
 def test_bootstrap_block_is_classified(client, install):
     error = ExtractorError("system busy")
-    install({"support-regions": error})
+    install({"/location": LOCATION, "support-regions": error})
     response = client.get(SEARCH, params={"query": "x"})
     assert response.status_code == 503 and response.json()["error"] == "upstream_blocked"
 
 
 def test_malformed_upstream_is_classified(client, install):
-    install({"support-regions": bootstrap(), "/search": {"code": 0, "data": {}}})
+    install({"/location": LOCATION, "support-regions": bootstrap(), "/search": {"code": 0, "data": {}}})
     response = client.get(SEARCH, params={"query": "x"})
     assert response.status_code == 500 and response.json()["error"] == "upstream_error"
 

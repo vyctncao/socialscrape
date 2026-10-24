@@ -46,12 +46,16 @@ def test_ad_library_search_second_page(client):
 
 
 @pytest.mark.live
-@pytest.mark.parametrize("ad_id", [CURRENT_TOP_AD, "7646829987799334920", "1879780091329538"])
-def test_ad_library_ad(client, ad_id):
+@pytest.mark.parametrize("ad_id, coverage", [
+    (CURRENT_TOP_AD, 0.4),
+    # Library-only ads (no Creative Center detail, so fewer fields) age out of the library: refresh from a search
+    ("1879780091329538", 0.38),
+])
+def test_ad_library_ad(client, ad_id, coverage):
     response = get(client, AD, ad_id=ad_id)
     assert response.status_code == 200, response.text[:500]
     body = response.json()
-    assert_conforms(body, AD, min_coverage=0.4)
+    assert_conforms(body, AD, min_coverage=coverage)
     assert body["id"] == ad_id
 
 
