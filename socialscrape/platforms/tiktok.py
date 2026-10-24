@@ -4,7 +4,7 @@ Everything here goes through yt-dlp's TikTok extractors, either their output or 
 exact web/app requests they make (via `ydl.get_info_extractor(...)`):
 
   TikTokIE           web post page  -> `webapp.video-detail.itemInfo.itemStruct`
-  TikTokUserIE       web user page  -> `webapp.user-detail`;  /api/creator/item_list/
+  TikTokUserIE       web user page  -> `webapp.user-detail`;  /api/creator/item_list/;  /embed/@name
   TikTokCollectionIE /api/collection/item_list/
   TikTokLiveIE       live page SIGI_STATE;  webcast.tiktok.com/webcast/room/info
   TikTokSoundIE      app API aweme/v1/music/aweme/
@@ -12,21 +12,30 @@ exact web/app requests they make (via `ydl.get_info_extractor(...)`):
 ScrapeCreators returns TikTok's app (`aweme`) objects. /v2/tiktok/video serves the real app
 object when the post shows up in its sound's app feed; otherwise web posts are re-keyed by
 `_tiktok_map`.
+
+When TikTok throttles or bot-checks a server's IP, its /api/ JSON endpoints answer with something else
+(an empty 200 body, SlardarWAF's JS challenge page, another HTML page) while its pages still load, as
+yt-dlp solves their challenge. `_web_api` asks those endpoints past that (challenge solved, bounded retries
+with backoff) and makes what's left a 503 upstream_blocked, which with_ydl retries on the next configured
+proxy/account, never a 500 "Failed to parse JSON". The profile feed and region then fall back to the
+creator's embed page and the posts' own pages.
 """
 
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import logging
 import re
 import threading
 import time
-from typing import Any
+from typing import Any, Callable, Iterable, Iterator
 
 import yt_dlp
 from fastapi import APIRouter, Query, Request
 from yt_dlp.networking import HEADRequest
+from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError
 
 from ..errors import (
@@ -62,6 +71,10 @@ _LANG = re.compile(r"[A-Za-z]{2,3}")
 # A secUid yt-dlp can send in a query: visible ASCII, as TikTok's (base64url) is. Half an emoji fails before asking.
 _SEC_UID = re.compile(r"[!-~]+")
 _RETRY_DELAY = 1.5  # s before re-asking after a 10204 post or an empty app-API body
+_API_TRIES = 3  # asks of a TikTok web JSON endpoint (_web_api): at once, after _RETRY_DELAY, after twice that
+_EMBED_URL = "https://www.tiktok.com/embed/@%s"  # the profile widget TikTok serves other sites: ~10 newest posts
+_EMBED_STATE = r'<script[^>]+\bid=[\'"]__FRONTITY_CONNECT_STATE__[\'"][^>]*>'  # as TikTokUserIE reads it
+_TITLE = re.compile(r"<title[^>]*>([^<]{1,60})", re.I)
 _PROFILE_TTL = 600.0  # s a handle's secUid & co. are reused across feed pages
 _PROFILE_MAX = 512
 
@@ -153,18 +166,21 @@ def _status_error(status: Any) -> ApiError | None:
 
 # --- extractor calls (run inside with_ydl) -----------------------------------
 
-def _web_page(ie: Any, url: str, name: str, note: str, **kwargs: Any) -> str:
+def _web_page(ie: Any, url: str, name: str, note: str, *, data: Callable[[str], Any] | None = None,
+              **kwargs: Any) -> str:
     """A tiktok.com page, past the SlardarWAF "Please wait..." JS challenge TikTok may send.
 
-    As in TikTokBaseIE._extract_web_data_and_status: a page without universal data is the challenge. It goes
-    through yt-dlp's solver and is fetched again with the challenge cookies, which are then dropped. Still none: 503.
+    As in TikTokBaseIE._extract_web_data_and_status: a page without its data (universal data, or what `data`
+    reads from the page) is the challenge. It goes through yt-dlp's solver and is fetched again with the challenge
+    cookies, which are then dropped. Still none: 503.
     The token TikTok sets once a page's challenge is passed is dropped before the next page: that page would get
     a 403 for it (as /@name/live, then /@name for one not live, did).
     """
+    has_data = data or (lambda page: ie._get_universal_data(page, name))
     for cookie in [c for c in ie.cookiejar if c.name == _WAF_TOKEN]:
         ie.cookiejar.clear(cookie.domain, cookie.path, cookie.name)
     page = ie._download_webpage(url, name, note, **kwargs)
-    if ie._get_universal_data(page, name):
+    if has_data(page):
         return page
     try:
         cookies = ie._solve_challenge_and_set_cookies(page)
@@ -174,11 +190,108 @@ def _web_page(ie: Any, url: str, name: str, note: str, **kwargs: Any) -> str:
     try:
         page = ie._download_webpage(url, name, f"{note} with challenge cookie", **kwargs)
     finally:
-        for cookie in filter(None, cookies):  # the challenge's own JS lets them expire after 1 s
-            ie.cookiejar.clear(domain=".tiktok.com", path="/", name=cookie)
-    if ie._get_universal_data(page, name):
+        _drop_challenge_cookies(ie, cookies)
+    if has_data(page):
         return page
     raise UpstreamBlocked("TikTok kept answering with its JS challenge (a bot check); retry later")
+
+
+def _drop_challenge_cookies(ie: Any, names: Iterable[str | None]) -> None:
+    """Clear the cookies yt-dlp's challenge solver set: the challenge's own JS lets them expire after 1 s. One the
+    answer already expired is gone (http.cookiejar's clear() raises KeyError for it)."""
+    for name in filter(None, names):
+        try:
+            ie.cookiejar.clear(domain=".tiktok.com", path="/", name=name)
+        except KeyError:
+            pass
+
+
+class _NotJson(Exception):
+    """One ask of a TikTok JSON endpoint got something else; the message says what (for the 503)."""
+
+
+def _not_json(body: str) -> str:
+    """What a body that isn't JSON is, for the 503's message: TikTok's throttled answers are empty, its bot checks
+    an HTML page (SlardarWAF's JS challenge is titled "Please wait...")."""
+    text = body.strip()
+    if not text:
+        return "an empty body"
+    if text.startswith("<"):
+        title = _TITLE.search(text[:4096])
+        return f'an HTML page ("{title.group(1).strip()}")' if title and title.group(1).strip() else "an HTML page"
+    return f"a {len(text)}-character body"  # a cut-off answer, or text
+
+
+def _undecodable(exc: ExtractorError) -> str | None:
+    """The body of a download yt-dlp couldn't read as JSON (its _parse_json keeps it in the cause), else None."""
+    cause = exc.cause
+    return cause.doc if isinstance(cause, json.JSONDecodeError) and isinstance(cause.doc, str) else None
+
+
+def _api_answer(ie: Any, url: str, display: str, note: str, query: dict[str, Any]) -> Any:
+    """One ask of a TikTok JSON endpoint, as yt-dlp asks it (ie._download_json). SlardarWAF's JS challenge page in
+    its place is solved as _web_page solves a page's, and the endpoint asked again with the challenge cookies.
+    _NotJson when the answer still isn't JSON; yt-dlp's errors (HTTP, network) as it raises them."""
+    try:
+        return ie._download_json(url, display, note, query=query)
+    except ExtractorError as exc:
+        body = _undecodable(exc)
+        if body is None:
+            raise
+    if not body.strip():
+        raise _NotJson(_not_json(body))
+    try:
+        cookies = ie._solve_challenge_and_set_cookies(body)
+    except ExtractorError:  # not the challenge (a captcha or block page, a cut-off body), or one yt-dlp can't solve
+        raise _NotJson(_not_json(body)) from None
+    try:
+        return ie._download_json(url, display, f"{note} with challenge cookie", query=query)
+    except ExtractorError as exc:
+        again = _undecodable(exc)
+        if again is None:
+            raise
+        raise _NotJson(f"its JS challenge page, then {_not_json(again)}") from None
+    finally:
+        _drop_challenge_cookies(ie, cookies)
+
+
+def _web_api(ie: Any, url: str, display: str, note: str, query: dict[str, Any], what: str) -> Any:
+    """A TikTok web JSON endpoint's answer (item_list, room/info), past what TikTok sends in its place when it
+    throttles or bot-checks the server's IP. From a server IP, production got item_list and collection answers that
+    weren't JSON (as 500 "Failed to parse JSON"; only an empty one was a 503) while every page still loaded. In
+    place of JSON TikTok sends:
+
+      - an empty 200 body (throttled);
+      - SlardarWAF's "Please wait..." JS challenge page, the one pages get (solved: see _api_answer);
+      - another page or text that isn't JSON (a captcha or block page, a cut-off body);
+      - HTTP 429 or 5xx;
+      - statusCode 10000/10102: TikTok refusing an anonymous request it serves a moment later.
+
+    Each is asked again after _RETRY_DELAY, then twice that: _API_TRIES asks in all. What still isn't JSON is a 503
+    upstream_blocked naming what came back, which with_ydl retries on the next configured proxy/account; a last
+    refusal is returned for the caller's _status_error. Other errors are raised as yt-dlp raises them.
+    """
+    problem = "no answer"
+    for attempt in range(_API_TRIES):
+        if attempt:
+            time.sleep(_RETRY_DELAY * 2 ** (attempt - 1))
+        try:
+            resp = _api_answer(ie, url, display, note, query)
+        except _NotJson as exc:
+            problem = str(exc)
+        except ExtractorError as exc:
+            status = exc.cause.status if isinstance(exc.cause, HTTPError) else None
+            if not (status == 429 or (status or 0) >= 500):
+                raise
+            problem = f"HTTP {status}"
+        else:
+            status = M.obj(resp).get("statusCode") or M.obj(resp).get("status_code")
+            if not (isinstance(status, int) and status in _REFUSED) or attempt + 1 == _API_TRIES:
+                return resp
+            problem = f"statusCode {status}"
+        log.info("tiktok: %s for %s: %s (ask %d of %d)", what, display, problem, attempt + 1, _API_TRIES)
+    raise UpstreamBlocked(f"TikTok answered the {what} request with {problem} instead of JSON, {_API_TRIES} times: "
+                          "it is throttling or bot-checking this server's IP; retry later or use another proxy")
 
 
 def _resolve_short_link(ydl: yt_dlp.YoutubeDL, url: str) -> str:
@@ -305,11 +418,12 @@ def _feed_page(ie: Any, sec_uid: str, display: str, cursor: int, region: str) ->
 
     The API's cursor is inclusive, so the next cursor is one ms before the oldest item
     returned; items newer than `cursor` are dropped so pages never overlap. Like
-    TikTokUserIE, an empty week is skipped by stepping the cursor back 7 days.
+    TikTokUserIE, an empty week is skipped by stepping the cursor back 7 days. A throttled or
+    bot-checked answer is retried, then a 503 (_web_api).
     """
     for _ in range(_FEED_HOPS):
         query = {**ie._build_web_query(sec_uid, cursor), "region": region}
-        resp = ie._download_json(ie._API_BASE_URL, display, "Downloading video list", query=query)
+        resp = _web_api(ie, ie._API_BASE_URL, display, "Downloading video list", query, "video list")
         if not isinstance(resp, dict):
             raise UpstreamError("TikTok returned no video list")
         status = resp.get("statusCode") or resp.get("status_code")
@@ -334,6 +448,78 @@ def _feed_page(ie: Any, sec_uid: str, display: str, cursor: int, region: str) ->
     return [], cursor  # still walking back through empty weeks: let the client continue
 
 
+def _embed_data(ie: Any, page: str, name: str) -> dict[str, Any] | None:
+    """The embed page's state for the profile (Frontity's source.data["/embed/@name"], as TikTokUserIE's
+    _extract_sec_uid_from_embed reads it), or None: what a JS challenge page lacks."""
+    state = ie._search_json(_EMBED_STATE, page, "embed data", name, default={})
+    data = M.obj(M.obj(M.obj(state).get("source")).get("data"))
+    return next((v for k, v in data.items() if isinstance(k, str) and k.lower() == f"/embed/@{name.lower()}"
+                 and isinstance(v, dict) and v), None)
+
+
+def _embed_ids(ydl: yt_dlp.YoutubeDL, name: str) -> list[str]:
+    """The ids on the creator's embed page (/embed/@name): its ~10 newest public posts, newest first, though a
+    pinned post may lead. The widget TikTok serves other sites is a page, not an API, so it still loads (past the
+    JS challenge, as _web_page passes one) where TikTok throttles or bot-checks an IP's /api/ requests. It has
+    only ids, captions, covers and rounded plays (no dates, likes or comments): each post's own page has those."""
+    ie = ydl.get_info_extractor("TikTokUser")
+    page = _web_page(ie, _EMBED_URL % name, name, "Downloading user embed page",
+                     data=lambda page: _embed_data(ie, page, name), impersonate=True,
+                     headers=ie._generate_blockbuster_headers())
+    videos = M.objs(M.obj(_embed_data(ie, page, name)).get("videoList"))
+    return list(dict.fromkeys(str(v.get("id")) for v in videos
+                              if _ID.fullmatch(str(v.get("id") or "")) and v.get("privateItem") is not True))
+
+
+def _embed_posts(ydl: yt_dlp.YoutubeDL, name: str, ids: Iterable[str]) -> Iterator[dict[str, Any]]:
+    """The web itemStruct of each post, read from its own page as /v2/tiktok/video reads it (_load_post): the shape
+    item_list's entries have. A post since made private or removed is skipped; any other failure is raised."""
+    for aweme_id in ids:
+        try:
+            yield _load_post(ydl, M.web_url(name, aweme_id))[1]
+        except (Forbidden, NotFound) as exc:
+            log.info("tiktok: embed post %s of %s skipped: %s", aweme_id, name, exc)
+
+
+def _embed_feed_page(ydl: yt_dlp.YoutubeDL, name: str, cursor: int, video_count: Any
+                     ) -> tuple[list[dict], int | None] | None:
+    """_feed_page's answer from the embed page, for when item_list is throttled or bot-checked: the embed's posts at
+    or before `cursor` (ms), newest first, read from their own pages (one page each; an id's top 32 bits are its
+    upload time, never after its createTime, so posts certainly newer than `cursor` aren't read). The next cursor
+    is one ms before the oldest, as on item_list, which then serves the pages after it. A pinned post leading the
+    embed out of date order is left for item_list's date order: paging past it would skip the posts in between.
+    None when the embed has nothing at or before `cursor`."""
+    ids = [i for i in _embed_ids(ydl, name) if (int(i) >> 32) * 1000 <= cursor]
+    items = [it for it in _embed_posts(ydl, name, ids)
+             if _ID.fullmatch(str(it.get("id") or "")) and M.to_int(it.get("createTime"))]
+    times = [int(it["createTime"]) for it in items]
+    in_order = [it for k, it in enumerate(items) if all(t <= times[k] for t in times[k + 1:])]
+    page = sorted((it for it in in_order if int(it["createTime"]) * 1000 <= cursor),
+                  key=lambda it: int(it["createTime"]), reverse=True)
+    if not page:
+        return None
+    nxt = min(int(it["createTime"]) for it in page) * 1000 - 1
+    done = isinstance(video_count, int) and not isinstance(video_count, bool) and video_count <= len(in_order)
+    return page, None if done or nxt < _FEED_START_MS else nxt
+
+
+def _embed_own_sound_posts(ydl: yt_dlp.YoutubeDL, name: str, prof: dict[str, Any], tries: int = 2
+                           ) -> list[dict[str, Any]] | None:
+    """The first `tries` posts on the creator's embed page that use its own sound (each read from its own page), for
+    _account_region when item_list is blocked; None when the embed lists no post."""
+    ids = _embed_ids(ydl, name)
+    if not ids:
+        return None
+    return list(itertools.islice((it for it in _embed_posts(ydl, name, ids) if _own_sound(prof, it)), tries))
+
+
+def _own_sound(prof: dict[str, Any], it: dict[str, Any]) -> bool:
+    """Whether a web post uses the creator's own original sound (its music by the creator's nickname)."""
+    m = M.obj(it.get("music"))
+    return (m.get("original") is True and bool(_ID.fullmatch(str(m.get("id") or "")))
+            and m.get("authorName") in (prof.get("nickname"), M.obj(it.get("author")).get("nickname")))
+
+
 def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dict[str, Any]],
                     tries: int = 2) -> str | None:
     """App `author.region` of one of the creator's posts, found via the creator's own sound.
@@ -345,12 +531,7 @@ def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dic
     sound it reports as unavailable counts as an answer). If every lookup failed (proxy, network,
     throttled empty body), the last failure is raised: the region may well be there.
     """
-    def own_sound(it: dict[str, Any]) -> bool:
-        m = M.obj(it.get("music"))
-        return (m.get("original") is True and bool(_ID.fullmatch(str(m.get("id") or "")))
-                and m.get("authorName") in (prof.get("nickname"), M.obj(it.get("author")).get("nickname")))
-
-    own = [it for it in items if own_sound(it)]
+    own = [it for it in items if _own_sound(prof, it)]
     failure: Exception | None = None
     answered = False
     for it in own[:tries]:
@@ -378,7 +559,8 @@ def _music_page(ydl: yt_dlp.YoutubeDL, clip_id: str, cursor: int) -> dict[str, A
     """TikTokSoundIE's app-API request: videos using a sound, 20 per page.
 
     The app API intermittently answers with an empty body; yt-dlp only retries that by
-    switching app_info, so with the single default app_info it is retried once here.
+    switching app_info, so with the single default app_info it is retried once here. A second
+    answer that isn't JSON (empty, or a block page from a throttled IP) is a 503, not a 500.
     """
     ie = ydl.get_info_extractor("TikTokSound")
     query = {"music_id": clip_id, "cursor": cursor, "count": 20, "type": 5, "device_id": ie._DEVICE_ID}
@@ -387,14 +569,33 @@ def _music_page(ydl: yt_dlp.YoutubeDL, clip_id: str, cursor: int) -> dict[str, A
             resp = ie._call_api("music/aweme", clip_id, note="Downloading sound videos", query=query)
             break
         except ExtractorError as exc:
-            if attempt or not isinstance(exc.cause, json.JSONDecodeError):
+            body = _undecodable(exc)
+            if body is None:
                 raise
+            if attempt:
+                raise UpstreamBlocked(f"TikTok's app API answered the sound's videos request with {_not_json(body)} "
+                                      "instead of JSON, twice: it is throttling this server's IP; retry later or "
+                                      "use another proxy") from exc
             time.sleep(_RETRY_DELAY)
     if not isinstance(resp, dict):
         raise UpstreamError("TikTok app API returned no data")
     if resp.get("status_code"):
         raise NotFound(f"TikTok sound not available: {resp.get('status_msg') or resp['status_code']}")
     return resp
+
+
+def _with_embed_fallback(blocked: UpstreamBlocked, name: str, fallback: Callable[[], Any]) -> Any:
+    """What `fallback` (an embed-page route) answers in place of the item_list that was `blocked`; that 503 again
+    when it has nothing for the request or fails too (the embed route's own error is logged)."""
+    log.info("tiktok: item_list for %s blocked (%s); trying the embed page", name, blocked.message)
+    try:
+        answer = fallback()
+    except (ApiError, ExtractorError) as exc:
+        log.info("tiktok: embed fallback for %s failed: %s", name, exc)
+        raise blocked from exc
+    if answer is None:
+        raise blocked
+    return answer
 
 
 # --- routes ------------------------------------------------------------------
@@ -471,7 +672,8 @@ async def tiktok_profile(handle: str | None = None, user_id: str | None = None) 
 
 
 @sc_get(router, "/v3/tiktok/profile/videos",
-        source="yt-dlp TikTokUserIE (/api/creator/item_list/ via _build_web_query)",
+        source="yt-dlp TikTokUserIE (/api/creator/item_list/ via _build_web_query; when that is blocked, the "
+               "/embed/@handle page and TikTokIE post pages)",
         notes="Newest first, ~15 per page; max_cursor is a ms timestamp (one ms before the page's oldest post), "
               "so posts sharing that exact second with the page's oldest post can be skipped; max_cursor=0 or "
               "omitted starts at the newest post; any other value that isn't such a timestamp is a 400 bad_cursor. "
@@ -485,7 +687,13 @@ async def tiktok_profile(handle: str | None = None, user_id: str | None = None) 
               "flag, which can disagree with the app's is_ads). Photo posts carry their images (image_post_info, "
               "as on /v2/tiktok/video); no post carries music. The handle's secUid is cached for 10 minutes, so "
               "pages after the first make one TikTok request. TikTok sometimes refuses a public feed to anonymous "
-              "requests (statusCode 10102); that is a 503 upstream_blocked, and a retry soon after works.")
+              "requests (statusCode 10102), and from a throttled or bot-checked server IP item_list answers with an "
+              "empty body or a JS challenge page instead of JSON: the challenge is solved and each is asked again "
+              "twice with backoff (1.5 s, 3 s). Still blocked, the posts at or before max_cursor among the ~10 "
+              "newest on the creator's embed page (/embed/@handle, a page TikTok still serves) are read from their "
+              "own pages (one request each, the same post objects), with the usual max_cursor for item_list to go "
+              "on from; a pinned post out of date order is left for later pages. Only when that fails too is it a "
+              "503 upstream_blocked, which a retry soon after (or another proxy) usually clears.")
 async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = None, sort_by: str | None = None,
                                 max_cursor: str | None = None, region: str | None = None,
                                 include_pinned: str | None = None, trim: str | None = None) -> dict[str, Any]:
@@ -506,7 +714,11 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
         if prof["videoCount"] == 0:
             return [], None
         ie = ydl.get_info_extractor("TikTokUser")
-        return _feed_page(ie, prof["secUid"], name, cursor, (region or "US").upper())
+        try:
+            return _feed_page(ie, prof["secUid"], name, cursor, (region or "US").upper())
+        except UpstreamBlocked as blocked:
+            return _with_embed_fallback(blocked, name, lambda: _embed_feed_page(ydl, name, cursor,
+                                                                                prof["videoCount"]))
 
     items, next_cursor = await with_ydl(P, go)
     if not keep_pinned:  # a no-op today (see notes), kept in case TikTok starts flagging pinned posts
@@ -516,15 +728,17 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
 
 
 @sc_get(router, "/v1/tiktok/profile/region",
-        source="yt-dlp TikTokUserIE (user page, /api/creator/item_list/) + TikTokSoundIE app API "
-               "(music/aweme author.region)",
+        source="yt-dlp TikTokUserIE (user page, /api/creator/item_list/ or the /embed/@handle page and TikTokIE "
+               "post pages) + TikTokSoundIE app API (music/aweme author.region)",
         notes="Web data has no account region, so it is read from the app API's author.region on one of the "
               "creator's recent posts, found through the creator's own original sound (music/aweme). That costs "
               "about 3-4 TikTok requests. 404 region_unavailable when none of the latest posts uses the "
               "creator's own sound (or it isn't on that sound's first page). When the app API can't be reached "
               "for any of those sounds, the error is the retryable one /v1/tiktok/song gives (502 proxy_error/"
-              "network_error, 503 when throttled), not a 404. TikTokSoundIE is marked broken in yt-dlp, so this "
-              "may stop working without notice.")
+              "network_error, 503 when throttled), not a 404. When item_list is throttled or bot-checked (see "
+              "/v3/tiktok/profile/videos), the creator's posts are found on its embed page and read from their own "
+              "pages until two use its own sound. Also at /v1/tiktok/profile-region. TikTokSoundIE is marked broken "
+              "in yt-dlp, so this may stop working without notice.")
 async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
     name = _handle(handle)
 
@@ -535,10 +749,13 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
         if prof["videoCount"] == 0:
             return None
         ie, cursor, items = ydl.get_info_extractor("TikTokUser"), int(time.time() * 1000), []
-        for _ in range(2):  # a second round only for accounts idle for over _FEED_HOPS weeks
-            items, cursor = _feed_page(ie, prof["secUid"], name, cursor, "US")
-            if items or cursor is None:
-                break
+        try:
+            for _ in range(2):  # a second round only for accounts idle for over _FEED_HOPS weeks
+                items, cursor = _feed_page(ie, prof["secUid"], name, cursor, "US")
+                if items or cursor is None:
+                    break
+        except UpstreamBlocked as blocked:
+            items = _with_embed_fallback(blocked, name, lambda: _embed_own_sound_posts(ydl, name, prof))
         return _account_region(ydl, prof, items)
 
     region = await with_ydl(P, go, extractor_args=_APP_API)
@@ -553,18 +770,31 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
         notes="Use is_live. liveRoomUserInfo/liveRoom are the /@handle/live page's data when it has the user (while "
               "live, and for a recently ended room: liveRoom.status 4); otherwise liveRoomUserInfo comes from the "
               "profile page, is_live from webcast/room/info, and liveRoom is omitted. The live page answers only to "
-              "the exact uniqueId, so a mixed-case handle or numeric id costs two more requests.")
+              "the exact uniqueId, so a mixed-case handle or numeric id costs two more requests. A live page that "
+              "stays a bot check (a JS challenge yt-dlp can't pass) is answered the same way, from the profile page "
+              "and room/info; room/info answering with something other than JSON is retried, then a 503, never a "
+              "guessed is_live.")
 async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
     name = _handle(handle)
 
     def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
         ie = ydl.get_info_extractor("TikTokLive")
-        info, profile = _live_page(ie, name), None
+        blocked: list[UpstreamBlocked] = []
+
+        def live_page(handle: str) -> dict[str, Any] | None:
+            try:
+                return _live_page(ie, handle)
+            except UpstreamBlocked as exc:  # the profile page and room/info still tell whether it is live
+                log.info("tiktok: live page of %s blocked (%s); using the profile page", handle, exc.message)
+                blocked.append(exc)
+                return None
+
+        info, profile = live_page(name), None
         if info is None:
             profile = _user_page(ydl, name)
             unique = profile["user"].get("uniqueId")
-            if M.is_handle(unique) and unique != name:  # 'WeatherNewsLive' or a numeric id: retry with the uniqueId
-                info = _live_page(ie, unique)
+            if M.is_handle(unique) and unique != name and not blocked:  # 'WeatherNewsLive' or a numeric id
+                info = live_page(unique)
         if info:
             room = M.obj(info.get("liveRoom"))
             live = M.to_int(room.get("status")) == 2 or M.to_int(info["user"].get("status")) == 2
@@ -573,8 +803,8 @@ async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
         user, live = profile["user"], False
         room_id = str(user.get("roomId") or "")
         if _ID.fullmatch(room_id):  # "" when not live; a roomId that isn't an id can't be asked about
-            resp = ie._download_json(_ROOM_INFO, room_id, "Downloading room info", fatal=False,
-                                     query={"aid": "1988", "room_id": room_id})
+            resp = _web_api(ie, _ROOM_INFO, room_id, "Downloading room info", {"aid": "1988", "room_id": room_id},
+                            "live room info")
             live = M.to_int(M.obj(M.obj(resp).get("data")).get("status")) == 2
         return {"is_live": live, "liveRoomUserInfo": M.live_user(user, profile.get("stats"))}
 
@@ -587,13 +817,15 @@ async def tiktok_user_live(handle: str = Query(...)) -> dict[str, Any]:
 
 @sc_get(router, "/v1/tiktok/live", source="yt-dlp TikTokLiveIE (webcast.tiktok.com/webcast/room/info)",
         notes="404 unless the room exists and its owner is user_id. like_count is omitted when the anonymous "
-              "room info reports 0 (it does even for busy rooms).")
+              "room info reports 0 (it does even for busy rooms). An answer that isn't JSON (throttled, a bot check) "
+              "is retried with backoff, then a 503 upstream_blocked.")
 async def tiktok_live(room_id: str = Query(...), user_id: str = Query(...)) -> dict[str, Any]:
     rid, uid = _numeric("room_id", room_id), _numeric("user_id", user_id)
 
     def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
         ie = ydl.get_info_extractor("TikTokLive")
-        return ie._download_json(_ROOM_INFO, rid, "Downloading room info", query={"aid": "1988", "room_id": rid})
+        return _web_api(ie, _ROOM_INFO, rid, "Downloading room info", {"aid": "1988", "room_id": rid},
+                        "live room info")
 
     resp = await with_ydl(P, go)
     data = resp.get("data") if isinstance(resp, dict) else None
@@ -650,7 +882,10 @@ async def tiktok_song_videos(clipId: str | None = None, cursor: str | None = Non
               "returns; pass it back as cursor while has_more is true (anything else is a 400 bad_cursor). A "
               "removed or non-public collection (TikTok statusCode 100001), or an id of 0 or beyond int64, is 404. "
               "Of TikTok's other statusCodes, 10216/10222 (private) are 403, 10000/10102 (TikTok refusing "
-              "anonymous requests) 503, and any other 500.")
+              "anonymous requests, asked again twice first) 503, and any other 500. From a throttled or "
+              "bot-checked server IP the API answers with an empty body or a JS challenge page instead of JSON: "
+              "the challenge is solved and each is asked again twice with backoff (1.5 s, 3 s), then it is a 503 "
+              "upstream_blocked. The collection's page has no items of its own to fall back on.")
 async def tiktok_collection_videos(url: str = Query(...), cursor: str | None = None) -> dict[str, Any]:
     cid = M.collection_id(url)
     if not cid:
@@ -663,8 +898,8 @@ async def tiktok_collection_videos(url: str = Query(...), cursor: str | None = N
 
     def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
         ie = ydl.get_info_extractor("TikTokCollection")
-        return ie._download_json(ie._API_BASE_URL, cid, "Downloading collection page",
-                                 query=ie._build_web_query(cid, offset))
+        return _web_api(ie, ie._API_BASE_URL, cid, "Downloading collection page", ie._build_web_query(cid, offset),
+                        "collection's video list")
 
     resp = await with_ydl(P, go)
     if not isinstance(resp, dict):
@@ -704,10 +939,52 @@ async def search_users(query: str = Query(..., min_length=1), cursor: str | None
     return {"cursor": 0, "users": [mapped] if mapped.get("uid") else []}
 
 
+_FOLLOWER_RANGES = {"10k-100k": (10_000, 100_000), "100k-1m": (100_000, 1_000_000),
+                    "1m-10m": (1_000_000, 10_000_000), ">10m": (10_000_000, float("inf")),
+                    "10m+": (10_000_000, float("inf"))}
+
+
+async def _regional_feed(request: Request, country: str) -> dict[str, Any]:
+    """TikTok's recommended feed for `country`, which TikTok serves only to a signed-in account: anonymously its web
+    recommend and explore item_list and the app feed answer empty, and Creative Center's creator chart (the official
+    source) now needs a TikTok One login (its API answers 40101 "no permission"). So it is read with the saved TikTok
+    account cookies, as /v1/tiktok/get-trending-feed reads it; without them it is asked of the configured
+    compatibility provider, unless the request says x-socialscrape-fallback: off. Neither: 501
+    platform_auth_required (it used to be a 500 "regional recommended feed is unavailable")."""
+    from .. import fallback
+    from .tiktok_private import trending
+
+    try:
+        return await trending(region=country)
+    except NotSupported as exc:
+        if exc.code != "platform_auth_required":
+            raise
+    if request.headers.get(fallback.HEADER, "").strip().lower() != "off":
+        status, feed, problem = await fallback.ask_path(request.app, "/v1/tiktok/get-trending-feed",
+                                                        {"region": country})
+        if problem != "disabled":
+            if problem or status != 200 or not isinstance(feed, dict):
+                raise UpstreamError(f"The compatibility provider's {country} trending feed is unavailable "
+                                    f"({problem or status})")
+            return feed
+    raise NotSupported("Popular creators are ranked from TikTok's regional recommended feed, which TikTok only "
+                       "serves to a signed-in account (Creative Center's creator chart now needs a TikTok One "
+                       "login): add TikTok account cookies in Platform settings to use this endpoint",
+                       code="platform_auth_required", platform=P)
+
+
 @sc_get(router, "/v1/tiktok/creators/popular",
-        source="regional anonymous recommended feed, with TikTok profile hydration",
-        notes="When TikTok Creative Center is down, ranks creators surfaced in the selected market's public "
-              "recommended feed; this is not Creative Center's official chart.")
+        source="TikTok's regional recommended feed (app feed API with saved account cookies), with TikTok profile "
+               "hydration",
+        status="needs_setup",
+        notes="Ranks the creators in the selected market's recommended feed, each hydrated from its profile page "
+              "(follower_cnt and liked_cnt are the profile's, absent when that page didn't load); this is not "
+              "Creative Center's official chart, which now needs a TikTok One login. TikTok serves the regional "
+              "feed only to a signed-in account, so this needs TikTok account cookies in Platform settings (as "
+              "/v1/tiktok/get-trending-feed does) or, failing those, a configured compatibility provider (not used "
+              "with x-socialscrape-fallback: off); otherwise 501 platform_auth_required. followerCount is 10k-100k, "
+              "100k-1m, 1m-10m or >10m (10m+ too, any case); sortBy is follower (default), engagement, popular or "
+              "avg_views (the sampled posts' likes per view, total views, mean views). audienceCountry is ignored.")
 async def popular_creators(
     request: Request,
     page: str = "1",
@@ -716,19 +993,16 @@ async def popular_creators(
     creatorCountry: str = "US",
     audienceCountry: str | None = None,
 ) -> dict[str, Any]:
-    from .. import fallback
-
     page_no = int(page) if page.isascii() and page.isdigit() and int(page) > 0 else 0
     if not page_no:
         raise BadRequest("page must be a positive integer")
     country = creatorCountry.strip().upper()
     if not _REGION.fullmatch(country):
         raise BadRequest("creatorCountry must be a two-letter country code")
-    status, feed, problem = await fallback.ask_path(
-        request.app, "/v1/tiktok/get-trending-feed", {"region": country}
-    )
-    if problem or status != 200 or not isinstance(feed, dict):
-        raise UpstreamError("TikTok's regional recommended feed is unavailable")
+    span = _FOLLOWER_RANGES.get(followerCount.strip().lower()) if followerCount else None
+    if followerCount and not span:
+        raise BadRequest("followerCount must be 10k-100k, 100k-1m, 1m-10m or >10m")
+    feed = await _regional_feed(request, country)
     grouped: dict[str, dict[str, Any]] = {}
     for item in M.objs(feed.get("aweme_list")):
         author, stats = M.obj(item.get("author")), M.obj(item.get("statistics"))
@@ -757,29 +1031,26 @@ async def popular_creators(
         return compact({
             "avatar_url": next(iter(avatar.get("url_list") or []), None), "country_code": country,
             "follower_cnt": M.to_int(stats.get("followerCount")), "items": row["items"],
-            "liked_cnt": M.to_int(stats.get("heartCount")) or row["likes"],
+            "liked_cnt": M.to_int(stats.get("heartCount")),  # the account's; the sampled posts' sum is not it
             "nick_name": author.get("nickname"), "tcm_id": str(author.get("uid")),
             "tcm_link": f"https://www.tiktok.com/@{author['unique_id']}",
             "tt_link": f"https://www.tiktok.com/@{author['unique_id']}", "user_id": str(author.get("uid")),
-            "_sample_views": row["views"], "_sample_likes": row["likes"],
+            "_sample_views": row["views"], "_sample_likes": row["likes"], "_sample_posts": len(row["items"]),
         })
 
     creators = await asyncio.gather(*(hydrate(row) for row in grouped.values()))
-    if followerCount:
-        ranges = {"10k-100k": (10_000, 100_000), "100k-1m": (100_000, 1_000_000),
-                  "1m-10m": (1_000_000, 10_000_000), ">10m": (10_000_000, float("inf"))}
-        if followerCount not in ranges:
-            raise BadRequest("followerCount must be 10k-100k, 100k-1m, 1m-10m or >10m")
-        low, high = ranges[followerCount]
-        creators = [c for c in creators if low <= (c.get("follower_cnt") or 0) < high]
-    key = ((lambda c: c.get("_sample_likes", 0) / max(c.get("_sample_views", 0), 1))
-           if sortBy in ("engagement", "engagement_rate") else
-           (lambda c: c.get("_sample_views", 0)) if sortBy in ("popular", "popularity") else
-           (lambda c: c.get("follower_cnt") or 0))
+    if span:
+        low, high = span
+        creators = [c for c in creators if c.get("follower_cnt") is not None and low <= c["follower_cnt"] < high]
+    sort = sortBy.strip().lower()
+    key = ((lambda c: c["_sample_likes"] / max(c["_sample_views"], 1)) if sort in ("engagement", "engagement_rate")
+           else (lambda c: c["_sample_views"]) if sort in ("popular", "popularity")
+           else (lambda c: c["_sample_views"] / max(c["_sample_posts"], 1)) if sort == "avg_views"
+           else (lambda c: c.get("follower_cnt") or 0))
     creators.sort(key=key, reverse=True)
     for creator in creators:
-        creator.pop("_sample_views", None)
-        creator.pop("_sample_likes", None)
+        for name in ("_sample_views", "_sample_likes", "_sample_posts"):
+            creator.pop(name, None)
     size, start = 20, (page_no - 1) * 20
     selected = creators[start:start + size]
     return {"creators": selected, "pagination": {"has_more": start + size < len(creators),

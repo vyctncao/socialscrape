@@ -204,6 +204,7 @@ def create_app() -> FastAPI:
         "/v1/tiktok/profile/following": "/v1/tiktok/user/following",
         "/v1/tiktok/profile/audience-demographics": "/v1/tiktok/user/audience",
         "/v1/tiktok/user/audience-demographics": "/v1/tiktok/user/audience",
+        "/v1/tiktok/profile-region": "/v1/tiktok/profile/region",
     }
     # Params an alias's callers name differently: ScrapeCreators clients send highlight_id to the highlight aliases.
     renamed = {"/v1/instagram/highlights/details": {"highlight_id": "id"},
