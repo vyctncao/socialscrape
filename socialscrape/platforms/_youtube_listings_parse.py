@@ -11,9 +11,10 @@ import urllib.parse
 from typing import Any
 
 from yt_dlp.extractor.youtube import YoutubeTabIE
-from yt_dlp.utils import parse_duration, traverse_obj, unified_timestamp
+from yt_dlp.utils import parse_duration, parse_iso8601, traverse_obj, unified_timestamp
 
-from ..util import iso_utc, parse_count
+from ..util import clock, iso_utc, parse_count
+from ._youtube_videos_parse import exact_count
 
 YT = "https://www.youtube.com"
 
@@ -638,6 +639,76 @@ def playlist_video_renderer(pv: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+# --- per-video extras (reel_item_watch) --------------------------------------
+
+REEL_OK = "REEL_ITEM_WATCH_STATUS_SUCCEEDED"
+REEL_GONE = "REEL_ITEM_WATCH_STATUS_REEL_ERROR"  # what it answers for an id that is no video YouTube shows
+_DIGITS = re.compile(r"[0-9]{1,19}")
+EXTRA_KEYS = ("description", "viewCountInt", "likeCountText", "likeCountInt", "commentCountText", "commentCountInt",
+              "publishDate", "genre", "durationMs", "durationFormatted")
+
+
+def _digits(value: Any) -> int | None:
+    """'285970' -> 285970; None for anything but a string of ASCII digits (YouTube's counts are strings)."""
+    return int(value) if isinstance(value, str) and _DIGITS.fullmatch(value) else None
+
+
+def _first(*values: int | None) -> int | None:
+    return next((v for v in values if v is not None), None)
+
+
+def reel_buttons(resp: dict[str, Any]) -> list[dict[str, Any]]:
+    """The buttonViewModels of a reel_item_watch answer's action bar (like, comments, share, remix...)."""
+    return traverse_obj(resp, ("overlay", "reelPlayerOverlayRenderer", "playerOverlay", "reelPlayerOverlayViewModel",
+                               "actionBar", "reelActionBarViewModel", "buttonViewModels", ..., "buttonViewModel",
+                               {dict}))
+
+
+def reel_extras(resp: dict[str, Any], vid: str) -> dict[str, Any] | None:
+    """A reel_item_watch answer (what YouTube's Shorts player asks for each Short; it answers for any video id) ->
+    what a listing's grid doesn't carry, under EXTRA_KEYS; None when it holds no details of video `vid`.
+
+    The player response in it is cut short of the formats (no PO token: 'UNPLAYABLE') but keeps videoDetails
+    (exact views, length, description) and the microformat: publishDate with its offset
+    ('2026-10-23T11:00:08-07:00', the form ScrapeCreators returns), exact likeCount (absent when the likes are
+    hidden) and category (SC's genre). The comment count is only in the comments button: its label is exact
+    ('View 40,525 comments'), its title rounded from 10,000 on ('40K'); one without a number (comments turned off)
+    is null."""
+    pr = traverse_obj(resp, ("playerResponse", {dict})) or {}
+    details = traverse_obj(pr, ("videoDetails", {dict})) or {}
+    if resp.get("status") != REEL_OK or details.get("videoId") != vid:
+        return None
+    mf = traverse_obj(pr, ("microformat", "playerMicroformatRenderer", {dict})) or {}
+    button = next((b for b in reel_buttons(resp)
+                   if b.get("accessibilityId") == "id.reel_comment_button" or b.get("iconName") == "SHORTS_COMMENT"),
+                  {})
+    shown = button.get("title") if isinstance(button.get("title"), str) and re.search(r"\d", button["title"]) else None
+    comments = exact_count(button.get("accessibilityText")) if shown and isinstance(
+        button.get("accessibilityText"), str) else None
+    likes = _digits(mf.get("likeCount"))
+    seconds = _first(_digits(details.get("lengthSeconds")), _digits(mf.get("lengthSeconds")))
+    published = next((d for d in (mf.get("publishDate"), mf.get("uploadDate"))
+                      if isinstance(d, str) and parse_iso8601(d) is not None), None)
+    description = details.get("shortDescription")
+    return {
+        "description": description if isinstance(description, str) else None,
+        "viewCountInt": _first(_digits(details.get("viewCount")), _digits(mf.get("viewCount"))),
+        "likeCountText": str(likes) if likes is not None else None,
+        "likeCountInt": likes,
+        "commentCountText": shown,
+        "commentCountInt": comments,
+        "publishDate": published,
+        "genre": mf.get("category") if isinstance(mf.get("category"), str) and mf["category"] else None,
+        "durationMs": seconds * 1000 if seconds is not None else None,
+        "durationFormatted": clock(seconds, always_hours=True),
+    }
+
+
+def reel_reason(resp: dict[str, Any]) -> str | None:
+    """Why the player in a reel_item_watch answer shows no video ('Sign in to confirm you’re not a bot')."""
+    return traverse_obj(resp, ("playerResponse", "playabilityStatus", "reason", {text}))
+
+
 # --- SC item shapes ----------------------------------------------------------
 
 def sc_video(v: dict[str, Any], kind: str, channel: dict[str, Any] | None, *,
@@ -653,6 +724,37 @@ def sc_video(v: dict[str, Any], kind: str, channel: dict[str, Any] | None, *,
     if published:
         out["publishedTime"] = v["publishedTime"]
     out.update({"lengthText": v["lengthText"], "lengthSeconds": v["lengthSeconds"], "badges": v["badges"]})
+    return out
+
+
+def sc_short(v: dict[str, Any], extras: dict[str, Any] | None) -> dict[str, Any]:
+    """A channel Shorts grid item (sc_shelf_item's) with its extras (reel_extras) in ScrapeCreators' order. Without
+    them every extra is null, never 0: the grid only has id, title, thumbnail and the abbreviated view count."""
+    x = extras or {}
+    views = x.get("viewCountInt")
+    return {
+        "type": "short", "id": v["id"], "url": v["url"], "title": v["title"], "description": x.get("description"),
+        "thumbnail": v["thumbnail"], "viewCountText": v["viewCountText"],
+        "viewCountInt": views if views is not None else v["viewCountInt"],
+        **{k: x.get(k) for k in EXTRA_KEYS if k not in ("description", "viewCountInt")},
+    }
+
+
+def with_extras(v: dict[str, Any], extras: dict[str, Any] | None) -> dict[str, Any]:
+    """An sc_video item with includeExtras' fields (reel_extras): description after the title as in SC's items,
+    exact counts, publishDate, and publishedTime made exact from it. Unknown ones are null, never 0."""
+    x = extras or {}
+    out: dict[str, Any] = {}
+    for key, value in v.items():
+        out[key] = value
+        if key == "title":
+            out["description"] = x.get("description")
+    if x.get("viewCountInt") is not None:
+        out["viewCountInt"] = x["viewCountInt"]
+    if x.get("publishDate") and "publishedTime" in out:
+        out["publishedTime"] = iso_utc(parse_iso8601(x["publishDate"]))
+    out.update({k: x.get(k) for k in ("likeCountText", "likeCountInt", "commentCountText", "commentCountInt",
+                                      "publishDate")})
     return out
 
 

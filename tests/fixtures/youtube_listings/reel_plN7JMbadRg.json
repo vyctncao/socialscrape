@@ -1,0 +1,65 @@
+{
+ "overlay": {
+  "reelPlayerOverlayRenderer": {
+   "playerOverlay": {
+    "reelPlayerOverlayViewModel": {
+     "actionBar": {
+      "reelActionBarViewModel": {
+       "buttonViewModels": [
+        {},
+        {
+         "buttonViewModel": {
+          "iconName": "SHORTS_COMMENT",
+          "title": "158K",
+          "accessibilityText": "View 158,439 comments",
+          "accessibilityId": "id.reel_comment_button"
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "SHORTS_SHARE",
+          "title": "Share",
+          "accessibilityText": "Share",
+          "accessibilityId": "id.reel_share_button"
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "REMIX_FILLED",
+          "title": "Remix",
+          "accessibilityText": "Remix",
+          "accessibilityId": "id.reel_remix_button"
+         }
+        },
+        {}
+       ]
+      }
+     }
+    }
+   }
+  }
+ },
+ "playerResponse": {
+  "playabilityStatus": {
+   "status": "UNPLAYABLE",
+   "reason": "Video unavailable"
+  },
+  "videoDetails": {
+   "videoId": "plN7JMbadRg",
+   "lengthSeconds": "3479",
+   "shortDescription": "I trapped 4 strangers in an entire supermarket and the only way out is eating everything inside\n\nThe guys wore Fitbit Air to track their health and fitness throughout their entire time in the store. See what they achieved during the Google Health Awards. GooglePartner\nGoogle Store: https://www.jdoqocy.com/click-100988033-15751464?url=https%3A%2F%2Fstore.google.com%2Fconfig%2Fgoogle_fitbit_air%3Fsku%3D_google_fitbit_air_obsidian&sid=YT3-C4EGzVjxI_xF6NgSwwEfKMiFfNRQ7aLkO2IyMJdsmb7S3hBTWCeUc-mgHQ_ofID6TDXlZnk46TQbwNOZnToAdEWXTHN3F8MWOiYxSCo\nAmazon: https://www.amazon.com/Fitbit-Google-Air-Screenless-Activity/dp/B0GTMTZF3V?maas=maas_adg_6671CEA13701B4B69160FE4996FE8D25_afap_abs&ref_=aa_maas&tag=maas\nAmazon CA: https://www.amazon.ca/dp/B0GHSNQKXX?maas=maas_adg_E13A27015EB1D05E2A7B77D9169B232F_afap_abs&ref_=aa_maas&tag=maas\nAmazon UK: https://www.amazon.co.uk/dp/B0GHSPCBV9?maas=maas_adg_87E620143421E47F1E80B03D2AA22FB4_afap_abs&ref_=aa_maas&tag=maas\n\nCan the guys win the ultimate endurance challenge in Kizik hands-free shoes? See how they put these shoes to the test. Go to https://www.kizik.com/mrbeast for 15% off some of their top styles. KizikPartner\n\nSpecial thanks to iFIT for providing equipment, and iFIT trainer John Peel for helping prepare our contestants for the ultimate endurance and eating challenge! https://www.instagram.com/johnpeelfitness \nhttps://www.instagram.com/ifit/\nhttps://www.ifit.com/ iFITPartner \n\nGood Ranchers stocked our grocery store with 100% American meat. You can get the same high-quality meat without doing the challenge. Get $100 off + a free gift with every order when you visit https://www.goodranchers.com/beast and start a plan. GoodRanchersPartner\n\nHuge thanks to the brands that helped stock our grocery store: all Free Clear, Purex, Persil, Snuggle, Campbell’s V8 Energy and SpaghettiOs, Mama Mancini’s Meatballs, Danone Silk, Knorr, TheWonerfulCompany, Matt’s Organic, Junkless, Crisp Power Pretzels, Hippeas, Mi Niña, Danone/Oikos, NOW Foods, Fairlife, OLIPOP, POM Juice, Farmland, SunMaid Lull Mattress, Cmfrt, and Stand+\n\nSeen something you like? 👀 Most of the merch worn in this video is available at MrBeast.Store. Shop the official MrBeast merch and support the bigger mission. https://mrbeast.store/pages/eat-everything-in-a-grocery-store\n\nSUB TO ALL CHANNELS\nwww.youtube.com/@UCX6OQ3DkcsbYNE6H8uQQuVA\nwww.youtube.com/@UC4-79UOlP48-QNGgCko5p2g \nwww.youtube.com/@UCIPPMRA040LQr5QPyJEbmXA \nwww.youtube.com/@UCUaT_39o1x6qWjz7K2pWcgw \nwww.youtube.com/@UCAiLfjNXkNv24uhpzUgPa6A \nwww.youtube.com/@UCZzvDDvaYti8Dd8bLEiSoyQ \n\nNew Merch - https://mrbeast.store\nCheck out Viewstats! - https://www.viewstats.com/\nFor any questions or inquiries regarding this video, please reach out to chucky@mrbeastbusiness.com\nMusic Provided by https://www.extrememusic.com\n----------------------------------------------------------------\nfollow all of these or i will kick you\n• Facebook - https://www.facebook.com/MrBeast/\n• Twitter - https://twitter.com/MrBeast\n•  Instagram - https://www.instagram.com/mrbeast\n•  Im Hiring! - https://www.mrbeastjobs.com/",
+   "viewCount": "293548025"
+  },
+  "microformat": {
+   "playerMicroformatRenderer": {
+    "lengthSeconds": "3479",
+    "viewCount": "293548025",
+    "category": "Entertainment",
+    "publishDate": "2026-10-03T09:00:01-07:00",
+    "uploadDate": "2026-10-03T09:00:01-07:00",
+    "likeCount": "4311623"
+   }
+  }
+ },
+ "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED"
+}

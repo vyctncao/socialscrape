@@ -1,0 +1,65 @@
+{
+ "overlay": {
+  "reelPlayerOverlayRenderer": {
+   "playerOverlay": {
+    "reelPlayerOverlayViewModel": {
+     "actionBar": {
+      "reelActionBarViewModel": {
+       "buttonViewModels": [
+        {},
+        {
+         "buttonViewModel": {
+          "iconName": "SHORTS_COMMENT",
+          "title": "40K",
+          "accessibilityText": "View 40,525 comments",
+          "accessibilityId": "id.reel_comment_button"
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "SHORTS_SHARE",
+          "title": "Share",
+          "accessibilityText": "Share",
+          "accessibilityId": "id.reel_share_button"
+         }
+        },
+        {
+         "buttonViewModel": {
+          "iconName": "REMIX_FILLED",
+          "title": "Remix",
+          "accessibilityText": "Remix",
+          "accessibilityId": "id.reel_remix_button"
+         }
+        },
+        {}
+       ]
+      }
+     }
+    }
+   }
+  }
+ },
+ "playerResponse": {
+  "playabilityStatus": {
+   "status": "UNPLAYABLE",
+   "reason": "Video unavailable"
+  },
+  "videoDetails": {
+   "videoId": "50G0kIty7Cg",
+   "lengthSeconds": "38",
+   "shortDescription": "",
+   "viewCount": "1331129480"
+  },
+  "microformat": {
+   "playerMicroformatRenderer": {
+    "lengthSeconds": "39",
+    "viewCount": "1331129480",
+    "category": "Entertainment",
+    "publishDate": "2025-09-16T10:00:04-07:00",
+    "uploadDate": "2025-09-16T10:00:04-07:00",
+    "likeCount": "12607576"
+   }
+  }
+ },
+ "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED"
+}
