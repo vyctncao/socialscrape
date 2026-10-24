@@ -11,7 +11,9 @@ router = APIRouter()
 
 
 def _needs_shop() -> None:
-    if not get_settings().tiktok_shop_token:
+    from ..portal import active_platform_credential
+    saved = active_platform_credential("tiktok.shop_credentials")
+    if not (saved or get_settings().tiktok_shop_token):
         raise NotSupported("Configure TikTok Shop app credentials and access token to use this endpoint",
                            code="platform_shop_auth_required", platform="tiktok",
                            required=["app_key", "app_secret", "access_token", "shop_cipher"])

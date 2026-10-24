@@ -2127,3 +2127,32 @@ def test_stratton_method_and_legacy_route_compatibility(client, monkeypatch):
     for alias, canonical in aliases.items():
         response = client.get(alias, follow_redirects=False)
         assert response.status_code == 307 and response.headers["location"] == canonical
+
+
+def test_owner_saves_encrypted_tiktok_api_credentials(env, tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from socialscrape.main import create_app
+    from socialscrape.portal import active_platform_credential
+
+    portal = tmp_path / "portal.sqlite3"
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    monkeypatch.setenv("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    env(SOCIALSCRAPE_PORTAL_PATH=str(portal), SOCIALSCRAPE_API_KEYS="")
+    owner = TestClient(create_app(), base_url="https://testserver")
+    owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                                "setup_token": "setup"})
+    csrf = {"x-csrf-token": owner.get("/portal/api/me").json()["csrf"]}
+    secrets = {"tiktok-research_token": "research-private-token",
+               "tiktok-shop_credentials": '{"app_key":"private-key","app_secret":"private-secret"}'}
+    initial = owner.get("/portal/api/settings/platform-credentials").json()
+    assert all(not value["configured"] for value in initial.values())
+    for name, value in secrets.items():
+        assert owner.put(f"/portal/api/settings/platform-credentials/{name}", headers=csrf,
+                         json={"value": value}).json() == {"configured": True}
+    status = owner.get("/portal/api/settings/platform-credentials").json()
+    assert all(value["configured"] and value["updated_at"] for value in status.values())
+    assert not any(secret.encode() in portal.read_bytes() for secret in secrets.values())
+    assert "private" not in owner.get("/portal/api/settings/platform-credentials").text
+    assert active_platform_credential("tiktok.research_token") == "research-private-token"
+    assert owner.delete("/portal/api/settings/platform-credentials/tiktok-research_token", headers=csrf).json() == {
+        "removed": True}
