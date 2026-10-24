@@ -1,0 +1,45 @@
+{
+ "data": {
+  "xig_user_by_username": {
+   "pk": "21393171",
+   "polaris_ordered_timeline_connection": null,
+   "id": "17841400515130334"
+  }
+ },
+ "errors": [
+  {
+   "message": "A server error field_exception occured. Check server logs for details.",
+   "severity": "CRITICAL",
+   "mids": [
+    "bd306d83977aec5a95ee6ba33f6cc9b2"
+   ],
+   "debug_link": "https://www.meta.com/debug/?mid=bd306d83977aec5a95ee6ba33f6cc9b2",
+   "code": 1675011,
+   "api_error_code": null,
+   "summary": "Invalid Cursor",
+   "description": "",
+   "description_html": null,
+   "description_raw": "",
+   "is_silent": false,
+   "is_transient": false,
+   "is_not_critical": false,
+   "requires_reauth": false,
+   "allow_user_retry": false,
+   "debug_info": "Cursor \"garbage\" was invalid.",
+   "query_path": null,
+   "fbtrace_id": "EEpfJ68zykg",
+   "www_request_id": "AhEAbYJUqg3POIkiKduSWtu",
+   "path": [
+    "xig_user_by_username",
+    "polaris_ordered_timeline_connection"
+   ]
+  }
+ ],
+ "extensions": {
+  "server_metadata": {
+   "request_start_time_ms": 1792816524128,
+   "time_at_flush_ms": 1792816524148
+  },
+  "is_final": true
+ }
+}

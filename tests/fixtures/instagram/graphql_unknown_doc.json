@@ -1,0 +1,11 @@
+{
+ "errors": [
+  {
+   "message": "The GraphQL document with ID 1234567890123456 was not found.",
+   "severity": "CRITICAL"
+  }
+ ],
+ "extensions": {
+  "is_final": true
+ }
+}

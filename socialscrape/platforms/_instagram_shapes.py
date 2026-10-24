@@ -91,3 +91,12 @@ HIGHLIGHT_REEL: Shape = {
                  "profile_pic_id", "profile_pic_url", "strong_id__", "transparency_product_enabled", "username"),
     },
 }
+
+
+# image_versions2 and video_versions[] of a media item (/v2/instagram/user/posts, /v1/instagram/user/reels items)
+_FRAME = _leaves("height", "url", "width")
+IMAGE_VERSIONS: Shape = {
+    "candidates": _FRAME,
+    "additional_candidates": {"first_frame": _FRAME, "igtv_first_frame": _FRAME, "smart_frame": _FRAME},
+}
+VIDEO_VERSION: Shape = _leaves("bandwidth", "height", "type", "url", "width")

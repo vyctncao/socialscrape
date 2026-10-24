@@ -1,0 +1,88 @@
+{
+ "data": {
+  "xig_polaris_media": {
+   "__typename": "XIGPolarisVideoMedia",
+   "pk": "3756328113124001496",
+   "code": "DQhKIRakcbY",
+   "if_not_gated_logged_out": {
+    "__typename": "XIGPolarisVideoMedia",
+    "user": {
+     "username": "jane",
+     "id": "17841400515130334",
+     "pk": "21393171",
+     "profile_pic_url": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-19/858159145_18629205538017172_2441018152328237746_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_cat=1&ccb=7-5&_nc_sid=f7ccc5&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDgwLkMzIn0%3D&_nc_ohc=_rnZZXBAarQQ7kNvwG_2Ml8&_nc_oc=Ado3_WTimpwR_QolgYQoOt0W6zBliuv4UyeLKNfyEtB9W-NSekXM2rgiwC5zf0oGWGk&_nc_zt=24&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&oh=00_AQMbJHU2Jv7fdYi08Gt0V7NS6f6eZjfBig3KPGc9ihxFEg&oe=6AE21878",
+     "is_unpublished": false,
+     "full_name": "Jane Williamson",
+     "is_verified": true,
+     "is_private": false,
+     "__typename": "User",
+     "profile_image_uri": "https://scontent-lax3-2.cdninstagram.com/v/t51.82787-19/858159145_18629205538017172_2441018152328237746_n.jpg?stp=cp0_dst-jpg_s34x34_tt6&_nc_cat=1&ccb=7-5&_nc_sid=bf7eb4&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDgwLkMzIn0%3D&_nc_ohc=_rnZZXBAarQQ7kNvwG_2Ml8&_nc_oc=Ado3_WTimpwR_QolgYQoOt0W6zBliuv4UyeLKNfyEtB9W-NSekXM2rgiwC5zf0oGWGk&_nc_zt=24&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&oh=00_AQP5AuFIO5gtxyV_mN5ZROV-YutyBQ2YNTiWP92aEbt8aw&oe=6AE21878"
+    },
+    "__isXIGPolarisMedia": "XIGPolarisVideoMedia",
+    "pk": "3756328113124001496",
+    "code": "DQhKIRakcbY",
+    "taken_at": 1762009243,
+    "media_type": 2,
+    "product_type": "clips",
+    "coauthor_producers": [],
+    "location": null,
+    "clips_metadata": {
+     "original_sound_info": {
+      "audio_asset_id": "2223898111440671",
+      "original_audio_title": "Original audio"
+     }
+    },
+    "like_count": 1744330,
+    "like_and_view_counts_disabled": false,
+    "comment_count": 18730,
+    "commenting_disabled_for_viewer": null,
+    "caption": {
+     "pk": "18060605873449050",
+     "has_translation": null,
+     "text": "CHICKENLEIGH, IT’S CHRISTMAS🎄🎄🎄\n\n#utahmom #utahmoms #november #november1st #christmas #moms #readyforchristmas #halloween #chickenleigh #mariah \n\nMusic @mariahcarey All I want for Christmas 🔥",
+     "created_at": 1762009245
+    },
+    "caption_is_edited": false,
+    "original_height": 1920,
+    "original_width": 1080,
+    "id": "POLARIS_3756328113124001496",
+    "display_uri": "https://scontent-lax3-2.cdninstagram.com/v/t51.71878-15/572457756_1546667933189745_6082928968253353319_n.jpg?stp=dst-jpg_e35_s640x640_tt6&_nc_cat=103&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0xJUFMuYmVzdF9pbWFnZV91cmxnZW4uQzMifQ%3D%3D&_nc_ohc=pwxJhsKFEPQQ7kNvwEJq_MJ&_nc_oc=AdrdPYDcjguWwumcXpYrHzKJ9E2sg-9KTwXmWoMz1ZwXTkHEgDXiU5oQJNqaEL8g4uc&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&oh=00_AQPX8YtXW29I_UwOsSR70xo4nmJtUt2XtWXpkILqnlaMGw&oe=6AE21AEE",
+    "image_versions2": {
+     "additional_candidates": {
+      "first_frame": {
+       "url": "https://scontent-lax3-1.cdninstagram.com/v/t51.71878-15/573272450_853023433912800_6582370196655851973_n.jpg?stp=dst-jpg_e15_tt6&_nc_cat=108&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkNMSVBTLnhwaWRzLjY0MC5zZHIudmlkZW9fYWRkaXRpb25hbF9jb3Zlcl9mcmFtZS5DMyJ9&_nc_ohc=U2b-YfXfpUQQ7kNvwFwgMjp&_nc_oc=AdrRsWnoliVN_3ebgiEAsKNMLYnTnRMSWy0A9NQ6ssyvwfg36Erf017AJA9hQkTDtrU&_nc_zt=23&_nc_ht=scontent-lax3-1.cdninstagram.com&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&oh=00_AQOOe0MLWkTWKpPc4jWePRtCiTXDh9F4GsNk04ZzSgDACg&oe=6AE21315"
+      }
+     },
+     "candidates": [
+      {
+       "url": "https://scontent-lax3-2.cdninstagram.com/v/t51.71878-15/572457756_1546667933189745_6082928968253353319_n.jpg?stp=dst-jpg_e15_tt6&_nc_cat=103&ig_cache_key=Mzc1NjMyODExMzEyNDAwMTQ5NjE1NjI2MTk5NzQ3NDQ3OTA%3D.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkNMSVBTLnhwaWRzLjY0MC5zZHIudmlkZW9fZGVmYXVsdF9jb3Zlcl9mcmFtZS5DMyJ9&_nc_ohc=pwxJhsKFEPQQ7kNvwEJq_MJ&_nc_oc=AdrdPYDcjguWwumcXpYrHzKJ9E2sg-9KTwXmWoMz1ZwXTkHEgDXiU5oQJNqaEL8g4uc&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&oh=00_AQPHPlB82vUZWqTwcI0KjVcySFEuyosNB1k709zxqsnvOw&oe=6AE21AEE",
+       "height": 1136,
+       "width": 640
+      },
+      {
+       "url": "https://scontent-lax3-2.cdninstagram.com/v/t51.71878-15/572457756_1546667933189745_6082928968253353319_n.jpg?stp=dst-jpg_e15_p480x480_tt6&_nc_cat=103&ig_cache_key=Mzc1NjMyODExMzEyNDAwMTQ5NjE1NjI2MTk5NzQ3NDQ3OTA%3D.3-ccb7-5&ccb=7-5&_nc_sid=58cdad&efg=eyJ2ZW5jb2RlX3RhZyI6IkNMSVBTLnhwaWRzLjY0MC5zZHIudmlkZW9fZGVmYXVsdF9jb3Zlcl9mcmFtZS5DMyJ9&_nc_ohc=pwxJhsKFEPQQ7kNvwEJq_MJ&_nc_oc=AdrdPYDcjguWwumcXpYrHzKJ9E2sg-9KTwXmWoMz1ZwXTkHEgDXiU5oQJNqaEL8g4uc&_nc_zt=23&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&oh=00_AQPg5dY5wRQaOGdo72_66NydVVbmk9YwvR1Y62q-08dr9A&oe=6AE21AEE",
+       "height": 852,
+       "width": 480
+      }
+     ]
+    },
+    "has_audio": true,
+    "is_dash_eligible": 1,
+    "number_of_qualities": 9,
+    "video_versions": [
+     {
+      "type": 101,
+      "url": "https://scontent-lax3-2.cdninstagram.com/o1/v/t2/f2/m86/AQPPTXF0EjAoNcQgGEvDSyZC3St16jUjJ-oiLML5kWdJrB7OA-iOGE_hNqG_uBW-mwC0yY343U4kyEyfUHg_ZZeeZfdUR4QZtbg_H7I.mp4?_nc_cat=106&_nc_sid=5e9851&_nc_ht=scontent-lax3-2.cdninstagram.com&_nc_ohc=g-hXKhygeGEQ7kNvwHebehy&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uQ0xJUFMuQzMuNzIwLmRhc2hfYmFzZWxpbmVfMV92MSIsInhwdl9hc3NldF9pZCI6MTU2MjYxOTIzODA3ODE5NywiYXNzZXRfYWdlX2RheXMiOjM1NiwidmlfdXNlY2FzZV9pZCI6MTAwOTksImR1cmF0aW9uX3MiOjY2LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=7a2098917e8536bf&_nc_vs=HBksFQIYUmlnX3hwdl9yZWVsc19wZXJtYW5lbnRfc3JfcHJvZC84MzQ4NkVDQ0U5NDNCMDEwQkE2QzI5NzkxMTk2OEZBQ192aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYR2lnX3hwdl9yZWVsc19wZXJtYW5lbnRfc3JfcHJvZC8xMzI0NzE5MzY4NzE3NDgwXzEyMzI1Nzk2MzA5MjM5MzU3OTgubXA0FQICyAESACgAGAAbAogHdXNlX29pbAExEnByb2dyZXNzaXZlX3JlY2lwZQExFQAAJurb1sm0zMYFFQIoAkMzLBdAULu2RaHKwRgSZGFzaF9iYXNlbGluZV8xX3YxEQB1_gdl5p0BAA&_nc_gid=NiUq1bgrkA95zdA1Ypmh2w&_nc_ss=7b689&_nc_zt=28&oh=00_AQO5ssg0K0pkJvaXPiae8fwGnvF1YufgmthJkJHBUM54zQ&oe=6ADE160F"
+     }
+    ],
+    "accessibility_caption": "Video by Jane Williamson on November 01, 2025.",
+    "usertags": {
+     "in": []
+    },
+    "video_dash_manifest": "<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"urn:mpeg:dash:schema:mpd:2011 DASH-MPD.xsd\" profiles=\"urn:mpeg:dash:profile:isoff-on-demand:2011\" minBufferTime=\"PT2S\" type=\"static\" mediaPresentationDuration=\"PT66.933334S\" FBManifestTimestamp=\"1792816387\" FBManifestIdentifier=\"FobU4a0NGBJyMmV2ZXZwOS1yMWdlbjJ2cDkZpsrrksLgwvkCjqG2t+PCnQPc0oimxNyfBNCSsrbotNoElKinyZy03gTg1Ib0nJDlBIj0v8Hs87QF1rOI49vJjQfI/aK0maTQDdCc5bLth44PIhgYZGFzaF9sbl9oZWFhY192YnIzX2F1ZGlvIiwZGAVsaWdodAAWyAUUAhIUAEgOTk9UX0NMQVNTSUZJRUQA\"></MPD>"
+   },
+   "gating_ruling": null,
+   "id": "POLARIS_3756328113124001496"
+  }
+ }
+}

@@ -44,15 +44,21 @@ async def basic_profile(userId: str | None = None) -> dict[str, Any]:
     return user
 
 
-@sc_get(router, "/v1/instagram/search/profiles", source="Instagram web top-search API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in Instagram cookie account configured in Platform settings.")
-async def search_profiles(query: str = Query(..., min_length=1)) -> dict[str, Any]:
+async def topsearch(query: str, context: str) -> Any:
+    """Instagram's web top search (context 'user' or 'blended': users, hashtags and places). Logged-out clients have
+    no search: the call answers them with a 404 page, so it needs a saved cookie account (501 without one)."""
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
         _require_login(ie)
-        return _api_json(ydl, ie, f"{WEB}/web/search/topsearch/", query, "Searching Instagram profiles",
-                         query={"context": "user", "include_reel": "true", "query": query})
-    data = await with_ydl(P, go)
+        return _api_json(ydl, ie, f"{WEB}/web/search/topsearch/", query, "Searching Instagram",
+                         query={"context": context, "include_reel": "true", "query": query})
+    return await with_ydl(P, go)
+
+
+@sc_get(router, "/v1/instagram/search/profiles", source="Instagram web top-search API with saved cookies",
+        status="needs_setup", notes="Requires a signed-in Instagram cookie account configured in Platform settings.")
+async def search_profiles(query: str = Query(..., min_length=1)) -> dict[str, Any]:
+    data = await topsearch(query, "user")
     profiles = []
     for item in traverse_obj(data, ("users", ..., {dict})):
         user = item.get("user") if isinstance(item.get("user"), dict) else item
