@@ -22,7 +22,8 @@ _FIELDS = ("ad.id,ad.first_shown_date,ad.last_shown_date,ad.status,ad.status_sta
 
 
 def _official_token() -> str:
-    token = get_settings().tiktok_research_token
+    from ..portal import active_platform_credential
+    token = active_platform_credential("tiktok.research_token") or get_settings().tiktok_research_token
     if not token:
         raise NotSupported("Configure SOCIALSCRAPE_TIKTOK_RESEARCH_ACCESS_TOKEN with TikTok Research API scopes",
                            code="platform_oauth_required", platform="tiktok",

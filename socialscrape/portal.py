@@ -249,6 +249,29 @@ class PortalStore:
         self._set_setting(owner, f"{platform}.{kind}.pool", json.dumps(pool, separators=(",", ":")))
         self._clear_setting(owner, f"{platform}.{kind}")
 
+    def credential_status(self, owner: Principal) -> dict[str, Any]:
+        if owner.role != "owner":
+            raise PermissionError
+        out = {}
+        for name in ("tiktok.research_token", "tiktok.shop_credentials"):
+            row = self._setting(name)
+            out[name] = {"configured": bool(row), "updated_at": row[1] if row else None}
+        return out
+
+    def set_credential(self, owner: Principal, name: str, value: str) -> None:
+        if owner.role != "owner":
+            raise PermissionError
+        if name not in ("tiktok.research_token", "tiktok.shop_credentials"):
+            raise ValueError("Unknown platform credential")
+        value = value.strip()
+        if not value or len(value) > 8192:
+            raise ValueError("Enter a credential no longer than 8192 characters")
+        self._set_setting(owner, name, value)
+
+    def credential(self, name: str) -> str | None:
+        row = self._setting(name)
+        return row[0].decode() if row else None
+
     def platform_status(self, owner: Principal) -> dict[str, Any]:
         if owner.role != "owner":
             raise PermissionError
@@ -875,6 +898,10 @@ def _owner(request: Request) -> Principal:
     return principal
 
 
+def active_platform_credential(name: str) -> str | None:
+    return _active_store.credential(name) if _active_store else None
+
+
 def active_platform_pool(platform: str) -> tuple[list[str], list[str]]:
     return _active_store.platform_pool(platform) if _active_store else ([], [])
 
@@ -1067,6 +1094,32 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
         data = await request.json()
         token = store.create_invite(p, str(data.get("email", "")))
         return {"url": str(request.base_url).rstrip("/") + "/invite/" + token}
+
+    @router.get("/portal/api/settings/platform-credentials")
+    async def platform_credentials(request: Request):
+        return store.credential_status(_owner(request))
+
+    @router.put("/portal/api/settings/platform-credentials/{name}")
+    async def set_platform_credential(request: Request, name: str):
+        p = _owner(request)
+        _csrf(request, p)
+        data = await request.json()
+        try:
+            store.set_credential(p, name.replace("-", "."), str(data.get("value", "")))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"configured": True}
+
+    @router.delete("/portal/api/settings/platform-credentials/{name}")
+    async def clear_platform_credential(request: Request, name: str):
+        p = _owner(request)
+        _csrf(request, p)
+        key = name.replace("-", ".")
+        if key not in ("tiktok.research_token", "tiktok.shop_credentials"):
+            raise HTTPException(404, "Unknown platform credential")
+        if not store._clear_setting(p, key):
+            return JSONResponse({"detail": "This credential was already removed."}, status_code=404)
+        return {"removed": True}
 
     @router.get("/portal/api/settings/platforms")
     async def platform_status(request: Request):
