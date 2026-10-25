@@ -21,7 +21,7 @@ from socialscrape.config import ConfigError, get_settings
 from socialscrape.errors import (BadRequest, Forbidden, NotFound, NotSupported, UpstreamBlocked, UpstreamError,
                                  UpstreamUnreachable)
 from socialscrape.main import create_app
-from socialscrape.platforms import facebook_ads, tiktok, tiktok_ads
+from socialscrape.platforms import facebook_ads, instagram, tiktok, tiktok_ads
 from socialscrape.portal import PortalStore
 
 CLIENT_KEY = "client-key"
@@ -184,6 +184,31 @@ def test_catalog_post_fallback_forwards_the_json_body(make, upstream, monkeypatc
         r = c.post(path, json=not_an_object)
         assert r.status_code == 400 and r.json()["error"] == "bad_request", r.json()
     assert len(upstream.requests) == 1
+
+
+@pytest.mark.parametrize("native_only", [False, True])
+def test_instagram_profile_compatibility_post_honors_fallback_and_its_opt_out(make, upstream, monkeypatch,
+                                                                          native_only):
+    async def blocked(*args, **kwargs):
+        raise UpstreamBlocked("Instagram returned a login wall")
+
+    monkeypatch.setattr(instagram, "with_ydl", blocked)
+    payload = {"handle": "sample", "trim": True}
+    headers = {fallback.HEADER: "off"} if native_only else {}
+    c = make()
+    response = c.post("/v1/instagram/profile", json=payload, headers=headers)
+    if native_only:
+        assert response.status_code == 503 and not upstream.requests
+        assert response.headers.get(fallback.HEADER) is None
+    else:
+        assert response.status_code == 200 and response.json() == SC_OK
+        assert response.headers[fallback.HEADER] == fallback.PROVIDER
+        [sent] = upstream.requests
+        assert sent["method"] == "POST" and sent["path"] == "/v1/instagram/profile"
+        assert json.loads(sent["body"]) == payload and sent["headers"]["x-api-key"] == SC_KEY
+    before = len(upstream.requests)
+    assert c.post("/v1/instagram/profile", json={}).status_code == 400
+    assert len(upstream.requests) == before
 
 
 def test_a_local_answer_never_asks_scrapecreators(make, upstream, monkeypatch):
