@@ -53,6 +53,9 @@ MAX_BODY_BYTES = 16 * 1024 * 1024
 API_KEY_SETTING = "scrapecreators.api_key"
 OPTIONS_SETTING = "scrapecreators.options"
 _CATALOG_METHODS = {entry["path"]: frozenset(entry.get("methods", ("GET",))) for entry in CATALOG}
+# The compatibility POST is registered separately from the catalog's GET
+# profile operation, and ScrapeCreators accepts the same JSON-body request.
+_CATALOG_METHODS["/v1/instagram/profile"] |= {"POST"}
 # The catalog's pagination params: the only ones that can carry our own cursors (cursor.PREFIX).
 _CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id"})
 # Sent with every fallback request. One that comes in with it isn't asked of ScrapeCreators again: an upstream URL
