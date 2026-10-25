@@ -1187,10 +1187,15 @@ def test_rejected_session_envelope(client, monkeypatch):
     requested: list[str] = []
 
     async def with_ydl(platform, fn, **opts):
-        requested.append(fn)
-        raise ig.SessionRejected()
+        return fn(None)
 
-    monkeypatch.setattr(ig, "_page_flow", lambda ie_name, url, item_id: url)
+    def page_flow(ie_name, url, item_id):
+        requested.append(url)
+        def flow(ydl):
+            raise ig.SessionRejected()
+        return flow
+
+    monkeypatch.setattr(ig, "_page_flow", page_flow)
     monkeypatch.setattr(ig, "with_ydl", with_ydl)
     import asyncio
 

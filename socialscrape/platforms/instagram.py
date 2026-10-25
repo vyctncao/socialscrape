@@ -405,8 +405,13 @@ def _check_page(html: str, final_url: str, what: str) -> list[dict[str, Any]]:
 
 async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[str, list[dict[str, Any]]]:
     """Download a logged-out page the way `ie_name` does -> (html, relay results)."""
-    html, final_url = await with_ydl(PLATFORM, _page_flow(ie_name, url, item_id))
-    return html, _check_page(html, final_url, what)
+    def go(ydl: yt_dlp.YoutubeDL) -> tuple[str, list[dict[str, Any]]]:
+        html, final_url = _page_flow(ie_name, url, item_id)(ydl)
+        # Classify the HTTP-200 login/block page before leaving the retry layer,
+        # so a refused primary can advance to the configured backup profiles.
+        return html, _check_page(html, final_url, what)
+
+    return await with_ydl(PLATFORM, go)
 
 
 def profile_restriction(html: str) -> str | None:
@@ -451,8 +456,14 @@ def _profile_user(html: str, results: list[dict[str, Any]]) -> dict[str, Any]:
 async def fetch_profile(handle: str, tab: str = "") -> tuple[dict[str, Any], str]:
     """Profile page InstagramUserIE downloads (or its /reels/ tab) -> (merged xig_user_by_username, html)."""
     url = f"{WEB}/{handle}/{tab + '/' if tab else ''}"
-    html, results = await fetch_page("InstagramUser", url, handle, "Profile")
-    return _profile_user(html, results), html
+
+    def go(ydl: yt_dlp.YoutubeDL) -> tuple[dict[str, Any], str]:
+        html, final_url = _page_flow("InstagramUser", url, handle)(ydl)
+        # Missing Relay data on an app/block page can also be a retryable
+        # refusal. Validate the resolved user inside the same profile attempt.
+        return _profile_user(html, _check_page(html, final_url, "Profile")), html
+
+    return await with_ydl(PLATFORM, go)
 
 
 async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
