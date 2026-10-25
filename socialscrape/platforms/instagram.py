@@ -463,7 +463,9 @@ async def fetch_profile(handle: str, tab: str = "") -> tuple[dict[str, Any], str
         # refusal. Validate the resolved user inside the same profile attempt.
         return _profile_user(html, _check_page(html, final_url, "Profile")), html
 
-    return await with_ydl(PLATFORM, go)
+    # Instagram can serve its missing-profile page to one connection while
+    # another resolves the same public creator. Confirm within the finite pool.
+    return await with_ydl(PLATFORM, go, confirm_not_found=True)
 
 
 async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
@@ -805,7 +807,7 @@ def _with_kept_caption(node: dict[str, Any]) -> dict[str, Any]:
 async def fetch_feed(handle: str, tab: str = "", cursor: str | None = None) -> Feed:
     """A page of the profile's posts tab (tab '') or reels tab: the first one is the page's own, later ones the
     tab's query after `cursor`; with each item's post-query details."""
-    return await with_ydl(PLATFORM, _feed_flow(handle, tab, cursor))
+    return await with_ydl(PLATFORM, _feed_flow(handle, tab, cursor), confirm_not_found=True)
 
 
 def _highlight_flow(highlight_id: str) -> Callable[[yt_dlp.YoutubeDL], dict[str, Any] | None]:

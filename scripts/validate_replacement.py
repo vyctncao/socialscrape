@@ -306,8 +306,9 @@ def main() -> None:
                                          data=json.dumps(params).encode() if is_post else None,
                                          headers={**headers, **({"Content-Type": "application/json"} if is_post else {})})
         with semaphores[platform]:
+            requested_at = datetime.now(timezone.utc).isoformat()
             start = time.monotonic()
-            status, body, response_headers, network_error = 0, {}, {}, None
+            status, body, response_headers, network_error, network_detail = 0, {}, {}, None, None
             try:
                 try:
                     response = urllib.request.urlopen(request, timeout=args.timeout, context=context)
@@ -323,6 +324,10 @@ def main() -> None:
                     body = json.loads(text)
             except Exception as exc:
                 network_error = type(exc).__name__
+                network_detail = str(exc)
+                if key:
+                    network_detail = network_detail.replace(key, "[REDACTED]")
+                network_detail = network_detail[:512]
             elapsed = time.monotonic() - start
         if not isinstance(body, dict):
             body = {}
@@ -336,8 +341,10 @@ def main() -> None:
         success = status == 200 and body.get("success") is True and not issues and not network_error
         return {"case_id": case["case_id"] + (f"-page{page}" if page > 1 else ""), "kind": kind, "platform": platform,
                 "fixture": case, "path": path, "status": status, "seconds": round(elapsed, 3),
+                "requested_at": requested_at,
                 "outcome": "passed" if success else "failed", "issues": issues,
-                "error": body.get("error"), "network_error": network_error, "fallback": fallback,
+                "error": body.get("error"), "network_error": network_error,
+                "network_error_detail": network_detail, "fallback": fallback,
                 "page": page}, body
 
     def run(case: dict) -> list[dict]:

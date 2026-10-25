@@ -211,7 +211,7 @@ Ad-library traffic uses the same ordered proxy/account pools as the other platfo
 
 TikTok web JSON requests use yt-dlp's browser transport, matching its public page requests. On the production
 proxy path, the standard Python transport received a "Site Maintenance" HTML page while the same request through
-browser transport returned paginated JSON. TikTok profile lookups also confirm a missing user through the remaining
+browser transport returned paginated JSON. Instagram and TikTok profile lookups also confirm a missing user through the remaining
 configured connections: one egress can report 404 for a public user that another serves. The pool bounds those
 checks; with no configured backups a missing user remains final.
 

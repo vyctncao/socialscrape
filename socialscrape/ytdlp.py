@@ -511,7 +511,7 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
                    **ydl_opts: Any) -> T:
     """Run `fn(ydl)` in the worker pool, retrying configured connection profiles.
 
-    confirm_not_found is opt-in for TikTok user lookups: its public profile page
+    confirm_not_found is opt-in for public profile lookups: Instagram and TikTok
     can report a real user as missing on some egresses. Confirm using the finite
     configured pool before returning 404. Other lookups keep missing content final.
     """
