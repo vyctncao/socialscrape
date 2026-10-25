@@ -1158,7 +1158,7 @@ def map_feed_item(node: dict[str, Any], profile: dict[str, Any], media: dict[str
     caption_pk = str_or_none(caption.get("pk"))
     taken_at = _timestamp(media.get("taken_at"), node.get("taken_at"))
     play_count = _count("play_count", node, media)
-    return compact({
+    result = compact({
         "id": _media_id({"pk": pk}, author),
         "code": code,
         "media_type": mtype,
@@ -1189,6 +1189,12 @@ def map_feed_item(node: dict[str, Any], profile: dict[str, Any], media: dict[str
         "owner": author,
         "url": f"{WEB}/{'reel' if reel else 'p'}/{code}/" if code else None,
     })
+    # An answered post query can explicitly say that a post has no caption.
+    # Keep that known null distinct from a detail request that never answered.
+    caption_source = media if "caption" in media else node
+    if text is None and "caption" in caption_source and caption_source["caption"] is None:
+        result["caption"] = None
+    return result
 
 
 def _cursor(page_info: dict[str, Any]) -> str | None:

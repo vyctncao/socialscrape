@@ -477,7 +477,9 @@ REEL_MASK = ("status,playerResponse(playabilityStatus(status,reason),videoDetail
              "shortDescription,viewCount),microformat.playerMicroformatRenderer(publishDate,uploadDate,likeCount,"
              "viewCount,category,lengthSeconds)),overlay.reelPlayerOverlayRenderer.playerOverlay."
              "reelPlayerOverlayViewModel.actionBar.reelActionBarViewModel.buttonViewModels(buttonViewModel("
-             "iconName,title,accessibilityText,accessibilityId))")
+             "iconName,title,accessibilityText,accessibilityId),likeButtonViewModel(likeStatusEntityKey,"
+             "toggleButtonViewModel.toggleButtonViewModel.defaultButtonViewModel.buttonViewModel("
+             "title,accessibilityText)))")
 
 _EXTRAS_NOTE = (f"They come from one more InnerTube request per item (reel/reel_item_watch, what YouTube's Shorts "
                 f"player asks for; it answers for any video), up to {_EXTRAS_JOBS} at a time and at most "
@@ -657,6 +659,19 @@ async def youtube_channel(channelId: str | None = None, handle: str | None = Non
     out = p.channel_about(data)
     if not out["channelId"]:
         raise NotFound("Channel not found")
+    if out["subscriberCount"] is None:
+        # The channel page omits "0 subscribers" on some small accounts.
+        # YouTube's public Subscribe widget can still explicitly show 0.
+        # A hidden/missing widget count remains null, never an inferred zero.
+        try:
+            widget = await _run(lambda ie: ie._download_webpage(
+                f"{YT}/subscribe_embed", out["channelId"], "Downloading public subscriber count",
+                query={"channelid": out["channelId"], "layout": "full", "count": "default"}))
+        except ApiError:
+            pass
+        else:
+            if counted := p.subscriber_widget_count(widget, out["channelId"]):
+                out["subscriberCount"], out["subscriberCountText"] = counted
     return out
 
 

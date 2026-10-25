@@ -330,6 +330,17 @@ def test_reels_next_page(client, net):
 # --- mapping details -------------------------------------------------------------------------------------------
 
 
+def test_captionless_post_is_distinct_from_an_unanswered_detail():
+    node = {"pk": "1", "code": "abc", "media_type": 2}
+    profile = {"pk": JANE_PK, "username": "jane"}
+    assert "caption" not in ig.map_feed_item(node, profile)
+    assert "caption" not in ig.map_feed_item(node, profile, {"caption": {"pk": "123"}})
+    assert ig.map_feed_item(node, profile, {"caption": None})["caption"] is None
+    assert ig.map_feed_item({**node, "caption": None}, profile)["caption"] is None
+    assert ig.map_feed_item(node, profile, {"caption": {"text": ""}})["caption"] == {"text": ""}
+    assert ig.map_feed_item(node, profile, {"caption": {"text": "hello"}})["caption"]["text"] == "hello"
+
+
 def test_hidden_counts_are_unknown_not_zero():
     profile = {"pk": JANE_PK, "username": "jane"}
     node = {"pk": "1", "code": "abc", "media_type": 2, "like_and_view_counts_disabled": True, "like_count": 0,
