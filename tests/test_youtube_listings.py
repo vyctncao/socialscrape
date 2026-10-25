@@ -2063,6 +2063,15 @@ def test_channel_about_parses_numeric_video_count_from_text():
     assert body["videoCount"] == 1009 and body["videoCountText"] == "1,009 videos"
 
 
+def test_channel_about_keeps_the_resolved_canonical_handle():
+    data = {"metadata": {"channelMetadataRenderer": {"externalId": NASA, "title": "Display Name",
+                                                    "vanityChannelUrl": "https://www.youtube.com/@current_name"}}}
+    body = P.channel_about(data)
+    assert body["channelId"] == NASA and body["handle"] == "@current_name"
+    data["metadata"]["channelMetadataRenderer"].pop("vanityChannelUrl")
+    assert P.channel_about(data)["handle"] is None  # never infer a handle from the display name
+
+
 @pytest.mark.parametrize("shown,expected", [("0", 0), ("523M", 523_000_000), ("1,234", 1234)])
 def test_subscriber_widget_preserves_visible_counts(shown, expected):
     html = (f'<button data-channel-external-id="{MRBEAST}"></button>'

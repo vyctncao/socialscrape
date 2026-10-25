@@ -507,8 +507,14 @@ def _cookie_sendable(cookie: Cookie) -> bool:
     return True
 
 
-async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], **ydl_opts: Any) -> T:
-    """Run `fn(ydl)` in the worker pool; retry configured platform profiles only for retryable upstream failures."""
+async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confirm_not_found: bool = False,
+                   **ydl_opts: Any) -> T:
+    """Run `fn(ydl)` in the worker pool, retrying configured connection profiles.
+
+    confirm_not_found is opt-in for TikTok user lookups: its public profile page
+    can report a real user as missing on some egresses. Confirm using the finite
+    configured pool before returning 404. Other lookups keep missing content final.
+    """
     from .portal import active_platform_pool
 
     proxies, cookies = active_platform_pool(platform)
@@ -532,7 +538,8 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], **ydl_opt
             error, cause = exc, exc
         except (YoutubeDLError, RequestError) as exc:
             error, cause = translate_error(exc), exc
-        if index + 1 >= attempts or not _retry_profile(error):
+        retryable = _retry_profile(error) or (confirm_not_found and isinstance(error, NotFound))
+        if index + 1 >= attempts or not retryable:
             raise error from cause
         log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1, error.code, index + 2)
     raise AssertionError("unreachable")
