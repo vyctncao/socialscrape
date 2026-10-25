@@ -497,7 +497,9 @@ def test_map_user_posts():
     assert first["caption"] == {"text": "CHICKENLEIGH", "pk": "18060605873449050", "created_at": 1762009245,
                                 "media_id": "3756328113124001496", "user_id": JANE_PK}
     assert first["url"].endswith("/p/DQhKIRakcbY/") and first["taken_at"] == 1762009243
-    assert first["user"]["fbid_v2"] == "17841400515130334" and "caption" not in second
+    # The posts-tab node explicitly carries caption=null even without a detail
+    # response; that known absence is distinct from a missing caption field.
+    assert first["user"]["fbid_v2"] == "17841400515130334" and second["caption"] is None
     assert first["user"]["full_name"] == "Jane Williamson" and first["user"]["is_verified"] is True
     assert first["comment_count"] == 18709 and "like_count" not in first  # the page's own nodes have no counts
     assert "taken_at" not in second and "comment_count" not in second  # no details: unknown, not 0

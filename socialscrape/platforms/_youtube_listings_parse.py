@@ -255,6 +255,43 @@ _STORE_HOST = re.compile(r"(?<!photo)(?<!work)(?<!bi)shop|(?:(?<!re)|(?<=[a-z]re
 _STORE_TITLE = re.compile(r"\b(store|shop|merch(?!ant))", re.I)
 
 
+def channel_verified(data: dict[str, Any]) -> bool | None:
+    """Verification from the channel header, using yt-dlp's badge signals.
+
+    A complete header without a badge is an unverified channel. A response
+    without a header is unknown, rather than evidence of a removed badge.
+    Restrict the search to the header so a recommended channel cannot mark
+    the requested channel as verified.
+    """
+    header = data.get("header")
+    if not isinstance(header, dict) or not header:
+        return None
+    styles = traverse_obj(header, (..., "badges", ..., "metadataBadgeRenderer", "style", {str}))
+    images = traverse_obj(header, (
+        "pageHeaderRenderer", "content", "pageHeaderViewModel", "title", "dynamicTextViewModel", "text",
+        "attachmentRuns", ..., "element", "type", "imageType", "image", "sources", ..., "clientResource",
+        "imageName", {str}))
+    return (any(style in ("BADGE_STYLE_TYPE_VERIFIED", "BADGE_STYLE_TYPE_VERIFIED_ARTIST") for style in styles)
+            or any(image in ("CHECK_CIRCLE_FILLED", "AUDIO_BADGE") for image in images))
+
+
+def subscriber_widget_count(html: str, channel_id: str) -> tuple[int, str] | None:
+    """A first-party Subscribe button's visible count, including an explicit 0.
+
+    A widget without a count (or one for another channel) is unknown. In
+    particular, do not make the absence of a subscriber label mean zero.
+    """
+    if not re.search(r'data-channel-external-id=[\'"]' + re.escape(channel_id) + r'[\'"]', html):
+        return None
+    match = re.search(r'<span\b[^>]*class=[\'"][^\'"]*\byt-subscription-button-subscriber-count-'
+                      r'[^\'"]*[\'"][^>]*>([^<]*)</span>', html)
+    if not match:
+        return None
+    shown = match.group(1).strip()
+    value = count(shown)
+    return (value, shown) if value is not None else None
+
+
 def channel_about(data: dict[str, Any]) -> dict[str, Any]:
     """/@handle/about page -> /v1/youtube/channel payload."""
     about = traverse_obj(data, (
@@ -282,6 +319,13 @@ def channel_about(data: dict[str, Any]) -> dict[str, Any]:
                 store = url
     subs = about.get("subscriberCountText")
     description = about.get("description")
+    videos = count(about.get("videoCountText"))
+    if videos is None and traverse_obj(data, (
+            "contents", "twoColumnBrowseResultsRenderer", "tabs", ..., "tabRenderer", "content",
+            "sectionListRenderer", "contents", ..., "channelOwnerEmptyStateRenderer", {dict})):
+        # YouTube explicitly says this channel has no public content. This is
+        # different from a truncated response with no video-count field.
+        videos = 0
     return {
         "channelId": about.get("channelId") or meta.get("externalId"),
         "channel": about.get("canonicalChannelUrl") or meta.get("vanityChannelUrl") or meta.get("channelUrl"),
@@ -290,7 +334,8 @@ def channel_about(data: dict[str, Any]) -> dict[str, Any]:
         "description": description if isinstance(description, str) else meta.get("description"),
         "subscriberCount": count(subs),
         "subscriberCountText": subs,
-        "videoCount": count(about.get("videoCountText")),
+        "isVerified": channel_verified(data),
+        "videoCount": videos,
         "videoCountText": about.get("videoCountText"),
         "viewCountText": about.get("viewCountText"),
         "joinedDateText": text(about.get("joinedDateText")),
@@ -676,7 +721,21 @@ def reel_extras(resp: dict[str, Any], vid: str) -> dict[str, Any] | None:
     is null."""
     pr = traverse_obj(resp, ("playerResponse", {dict})) or {}
     details = traverse_obj(pr, ("videoDetails", {dict})) or {}
-    if resp.get("status") != REEL_OK or details.get("videoId") != vid:
+    like = traverse_obj(resp, ("overlay", "reelPlayerOverlayRenderer", "playerOverlay", "reelPlayerOverlayViewModel",
+                              "actionBar", "reelActionBarViewModel", "buttonViewModels", ..., "likeButtonViewModel",
+                              {dict}, any)) or {}
+    identity = details.get("videoId") == vid
+    if not details.get("videoId") and traverse_obj(pr, ("playabilityStatus", "reason")) == "Please sign in":
+        # The sign-in-gated player omits videoDetails, but its public action bar
+        # can still show counts. Its entity key binds those counts to this id.
+        raw_key = like.get("likeStatusEntityKey")
+        key = urllib.parse.unquote(raw_key) if isinstance(raw_key, str) else ""
+        try:
+            entity = base64.urlsafe_b64decode(key + "=" * (-len(key) % 4))
+        except (ValueError, TypeError):
+            entity = b""
+        identity = entity.startswith(b"\x12\x0b" + vid.encode()) and len(vid) == 11
+    if resp.get("status") != REEL_OK or not identity:
         return None
     mf = traverse_obj(pr, ("microformat", "playerMicroformatRenderer", {dict})) or {}
     button = next((b for b in reel_buttons(resp)
@@ -685,7 +744,15 @@ def reel_extras(resp: dict[str, Any], vid: str) -> dict[str, Any] | None:
     shown = button.get("title") if isinstance(button.get("title"), str) and re.search(r"\d", button["title"]) else None
     comments = exact_count(button.get("accessibilityText")) if shown and isinstance(
         button.get("accessibilityText"), str) else None
-    likes = _digits(mf.get("likeCount"))
+    # Zero-comment Shorts show title="0" but the label is just "View comments",
+    # without the number used on positive counts. The visible zero is evidence;
+    # a "Comments" title (disabled/unknown) still stays null.
+    if comments is None and shown is not None and shown.strip() == "0":
+        comments = 0
+    like_button = traverse_obj(like, ("toggleButtonViewModel", "toggleButtonViewModel", "defaultButtonViewModel",
+                                     "buttonViewModel", {dict})) or {}
+    likes = _first(_digits(mf.get("likeCount")), exact_count(like_button.get("accessibilityText")),
+                   _digits(like_button.get("title")))
     seconds = _first(_digits(details.get("lengthSeconds")), _digits(mf.get("lengthSeconds")))
     published = next((d for d in (mf.get("publishDate"), mf.get("uploadDate"))
                       if isinstance(d, str) and parse_iso8601(d) is not None), None)

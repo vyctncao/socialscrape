@@ -607,6 +607,35 @@ def test_channel_about():
     assert out["store"] == "https://shopmrbeast.com" and out["links"] == ["https://shopmrbeast.com"]
 
 
+@pytest.mark.parametrize("image", ["CHECK_CIRCLE_FILLED", "AUDIO_BADGE"])
+def test_channel_about_preserves_header_verification(image):
+    """Stratton otherwise converts the omitted field into verified=False."""
+    page = about_page()
+    page["header"] = {"pageHeaderRenderer": {"content": {"pageHeaderViewModel": {
+        "title": {"dynamicTextViewModel": {"text": {"attachmentRuns": [{"element": {"type": {
+            "imageType": {"image": {"sources": [{"clientResource": {"imageName": image}}]}}
+        }}}]}}}
+    }}}}
+    assert P.channel_about(page)["isVerified"] is True
+
+
+def test_channel_about_distinguishes_unverified_from_unknown_header():
+    page = about_page()
+    assert P.channel_about(page)["isVerified"] is None
+    page["header"] = {"pageHeaderRenderer": {"content": {"pageHeaderViewModel": {
+        "title": {"dynamicTextViewModel": {"text": {"content": "Small creator"}}}
+    }}}}
+    page["contents"] = {"badges": [{"metadataBadgeRenderer": {"style": "BADGE_STYLE_TYPE_VERIFIED"}}]}
+    assert P.channel_about(page)["isVerified"] is False
+
+
+@pytest.mark.parametrize("style", ["BADGE_STYLE_TYPE_VERIFIED", "BADGE_STYLE_TYPE_VERIFIED_ARTIST"])
+def test_channel_about_reads_legacy_header_badges(style):
+    page = about_page()
+    page["header"] = {"c4TabbedHeaderRenderer": {"badges": [{"metadataBadgeRenderer": {"style": style}}]}}
+    assert P.channel_about(page)["isVerified"] is True
+
+
 def redirect(q: str) -> str:
     return "https://www.youtube.com/redirect?event=channel_description&q=" + quote(q, safe="")
 
@@ -1629,6 +1658,35 @@ def test_reel_extras_unknown_is_null_never_zero():
     assert all(item[k] is None for k in P.EXTRA_KEYS if k != "viewCountInt")
 
 
+def test_reel_extras_preserves_visible_zero_when_accessibility_label_omits_count():
+    answer = recorded("reel_mND4T0lzg_g")
+    for button in P.reel_buttons(answer):
+        if button.get("iconName") == "SHORTS_COMMENT":
+            button.update(title="0", accessibilityText="View comments")
+    extras = P.reel_extras(answer, "mND4T0lzg_g")
+    assert extras["commentCountInt"] == 0
+    assert extras["commentCountText"] == "0"
+
+
+def test_restricted_player_keeps_public_counts_only_for_the_matching_video():
+    vid = "abcdefghijk"
+    entity_key = base64.urlsafe_b64encode(b"\x12\x0b" + vid.encode() + b" >(\x01").decode()
+    like = {"likeStatusEntityKey": entity_key, "toggleButtonViewModel": {
+        "toggleButtonViewModel": {"defaultButtonViewModel": {"buttonViewModel": {
+            "title": "2", "accessibilityText": "like this video along with 2 other people"}}}}}
+    answer = {"status": P.REEL_OK, "playerResponse": {"playabilityStatus": {
+        "status": "LOGIN_REQUIRED", "reason": "Please sign in"}}, "overlay": {"reelPlayerOverlayRenderer": {
+        "playerOverlay": {"reelPlayerOverlayViewModel": {"actionBar": {"reelActionBarViewModel": {
+            "buttonViewModels": [{"likeButtonViewModel": like}, {"buttonViewModel": {
+                "iconName": "SHORTS_COMMENT", "title": "0", "accessibilityText": "View comments"}}]}}}}}}}
+    extras = P.reel_extras(answer, vid)
+    assert extras["likeCountInt"] == 2 and extras["commentCountInt"] == 0
+    assert extras["publishDate"] is None and extras["viewCountInt"] is None
+    assert P.reel_extras(answer, "zzzzzzzzzzz") is None
+    like["likeStatusEntityKey"] = "invalid%%%"
+    assert P.reel_extras(answer, vid) is None
+
+
 def test_channel_shorts_route_adds_extras(client, upstream, reels):
     """blocker 5: the Shorts grid has no publish date, likes or comments, which the consumer turned into missing
     dates and zero counters. One field-masked reel_item_watch per Short fills ScrapeCreators' fields in; the page's
@@ -2003,6 +2061,54 @@ def test_channel_about_parses_numeric_video_count_from_text():
         "metadata": {"channelMetadataRenderer": {"externalId": "UCx", "title": "X"}}}
     body = parse.channel_about(data)
     assert body["videoCount"] == 1009 and body["videoCountText"] == "1,009 videos"
+
+
+@pytest.mark.parametrize("shown,expected", [("0", 0), ("523M", 523_000_000), ("1,234", 1234)])
+def test_subscriber_widget_preserves_visible_counts(shown, expected):
+    html = (f'<button data-channel-external-id="{MRBEAST}"></button>'
+            f'<span class="yt-subscription-button-subscriber-count-branded-horizontal">{shown}</span>')
+    assert P.subscriber_widget_count(html, MRBEAST) == (expected, shown)
+    assert P.subscriber_widget_count(html, NASA) is None
+
+
+def test_subscriber_widget_without_a_count_is_unknown():
+    assert P.subscriber_widget_count(f'<button data-channel-external-id="{MRBEAST}">Subscribe</button>',
+                                     MRBEAST) is None
+
+
+def test_empty_channel_needs_explicit_source_evidence_for_zero_videos():
+    data = {"metadata": {"channelMetadataRenderer": {"externalId": NASA}}}
+    assert P.channel_about(data)["videoCount"] is None
+    data["contents"] = {"twoColumnBrowseResultsRenderer": {"tabs": [{"tabRenderer": {"content": {
+        "sectionListRenderer": {"contents": [{"channelOwnerEmptyStateRenderer": {
+            "description": {"runs": [{"text": "This channel doesn't have any content"}]}}}]}}}}]}}
+    assert P.channel_about(data)["videoCount"] == 0
+    assert P.channel_about(data)["subscriberCount"] is None
+
+
+@pytest.mark.parametrize("widget,expected", [
+    ('<button data-channel-external-id="' + NASA + '"></button>'
+     '<span class="yt-subscription-button-subscriber-count-branded-horizontal">0</span>', 0),
+    ('<button data-channel-external-id="' + NASA + '">Subscribe</button>', None),
+])
+def test_channel_route_only_fills_missing_subscribers_from_the_matching_public_widget(client, monkeypatch,
+                                                                                   widget, expected):
+    def page(*args, **kwargs):
+        return {"metadata": {"channelMetadataRenderer": {"externalId": NASA, "title": "NASA"}}}, {}
+
+    class Extractor:
+        def _download_webpage(self, url, channel_id, note, *, query):
+            assert url == "https://www.youtube.com/subscribe_embed"
+            assert channel_id == NASA and query["channelid"] == NASA
+            return widget
+
+    async def run(fn):
+        return fn(Extractor())
+
+    monkeypatch.setattr(M, "_page", page)
+    monkeypatch.setattr(M, "_run", run)
+    body = client.get("/v1/youtube/channel", params={"handle": "NASA"}).json()
+    assert body["success"] is True and body["subscriberCount"] == expected
 
 
 def test_trending_shorts_composes_current_short_search(client, monkeypatch):

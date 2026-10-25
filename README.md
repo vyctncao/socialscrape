@@ -125,6 +125,13 @@ An endpoint is implemented only when its data comes from one of two places:
 - a yt-dlp extractor's output, or
 - a platform API/page that a yt-dlp extractor **already calls**, reached through that extractor's own methods or yt-dlp's networking stack, possibly with another cursor, tab or field.
 
+One bounded exception is YouTube's public Subscribe widget: when the channel page omits its subscriber count,
+`/v1/youtube/channel` asks the matching channel's widget once through yt-dlp's networking stack. Only a visible
+count is used, including an explicit `0`; a missing or hidden count remains `null`.
+
+Sign-in-gated Shorts can still expose public like/comment buttons. Those counts are kept only when the action
+bar's entity key matches the requested video; dates and other player-only fields remain `null` when unavailable.
+
 Search APIs and the other endpoints that no extractor touches stay as `501`. This keeps the scraping logic maintained upstream: when a platform changes, `uv lock --upgrade-package yt-dlp` usually fixes it.
 
 ## Coverage
@@ -139,7 +146,7 @@ Search APIs and the other endpoints that no extractor touches stay as `501`. Thi
 | `/v1/youtube/video/comment/replies` | Takes the `repliesContinuationToken` from a comments page. |
 | `/v1/youtube/video/sponsors` | Heuristic from the description, links, promo codes and transcript; `isPaidPromotion` comes from YouTube. Links count only next to sponsor wording or a promo code, and shorteners or redirect hosts (e.g. LTT's `lmg.gg`) name no brand. |
 | `/v1/youtube/community-post` | Text, image, poll and video posts. A shared post returns the share, with the post it shares as `originalPost`. |
-| `/v1/youtube/channel` | About page data: subscribers (from abbreviated text), links, country, joined date. `email` is always null. |
+| `/v1/youtube/channel` | About page data: subscribers (from abbreviated text, or the public Subscribe widget when the page omits it), numeric `videoCount`, `isVerified` from the channel header, links, country, joined date. An explicit empty-channel state means zero public videos; missing counts stay null. `email` is always null. |
 | `/v1/youtube/channel-videos` | Exact view counts; `sort=latest\|popular`. Without `includeExtras` there is no per-video description and `publishedTime` is estimated from YouTube's relative text ("3 weeks ago"); `includeExtras=true` adds `description`, `likeCountText`/`Int`, `commentCountText`/`Int` and YouTube's own `publishDate`, and makes `publishedTime` exact (one extra request per video, as on `channel/shorts`). |
 | `/v1/youtube/channel/shorts` | The Shorts tab (48 per page) with ScrapeCreators' per-Short fields: `publishDate` (YouTube's own, with its offset), exact `viewCountInt`/`likeCountInt`/`commentCountInt`, `commentCountText` (the button's rounded text, "40K"), `description`, `genre`, `durationMs`/`durationFormatted`. The grid carries none of them, so each Short costs one more InnerTube request (`reel/reel_item_watch`, field-masked to ~1 KB): at most 4 at a time, 60 items and 20 s per page, cached 15 minutes per video. Unknown values are `null`, never `0` (likes hidden, comments off); when YouTube bot-checks or rate-limits those requests the page is still served with `null` extras for the items it didn't answer, and a dashboard proxy pool is tried in turn. |
 | `/v1/youtube/channel/lives`, `/channel/playlists`, `/channel/community-posts` | Tab listings with continuations, YouTube's pages as they are (only search and hashtag skip repeats). A shared community post nests the post it shares as `originalPost`, as `/v1/youtube/community-post` does. |
@@ -243,6 +250,24 @@ uv run pytest -q -m live         # hits YouTube/TikTok/Instagram for real (~20 m
 ```
 
 `contracts/*.json` holds the type contracts derived from ScrapeCreators' examples (`tests/contract.py`). Some offline replay tests read raw platform responses cached by the probe runs from `$SOCIALSCRAPE_PROBE_DIR` (default `/tmp/sc`). Those files are too large to commit, so the tests skip when they're missing.
+
+For a replacement gate over a real customer cohort, use the read-only runner. Keep the cohort and results outside
+the repository; they can contain customer account names and captured responses.
+
+```bash
+SOCIALSCRAPE_API_KEY=... uv run python scripts/validate_replacement.py \
+  --base-url https://your-service.example --cohort /private/cohort.json \
+  --output /private/replacement-run --workers 6 --per-platform 2 \
+  --feeds-per-platform 20 --pages-per-feed 3 --instagram-reels
+```
+
+The cohort is `{"profiles":[{"platform":"instagram","handle":"example"}],"videos":[{"platform":"youtube",
+"url":"https://www.youtube.com/shorts/abcdefghijk","previous_views":123}]}` (all three platforms are accepted).
+Every request disables ScrapeCreators fallback and omits response-cache opt-ins. The gate checks dates, identities,
+numeric counters, previously positive views becoming zero, and pagination overlaps/cycles. It writes private raw
+responses, `results.jsonl` and `summary.json`, and exits nonzero on any failed check, unavailable fixture or hidden
+required count. It does not classify a 404 as a deleted account without a separate source/provider control.
+`--only-failures /private/previous/results.jsonl` reruns the failed fixtures with the same case IDs.
 
 The code is laid out as follows:
 
