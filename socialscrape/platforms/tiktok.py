@@ -230,7 +230,10 @@ def _api_answer(ie: Any, url: str, display: str, note: str, query: dict[str, Any
     its place is solved as _web_page solves a page's, and the endpoint asked again with the challenge cookies.
     _NotJson when the answer still isn't JSON; yt-dlp's errors (HTTP, network) as it raises them."""
     try:
-        return ie._download_json(url, display, note, query=query)
+        # The same endpoint returns "Site Maintenance" to the standard Python
+        # transport on production proxies, but JSON to yt-dlp's browser
+        # transport. Keep it consistent with the working public page requests.
+        return ie._download_json(url, display, note, query=query, impersonate=True)
     except ExtractorError as exc:
         body = _undecodable(exc)
         if body is None:
@@ -242,7 +245,7 @@ def _api_answer(ie: Any, url: str, display: str, note: str, query: dict[str, Any
     except ExtractorError:  # not the challenge (a captcha or block page, a cut-off body), or one yt-dlp can't solve
         raise _NotJson(_not_json(body)) from None
     try:
-        return ie._download_json(url, display, f"{note} with challenge cookie", query=query)
+        return ie._download_json(url, display, f"{note} with challenge cookie", query=query, impersonate=True)
     except ExtractorError as exc:
         again = _undecodable(exc)
         if again is None:
@@ -768,11 +771,13 @@ async def tiktok_transcript(url: str = Query(...), language: str | None = None,
 
 @sc_get(router, "/v1/tiktok/profile", source="yt-dlp TikTokUserIE (user page webapp.user-detail)",
         notes="TikTok's web userInfo as-is (user, stats, itemList — itemList is usually empty on the web page). "
-              "user_id must be the numeric id; it is looked up through the same page (/@<id>).")
+              "user_id must be the numeric id; it is looked up through the same page (/@<id>). A profile-not-found "
+              "answer is checked through the remaining configured connection profiles, because TikTok sometimes "
+              "reports a real public user as missing on one egress.")
 async def tiktok_profile(handle: str | None = None, user_id: str | None = None) -> dict[str, Any]:
     require_one(handle=handle, user_id=user_id)
     ident = _handle(handle) if handle else _numeric("user_id", user_id)
-    info = await with_ydl(P, lambda ydl: _user_page(ydl, ident))
+    info = await with_ydl(P, lambda ydl: _user_page(ydl, ident), confirm_not_found=True)
     return compact({"user": info["user"], "stats": info.get("stats"), "itemList": info.get("itemList") or []})
 
 
@@ -831,7 +836,7 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
             return _with_embed_fallback(blocked, name, lambda: _embed_feed_page(ydl, name, cursor,
                                                                                 prof["videoCount"], deadline))
 
-    items, next_cursor = await with_ydl(P, go)
+    items, next_cursor = await with_ydl(P, go, confirm_not_found=True)
     if not keep_pinned:  # a no-op today (see notes), kept in case TikTok starts flagging pinned posts
         items = [it for it in items if not it.get("isPinnedItem")]
     return compact({"aweme_list": [M.aweme(it) for it in items], "has_more": next_cursor is not None,

@@ -326,9 +326,12 @@ def channel_about(data: dict[str, Any]) -> dict[str, Any]:
         # YouTube explicitly says this channel has no public content. This is
         # different from a truncated response with no video-count field.
         videos = 0
+    channel = about.get("canonicalChannelUrl") or meta.get("vanityChannelUrl") or meta.get("channelUrl")
+    handle = handle_of(channel) or handle_of(meta.get("vanityChannelUrl"))
     return {
         "channelId": about.get("channelId") or meta.get("externalId"),
-        "channel": about.get("canonicalChannelUrl") or meta.get("vanityChannelUrl") or meta.get("channelUrl"),
+        "channel": channel,
+        "handle": f"@{handle}" if handle else None,
         "name": meta.get("title"),
         "avatar": avatar,
         "description": description if isinstance(description, str) else meta.get("description"),

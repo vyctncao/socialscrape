@@ -209,6 +209,12 @@ Ad-library traffic uses the same ordered proxy/account pools as the other platfo
 
 ## Caveats
 
+TikTok web JSON requests use yt-dlp's browser transport, matching its public page requests. On the production
+proxy path, the standard Python transport received a "Site Maintenance" HTML page while the same request through
+browser transport returned paginated JSON. TikTok profile lookups also confirm a missing user through the remaining
+configured connections: one egress can report 404 for a public user that another serves. The pool bounds those
+checks; with no configured backups a missing user remains final.
+
 - **Approximate values.** Some values are YouTube's display text, not exact figures: relative times (`"3 weeks ago"`) turned into dates, and abbreviated counts (`"2.5K"`). The notes say where.
 - **Rate limits.** Every platform throttles, and the ad libraries quickly: Google answers a burst from one IP with its "sorry" CAPTCHA page for a while, and Meta can block an IP after a few dozen Ad Library requests. Use `SOCIALSCRAPE_PROXY` or the per-platform proxy pools (residential works best) and `cache_max_age`. Blocks surface as `503`. After Google refuses an egress (HTTP 429 or a redirect to `google.com/sorry`), the Google routes leave that IP or proxy alone for a cooling window of 60 seconds that doubles, up to 15 minutes, while Google keeps refusing (or Google's own `Retry-After`, if longer): calls inside it answer `503 upstream_blocked` with a `Retry-After` header and no request, so a burst can't keep the flag fresh, and with a Google proxy pool the next proxy is tried. A clean answer ends the window.
 - **Cookies.** Optional. They unlock login-gated paths (e.g. Instagram comments via `media/<pk>/comments/`), but those paths were **not verified** here, since only anonymous access was tested. Never use your personal account. An Instagram session that has been logged out answers `500 cookies_rejected` (replace the file); the files are never written. Check `/health` `cookie_errors` after changing one.

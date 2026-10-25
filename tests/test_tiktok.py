@@ -531,7 +531,7 @@ class _FakeFeed:
     def _build_web_query(self, sec_uid, cursor):
         return {"secUid": sec_uid, "cursor": cursor, "region": "US"}
 
-    def _download_json(self, url, display, note, query):
+    def _download_json(self, url, display, note, query, **kwargs):
         Request(url, query=query)
         self.calls += 1
         cur = query["cursor"]
@@ -646,7 +646,7 @@ class _FakeCollection:
     def _build_web_query(self, cid, cursor):
         return {"collectionId": cid, "cursor": cursor}
 
-    def _download_json(self, url, cid, note, query):
+    def _download_json(self, url, cid, note, query, **kwargs):
         self.queries.append(query)
         return self.resp
 
@@ -1178,7 +1178,7 @@ class _FakeLive(_FakeWaf):
     def _get_universal_data(self, page, name):  # every page but the challenge has it, SIGI state or not
         return {} if page == _CHALLENGE else {"webapp.app-context": {}}
 
-    def _download_json(self, url, room_id, note, fatal=True, query=None):
+    def _download_json(self, url, room_id, note, fatal=True, query=None, **kwargs):
         Request(url, query=query)
         self.fetched.append(url)
         return self.room
