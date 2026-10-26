@@ -4,10 +4,17 @@ const asset = path => `/assets/${path}?v=${encodeURIComponent(document.documentE
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="${asset('brand/icons.svg')}#${name}"></use></svg>`;
 const platforms = ['instagram', 'tiktok', 'youtube', 'facebook', 'google'];
 const docTagOrder = ['TikTok', 'TikTok Shop', 'Instagram', 'YouTube', 'Facebook Ad Library', 'TikTok Ad Library', 'Google Ad Library'];
-const platformIcon = platform => platforms.includes(platform) ? `<img class="platform-icon" data-platform="${platform}" src="${asset(`brand/platforms/${platform}.svg`)}" alt="" width="20" height="20">` : '';
+// Official brand artwork in brand/platforms/ (provenance in sources.json there), keyed by API path segment.
+const platformMarks = ['bluesky', 'facebook', 'github', 'google', 'instagram', 'komi', 'linkbio', 'linkme', 'linktree', 'soundcloud', 'telegram', 'tiktok', 'youtube', 'rumble', 'linkedin', 'twitter', 'reddit', 'truthsocial', 'threads', 'pinterest', 'twitch', 'apple-music', 'spotify', 'kwai', 'kick', 'snapchat', 'cosmos', 'pillar', 'amazon'];
+// Google and Meta publish these gradient marks only as raster artwork.
+const rasterMarks = ['google', 'instagram'];
+// Groups that are not a platform get a neutral glyph in the same slot.
+const platformGlyphs = {'find-social-profiles':'magnifying-glass', 'find-creator-emails':'envelope', 'detect-age-gender':'users-three', 'creator-tools':'magnifying-glass', account:'user-circle'};
+const platformIcon = platform => platformMarks.includes(platform) ? `<img class="platform-icon" data-platform="${platform}" src="${asset(`brand/platforms/${platform}.${rasterMarks.includes(platform) ? 'png' : 'svg'}`)}" alt="" width="20" height="20">` : platformGlyphs[platform] ? `<span class="platform-icon platform-glyph" aria-hidden="true">${icon(platformGlyphs[platform])}</span>` : '';
 const platformLabel = platform => `<span class="platform-label">${platformIcon(platform)}<span>${esc(platformName(platform))}</span></span>`;
 const platformFromPath = path => String(path).split('/')[2];
-const tagPlatform = tag => String(tag).startsWith('Facebook') ? 'facebook' : String(tag).startsWith('Google') ? 'google' : String(tag).startsWith('YouTube') ? 'youtube' : String(tag).startsWith('Instagram') ? 'instagram' : String(tag).startsWith('TikTok') ? 'tiktok' : '';
+// A tag names its platform: "TikTok Shop" → tiktok, "Truth Social" → truthsocial, "Creator Tools" → creator-tools.
+const tagPlatform = tag => { const key = String(tag).toLowerCase().replace(/[^a-z]/g, ''); return [...platformMarks, ...Object.keys(platformGlyphs)].filter(platform => key.startsWith(platform.replace(/-/g, ''))).sort((a, b) => b.length - a.length)[0] || ''; };
 const tagLabel = tag => `<span class="platform-label">${platformIcon(tagPlatform(tag))}<span>${esc(tag)}</span></span>`;
 const platformList = (items = platforms) => items.map(platform => `<span class="badge platform-badge">${platformLabel(platform)}</span>`).join('');
 const dateFormatter = new Intl.DateTimeFormat(undefined, {year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short'});
@@ -383,7 +390,7 @@ function endpoints(schema) {
 }
 const endpointId = endpoint => `${endpoint.method} ${endpoint.path}`;
 const endpointHash = endpoint => endpoint.method === 'GET' ? endpoint.path : endpointId(endpoint);
-function platformName(platform) { return {youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok', facebook:'Facebook', google:'Google', github:'GitHub', bluesky:'Bluesky', telegram:'Telegram', linktree:'Linktree', linkbio:'Lnk.Bio', linkme:'Linkme', komi:'Komi', pillar:'Pillar', spotify:'Spotify', 'apple-music':'Apple Music', linkedin:'LinkedIn', reddit:'Reddit', rumble:'Rumble', twitch:'Twitch', snapchat:'Snapchat', pinterest:'Pinterest', twitter:'Twitter (X)', 'truth-social':'Truth Social', cosmos:'Cosmos', kwai:'Kwai', kick:'Kick', account:'Account'}[platform] || String(platform).replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()); }
+function platformName(platform) { return {youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok', facebook:'Facebook', google:'Google', github:'GitHub', bluesky:'Bluesky', telegram:'Telegram', linktree:'Linktree', linkbio:'Lnk.Bio', linkme:'Linkme', komi:'Komi', pillar:'Pillar', spotify:'Spotify', 'apple-music':'Apple Music', linkedin:'LinkedIn', reddit:'Reddit', rumble:'Rumble', twitch:'Twitch', snapchat:'Snapchat', pinterest:'Pinterest', twitter:'Twitter (X)', truthsocial:'Truth Social', soundcloud:'SoundCloud', threads:'Threads', cosmos:'Cosmos', kwai:'Kwai', kick:'Kick', amazon:'Amazon', account:'Account'}[platform] || String(platform).replace(/-/g, ' ').replace(/^./, c => c.toUpperCase()); }
 const playgroundLede = 'Try one endpoint at a time, or test them all at once.';
 async function playground() {
   const [schema] = await Promise.all([spec(), loadKeys()]);

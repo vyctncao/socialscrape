@@ -2181,7 +2181,35 @@ def test_documentation_loading_and_interaction_contract():
     assert "method: 'POST'" in snippets and "requests.post(" in snippets
     assert '.method[data-method=POST]' in css
     assert (static / 'brand' / 'platforms' / 'facebook.svg').is_file()
-    assert (static / 'brand' / 'platforms' / 'google.svg').is_file()
+    assert (static / 'brand' / 'platforms' / 'google.png').is_file()
+
+
+def test_every_api_platform_has_inert_official_artwork(client):
+    import re
+    import xml.etree.ElementTree as ET
+    static = __import__('pathlib').Path(__file__).parents[1] / 'socialscrape' / 'static'
+    script = (static / 'portal.js').read_text()
+    marks = re.findall(r"'([a-z-]+)'", re.search(r"const platformMarks = \[(.*?)\];", script)[1])
+    glyphs = re.findall(r"'?([a-z-]+)'?:'[a-z-]+'", re.search(r"const platformGlyphs = \{(.*?)\};", script)[1])
+    segments = {path.split('/')[2] for path in client.app.openapi()['paths'] if re.match(r'^/v\d+/', path)}
+    assert segments <= set(marks) | set(glyphs), segments - set(marks) - set(glyphs)
+    rasters = re.findall(r"'([a-z-]+)'", re.search(r"const rasterMarks = \[(.*?)\];", script)[1])
+    sources = json.loads((static / 'brand' / 'platforms' / 'sources.json').read_text())['brands']
+    for platform in marks:
+        assert sources[platform]['sourceUrl'].startswith('https://')
+        if platform in rasters:
+            data = (static / 'brand' / 'platforms' / f'{platform}.png').read_bytes()
+            assert data[:8] == b'\x89PNG\r\n\x1a\n' and data[16:24] == (128).to_bytes(4, 'big') * 2, platform
+            assert sources[platform]['file'] == f'{platform}.png'
+            continue
+        root = ET.parse(static / 'brand' / 'platforms' / f'{platform}.svg').getroot()
+        assert root.tag == '{http://www.w3.org/2000/svg}svg' and f'brand-{platform}' in root.get('class')
+        for element in root.iter():
+            assert element.tag.split('}')[-1] not in {'script', 'style', 'image', 'foreignObject', 'text'}, platform
+            for name, value in element.attrib.items():
+                assert not name.split('}')[-1].lower().startswith('on'), platform
+                assert not name.endswith('href') or value.startswith('#'), platform
+                assert 'currentColor' not in value or element.tag.endswith('svg'), platform
 
 
 def test_agent_integrations_portal_contract():

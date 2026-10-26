@@ -816,8 +816,9 @@ def _portal_asset_version() -> str:
     digest = hashlib.sha256()
     for name in ("portal.html", "loading.html", "portal.css", "portal.js", "preview.js", "snippets.js", "fallback.css",
                  "fallback.js", "selftest.css", "selftest.js", "appearance.js", "brand/tokens.css", "brand/icons.svg",
-                 "brand/platforms/instagram.svg", "brand/platforms/tiktok.svg", "brand/platforms/youtube.svg",
-                 "brand/platforms/facebook.svg", "brand/platforms/google.svg", *BRAND_ASSETS):
+                 *sorted(f"brand/platforms/{mark.name}" for mark in (assets / "brand" / "platforms").iterdir()
+                         if mark.suffix in {".svg", ".png"}),
+                 *BRAND_ASSETS):
         digest.update(name.encode())
         digest.update((assets / name).read_bytes())
     return digest.hexdigest()[:16]
@@ -828,7 +829,7 @@ def _versioned_page(page: str) -> str:
     page = page.replace("__ASSET_VERSION__", version).replace("__BRAND__", _brand("/app"))
     for name in ("portal.css", "portal.js", "preview.js", "snippets.js", "fallback.css", "fallback.js", "selftest.css",
                  "selftest.js", "appearance.js", "brand/tokens.css", "brand/icons.svg", "brand/platforms/facebook.svg",
-                 "brand/platforms/google.svg", *BRAND_ASSETS):
+                 "brand/platforms/google.png", *BRAND_ASSETS):
         path = f"/assets/{name}"
         page = page.replace(f'{path}"', f'{path}?v={version}"')
         page = page.replace(f"{path}#", f"{path}?v={version}#")

@@ -102,10 +102,20 @@ uses one-line identity text and opens the kit's neutral account popup, with them
 settings, and log-out actions. The mobile drawer owns its own popup instance so its
 controls stay inside the active modal's interaction scope.
 
-Instagram, TikTok, and YouTube use the kit's original colored brand artwork in
-`brand/platforms/`; Facebook and Google use simple marks of their own in the two
-brands' colors. One platform-label helper keeps the picker, overview, reference, settings
-and route activity consistent. The picker uses a native popover
+Every API platform shows its official logo from `brand/platforms/`, named by the
+path segment (`truthsocial.svg`, `apple-music.svg`). Each mark is the brand's current
+artwork from its own site or brand kit, or a kit copy audited against it. None is
+redrawn or approximated. `sources.json` there records each file's source, license and
+edits. Files use the kit's inert SVG format with explicit colors, since an `<img>` cannot
+inherit `currentColor`. Google and Meta publish their current gradient marks (the Google G
+and the Instagram glyph) only as raster artwork. Those two are 128px PNGs listed in
+`rasterMarks`; a flat vector stand-in would be an outdated or redrawn logo. Black-only
+marks (GitHub, SoundCloud, Threads, X) invert to their brands' white variants on the dark
+theme, and TikTok sits on a white tile. Groups that are not platforms (Creator Tools,
+Account) use a neutral glyph in the same slot. To add a platform, list it in
+`platformMarks` and add its file and source record. A test fails when an API path
+segment has neither a mark nor a glyph. One platform-label helper keeps the picker,
+overview, reference, settings and route activity consistent. The picker uses a native popover
 with labeled listbox options and keyboard navigation because ordinary native
 select options cannot display the brand images consistently. The reference and the
 picker group operations by ScrapeCreators' tag, in its order (TikTok, TikTok Shop,
