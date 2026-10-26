@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
+from socialscrape.catalog import UPSTREAM_OPERATIONS
 from socialscrape.config import get_settings
 from socialscrape.main import create_app
 
@@ -97,11 +98,11 @@ def test_full_oauth_flow_and_refresh(oauth_client):
     for scheme in ("Bearer", "bearer", "BEARER"):
         listed = client.post("/mcp", headers={"Authorization": scheme + " " + tokens["access_token"]},
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
-        assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 78
+        assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == len({op["path"] for op in UPSTREAM_OPERATIONS})
 
     listed = client.post("/mcp", headers={"Authorization": "Bearer " + tokens["access_token"]},
         json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
-    assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == 78
+    assert listed.status_code == 200 and len(listed.json()["result"]["tools"]) == len({op["path"] for op in UPSTREAM_OPERATIONS})
     assert client.get("/v1/account/credit-balance",
                       headers={"Authorization": "Bearer " + tokens["access_token"]}).status_code == 200
 

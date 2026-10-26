@@ -9,7 +9,7 @@ window.EndpointTests = (() => {
   };
   const COUNTED = ['passed', 'failed', 'setup', 'unsupported', 'skipped', 'stopped', 'idle'];
   const RETRYABLE = new Set(['failed', 'stopped', 'skipped']);
-  const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'google'];
+  const platforms = () => [...new Set(model.tests.map(test => test.platform))];
   const model = {tests:[], fallback:null, filter:'all', allowFallback:false, results:{}, bodies:new Map(), lastRun:null, run:null};
   let announcementTimer = null, announcements = [];
 
@@ -51,7 +51,8 @@ window.EndpointTests = (() => {
     let data = null;
     try { data = JSON.parse(text); } catch {}
     const body = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-    if (status >= 200 && status < 300 && body.success === true) {
+    const successShape = test.response_kind === 'array' ? Array.isArray(data) : body.success === true;
+    if (status >= 200 && status < 300 && successShape) {
       const missing = test.expect.filter(path => !resolve(data, path).some(present));
       return missing.length ? {outcome:'failed', message:`The response has no ${missing.join(', ')}.`} : {outcome:'passed'};
     }
@@ -242,7 +243,7 @@ window.EndpointTests = (() => {
     document.getElementById('test-run-all').innerHTML = runLabel();
     const retryButton = document.getElementById('test-retry'), retry = retryLabel();
     retryButton.hidden = retry.hidden; retryButton.textContent = retry.text;
-    for (const platform of PLATFORMS) {
+    for (const platform of platforms()) {
       const caption = document.querySelector(`[data-group-summary="${platform}"]`);
       if (caption) caption.textContent = groupSummary(model.tests.filter(test => test.platform === platform));
     }
@@ -285,7 +286,7 @@ window.EndpointTests = (() => {
     }
     if (!model.fallback) model.allowFallback = false;
     // Within a platform, what this server implements comes first.
-    const groups = PLATFORMS.map(platform => [platform, model.tests.filter(test => test.platform === platform).sort((a, b) => b.implemented - a.implemented)]).filter(([, tests]) => tests.length);
+    const groups = platforms().map(platform => [platform, model.tests.filter(test => test.platform === platform).sort((a, b) => b.implemented - a.implemented)]).filter(([, tests]) => tests.length);
     const retry = retryLabel(), filters = [['all', 'All', model.tests.length], ...groups.map(([platform, tests]) => [platform, platformName(platform), tests.length])];
     const fallbackNote = model.fallback
       ? `<label class="test-option" for="test-allow-fallback"><input id="test-allow-fallback" type="checkbox" ${model.allowFallback ? 'checked' : ''} aria-describedby="test-fallback-help"><span><strong>Allow ScrapeCreators fallback</strong><small id="test-fallback-help">Off: tests check this server alone and spend no credits. On: unsupported and failing endpoints go to ScrapeCreators, as your integrations’ requests do, which can spend credits. Applies to the next run you start.</small></span></label>`

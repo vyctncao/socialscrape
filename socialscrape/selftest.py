@@ -25,6 +25,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from . import fallback
+from .catalog import CATALOG
 from .portal import _require
 from .registry import coverage
 
@@ -36,6 +37,7 @@ class Preset:
     # param: (source endpoint, key path in its answer), on the same platform
     derive: dict[str, tuple[str, str]] = field(default_factory=dict)
     note: str = ""
+    response_kind: str = "object"
 
 
 # Fixtures of the live e2e tests (tests/test_e2e_*.py), where most of them are described.
@@ -184,6 +186,35 @@ PRESETS: dict[str, Preset] = {
 }
 
 
+def _documented_preset(entry: dict[str, Any]) -> Preset:
+    params = {key: str(value).lower() if isinstance(value, bool) else str(value)
+              for key, value in entry.get("examples", {}).items()
+              if key in entry["params"] and key != "cache_max_age" and value not in (None, "")}
+    # The docs sometimes demonstrate handle and URL with two different users.
+    if "handle" in params and "url" in params and "url" not in entry["required"]:
+        params.pop("url")
+    return Preset(params, tuple(entry.get("preset_expect", ())),
+                  note="Official documentation fixture; this is a live check, not proof of implementation.",
+                  response_kind=entry.get("response_kind") or "object")
+
+
+for _entry in CATALOG:
+    PRESETS.setdefault(_entry["path"], _documented_preset(_entry))
+
+# A few upstream definitions omit the required parameter's example. Use public
+# fixtures explicitly rather than sending a known-invalid request as a test.
+for _path, _params in {
+    "/v1/facebook/post/transcript": {"url": "https://www.facebook.com/reel/1102710501132443"},
+    "/v1/twitter/tweet": {"url": "https://x.com/jack/status/20"},
+    "/v1/reddit/subreddit": {"subreddit": "AskReddit"},
+    "/v1/reddit/subreddit/search": {"subreddit": "AskReddit"},
+    "/v1/reddit/search": {"query": "science"},
+}.items():
+    _previous = PRESETS[_path]
+    PRESETS[_path] = Preset({**_previous.params, **_params}, _previous.expect,
+                           note=_previous.note, response_kind=_previous.response_kind)
+
+
 def tests() -> list[dict[str, Any]]:
     """Every catalog endpoint, in catalog order, with its preset."""
     out = []
@@ -197,6 +228,7 @@ def tests() -> list[dict[str, Any]]:
             "derive": [{"param": name, "source": source, "pick": pick}
                        for name, (source, pick) in preset.derive.items()],
             "note": preset.note,
+            "response_kind": preset.response_kind,
         })
     return out
 

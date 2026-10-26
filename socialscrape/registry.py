@@ -33,7 +33,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import ConfigDict, Field, create_model
 
-from .catalog import CATALOG
+from .catalog import CATALOG, UPSTREAM_OPERATIONS
 from .errors import NotSupported, UpstreamError, error_responses
 from .responses import LenientJSONResponse
 from .util import clean_param
@@ -196,7 +196,7 @@ def add_unsupported_routes(app: FastAPI) -> None:
         path = entry["path"]
         if path in IMPLEMENTED:
             continue
-        reason = UNSUPPORTED_REASONS.get(path, "Not implemented: yt-dlp has no extractor for this data.")
+        reason = UNSUPPORTED_REASONS.get(path, "No native implementation is available for this endpoint yet.")
 
         async def not_supported(_reason: str = reason, _path: str = path) -> JSONResponse:
             exc = NotSupported(_reason, endpoint=_path)
@@ -205,11 +205,21 @@ def add_unsupported_routes(app: FastAPI) -> None:
         # Hide the private default args from the OpenAPI schema / query parsing.
         not_supported.__signature__ = inspect.Signature()  # type: ignore[attr-defined]
         for method in entry.get("methods", ["GET"]):
+            operation = next((op for op in UPSTREAM_OPERATIONS if op["path"] == path and op["method"] == method), {})
+            parameters = operation.get("parameters", [])
+            extra = {"x-socialscrape-status": "not_supported",
+                     "parameters": [p for p in parameters if p.get("in") == "query" and p["name"] != "cache_max_age"]}
+            body = [p for p in parameters if p.get("in") == "body"]
+            if body:
+                extra["requestBody"] = {"required": any(p.get("required") for p in body), "content": {"application/json": {
+                    "schema": {"type": "object", "properties": {p["name"]: p.get("schema", {}) for p in body},
+                               "required": [p["name"] for p in body if p.get("required")]}}}}
             app.add_api_route(path, not_supported, methods=[method],
                               summary=f"{entry['summary']} (not supported)", tags=[entry["tag"]],
-                              openapi_extra={"x-socialscrape-status": "not_supported"}, include_in_schema=True,
-                              dependencies=[Security(_api_key)], status_code=501,
-                              responses=error_responses(400, 401, 501))
+                              openapi_extra=extra, include_in_schema=True,
+                              dependencies=[Security(_api_key), Depends(_cache_max_age)], status_code=501,
+                              responses={200: {"description": "Configured fallback response; this endpoint has no native implementation."},
+                                         **error_responses(400, 401, 403, 404, 500, 501, 502, 503, "default")})
 
 
 def coverage() -> list[dict[str, Any]]:
@@ -226,6 +236,6 @@ def coverage() -> list[dict[str, Any]]:
             "featured": entry.get("featured", False),
             "status": info.status if info else "not_supported",
             "source": info.source if info else None,
-            "notes": (info.notes if info else UNSUPPORTED_REASONS.get(path)),
+            "notes": (info.notes if info else UNSUPPORTED_REASONS.get(path, "No native implementation is available for this endpoint yet.")),
         })
     return out

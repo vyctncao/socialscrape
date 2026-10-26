@@ -5,9 +5,11 @@
 
 # Social Scrape API
 
-A self-hosted, [ScrapeCreators](https://docs.scrapecreators.com)-compatible API for **YouTube, TikTok, Instagram, and the Facebook, TikTok, and Google ad libraries**, built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+A self-hosted API working toward full [ScrapeCreators](https://docs.scrapecreators.com) compatibility, with native extractors for **YouTube, TikTok, Instagram, Bluesky, GitHub, Telegram, SoundCloud, public bio-link profiles and ad libraries**.
 
-It uses ScrapeCreators' paths, query parameters, `x-api-key` header and response shapes, so most existing clients only need a new base URL. Each endpoint either returns real data from yt-dlp or answers `501` with the reason it can't. **54 of 74** cataloged endpoints are implemented, including all 10 ad-library operations (12 HTTP operations when the two Facebook POST variants are counted).
+The pinned official API snapshot (2026-10-25) contains **199 HTTP operations across 196 paths**. All are registered and discoverable. **80 data operations have native implementations, 14 require account/backend setup and live qualification, 101 have no native implementation, and four account operations report local usage.** Registration is not proof of working extraction. This is not yet a qualified replacement for every ScrapeCreators feature; implemented endpoints can still have field, filter or access limitations. `/meta/coverage` records those limits, and optional paid fallback is explicitly labeled.
+
+Refresh the official inventory with `uv run python scripts/refresh_upstream_contract.py`. Run `uv run python scripts/audit_upstream_coverage.py --require-native` for an inventory gate that fails while implementation or setup gaps remain. Live identity, field completeness and pagination tests are separate from this structural audit.
 
 ## Quick start
 
@@ -71,7 +73,7 @@ Configuration is through environment variables (the `socialscrape` command takes
 | `SOCIALSCRAPE_CACHE_PATH` | SQLite file backing `cache_max_age` (default `.cache/socialscrape.sqlite3`). Blank disables the cache. |
 | `SOCIALSCRAPE_SCRAPECREATORS_API_KEY` | ScrapeCreators key for the [fallback](#scrapecreators-fallback). Empty disables it unless an owner saves one in the dashboard. Ignored without `SOCIALSCRAPE_API_KEYS` or the portal. |
 | `SOCIALSCRAPE_SCRAPECREATORS_FALLBACK` | When it falls back: `unsupported`, `errors`, `restricted`, `not_found`, comma separated, or `all` or `none` (default `unsupported,errors`). |
-| `SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS` | The platforms it falls back for, comma separated (default all five). |
+| `SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS` | The platforms it falls back for, comma separated (default all catalog platforms). |
 | `SOCIALSCRAPE_SCRAPECREATORS_URL` | Where it asks (default `https://api.scrapecreators.com`): a relay's base URL, or a test server. |
 | `HOST` / `PORT` | Bind address and port (default `127.0.0.1:8000`). |
 
@@ -118,12 +120,17 @@ With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fail
 - **Credits.** Fallback requests spend ScrapeCreators credits (its errors cost none; a request that timed out may still have been charged). Its answers are cached like any other response, so `cache_max_age` avoids paying twice. ScrapeCreators is always asked live, without `cache_max_age`: an answer from its cache would otherwise be stored here as new. Request history marks the requests it served, and Usage counts them.
 - **Safety.** The fallback runs only behind authentication (`SOCIALSCRAPE_API_KEYS` or the dashboard): with neither, the key is ignored, since anyone could spend the credits. Only the ScrapeCreators key is sent, never the caller's headers or key, and redirects aren't followed. A dashboard key is encrypted with `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY` and never shown again. Requests carry `Via: 1.1 socialscrape`, and one that arrives with it doesn't fall back, so an upstream URL pointed back at a socialscrape server can't loop.
 
-## What "powered by yt-dlp" means here
+## Native data sources
 
-An endpoint is implemented only when its data comes from one of two places:
+Native endpoints read real platform data:
 
 - a yt-dlp extractor's output, or
-- a platform API/page that a yt-dlp extractor **already calls**, reached through that extractor's own methods or yt-dlp's networking stack, possibly with another cursor, tab or field.
+- a platform API/page reached through yt-dlp's networking stack, or
+- a platform's public guest API, public HTML or embedded profile data, through bounded requests to fixed platform origins.
+
+Bluesky uses its public XRPC API. GitHub uses anonymous REST and public profile/trending pages. Telegram reads public channel previews and post embeds. SoundCloud uses yt-dlp's guest client and original API pagination. Linktree, Lnk.Bio, Komi and Linkme read their public profile data. Anonymous requests do not inherit browser cookies, CLI tokens or authorization headers. Redirects cannot leave the platform's allowed origins; oversized responses fail explicitly.
+
+With Instagram account cookies, profiles, feeds, highlights, basic profile lookup and search use the signed-in web client's current GraphQL queries and page request tokens. The requested route identifies the profile independently of the signed-in viewer, and returned profile/media identities are checked. Posts keep every item of each native page; reels add dates and captions from authenticated media-info responses. Request tokens and cookie values are never returned. Anonymous Instagram continues to use its logged-out client separately.
 
 One bounded exception is YouTube's public Subscribe widget: when the channel page omits its subscriber count,
 `/v1/youtube/channel` asks the matching channel's widget once through yt-dlp's networking stack. Only a visible
@@ -132,9 +139,11 @@ count is used, including an explicit `0`; a missing or hidden count remains `nul
 Sign-in-gated Shorts can still expose public like/comment buttons. Those counts are kept only when the action
 bar's entity key matches the requested video; dates and other player-only fields remain `null` when unavailable.
 
-Search APIs and the other endpoints that no extractor touches stay as `501`. This keeps the scraping logic maintained upstream: when a platform changes, `uv lock --upgrade-package yt-dlp` usually fixes it.
+Endpoints without a native data source stay as `501`. TikTok audience demographics remain unsupported: its Research User Info API does not provide audience country analytics, so adding a Research token does not enable that feature. TikTok Shop also remains unsupported: its request-signing and product/search integrations are not implemented, so storing credentials alone does not enable those routes. Coverage notes distinguish missing implementation from account or service setup.
 
 ## Coverage
+
+The tables below describe the original video-platform routes. `/meta/coverage` and `scripts/audit_upstream_coverage.py` include the complete pinned API inventory and all additional public platforms. The `implemented` label describes available code, not a sustained live qualification result.
 
 ### YouTube: 17 / 17
 
@@ -229,7 +238,7 @@ checks; with no configured backups a missing user remains final.
 
 ## MCP server
 
-SocialScrape exposes its 74 compatibility routes across YouTube, TikTok, Instagram, Facebook, and Google plus four account tools at `POST /mcp`. It implements stateless MCP Streamable HTTP for protocol versions `2025-06-18` and `2025-03-26`; no session ID is required. Configure a client with the same API key used for REST:
+SocialScrape exposes one MCP tool per documented path, including the four local account tools, at `POST /mcp`. The complete tool inventory uses the pinned API snapshot; a listed tool may still return `501`. It implements stateless MCP Streamable HTTP for protocol versions `2025-06-18` and `2025-03-26`; no session ID is required. Configure a client with the same API key used for REST:
 
 ```json
 {

@@ -50,7 +50,6 @@ def _unsupported(client) -> list[str]:
 def test_unsupported_routes_are_501_with_reason(client):
     cov = _coverage(client)
     paths = _unsupported(client)
-    assert paths == []  # every catalog path has a direct or setup-gated Social Scrape handler
     for path in paths:
         dummy = {p: "x" for p in CATALOG_BY_PATH[path]["params"] if p != "cache_max_age"}
         for params in ({}, dummy, {**dummy, "unknown_param": "1"}):
@@ -84,16 +83,18 @@ def test_meta_coverage_is_consistent(client):
     assert body["total"] == len(CATALOG) == len(rows)
     assert [row["path"] for row in rows] == [e["path"] for e in CATALOG]
     assert body["implemented"] == sum(row["status"] == "implemented" for row in rows)
-    assert body["implemented"] + body["needs_setup"] == body["total"]
-    assert body["unsupported"] == 0
+    assert body["implemented"] + body["needs_setup"] + body["unsupported"] == body["total"]
+    assert body["unsupported"] == sum(row["status"] == "not_supported" for row in rows)
     for row in rows:
-        assert row["platform"] == row["path"].split("/")[2] and row["platform"] in ("youtube", "tiktok", "instagram", "facebook", "google")
+        assert row["platform"] == row["path"].split("/")[2]
         assert row["summary"] == CATALOG_BY_PATH[row["path"]]["summary"]
         assert row["notes"], row["path"]
         if row["status"] == "implemented":
             assert row["source"], row["path"]
+        elif row["status"] == "needs_setup":
+            assert row["source"], row["path"]
         else:
-            assert row["status"] == "needs_setup" and row["source"], row["path"]
+            assert row["status"] == "not_supported" and row["source"] is None, row["path"]
 
 
 def test_openapi_covers_catalog(client):
@@ -269,13 +270,13 @@ def test_malformed_cursor_is_400(client):
 # --- openapi accuracy -------------------------------------------------------------
 
 
-def test_openapi_lists_no_params_on_501_routes(client):
-    # by design (registry.add_unsupported_routes): a 501 route ignores every param, catalog ones included (see
-    # test_unsupported_routes_are_501_with_reason), so it documents none and is labelled as unsupported instead
+def test_openapi_preserves_the_documented_interface_on_501_routes(client):
+    # Discovery and configured fallback need the caller interface even before
+    # native extraction exists. Its unsupported status must stay explicit.
     spec = client.get("/openapi.json").json()["paths"]
     for path in _unsupported(client):
         op = spec[path]["get"]
-        assert "parameters" not in op, path
+        assert {p["name"] for p in op.get("parameters", [])} == set(CATALOG_BY_PATH[path]["params"]) | {"cache_max_age"}, path
         assert op["tags"] == [CATALOG_BY_PATH[path]["tag"]] and op["x-socialscrape-status"] == "not_supported" and op["summary"].endswith("(not supported)"), path
 
 

@@ -9,9 +9,14 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from .catalog import UPSTREAM_OPERATIONS
 from .portal import PortalStore, Principal
 
 router = APIRouter(tags=["account"])
+
+
+def _query_schema(path: str) -> dict:
+    return {"parameters": next(op["parameters"] for op in UPSTREAM_OPERATIONS if op["path"] == path)}
 
 
 def _identity(request: Request) -> tuple[PortalStore, Principal] | JSONResponse:
@@ -36,7 +41,8 @@ async def credit_balance() -> dict[str, Any]:
     }
 
 
-@router.get("/v1/account/get-api-usage", summary="Get request history")
+@router.get("/v1/account/get-api-usage", summary="Get request history",
+            openapi_extra=_query_schema("/v1/account/get-api-usage"))
 async def get_api_usage(request: Request):
     identity = _identity(request)
     if isinstance(identity, JSONResponse):
@@ -75,7 +81,8 @@ def _timestamp(value: str | None, default: float) -> float:
     return parsed.timestamp()
 
 
-@router.get("/v1/account/get-most-used-routes", summary="Get most used routes")
+@router.get("/v1/account/get-most-used-routes", summary="Get most used routes",
+            openapi_extra=_query_schema("/v1/account/get-most-used-routes"))
 async def get_most_used_routes(request: Request):
     identity = _identity(request)
     if isinstance(identity, JSONResponse):

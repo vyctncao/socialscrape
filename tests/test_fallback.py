@@ -219,7 +219,7 @@ def test_a_local_answer_never_asks_scrapecreators(make, upstream, monkeypatch):
     assert c.get(PROFILE).status_code == 400  # handle missing: the caller's mistake
     assert c.get(PROFILE, headers={"x-api-key": "wrong"}).status_code == 401
     assert c.post(UNSUPPORTED).status_code == 405
-    assert c.get("/v1/twitter/profile").status_code == 404  # outside the catalog
+    assert c.get("/v1/not-a-platform/profile").status_code == 404  # outside the catalog
     assert upstream.requests == []
 
 
@@ -506,7 +506,7 @@ def test_owner_settings_are_encrypted_never_returned_and_apply_at_once(portal, u
     owner, csrf, _ = portal(SOCIALSCRAPE_SCRAPECREATORS_API_KEY="env-key-1")
     settings = owner.get("/portal/api/settings/fallback").json()
     assert settings == {"provider": "scrapecreators", "active": True, "enabled": True,
-                        "triggers": ["unsupported", "errors"], "platforms": ["youtube", "tiktok", "instagram", "facebook", "google"],
+                        "triggers": ["unsupported", "errors"], "platforms": list(fallback.PLATFORMS),
                         "options_source": "environment", "options_updated_at": None,
                         "api_key": {"configured": True, "source": "environment", "updated_at": None}}
 
@@ -618,3 +618,42 @@ def test_an_existing_portal_database_gains_the_fallback_column(tmp_path):
     columns = {row[1] for row in store._conn.execute("PRAGMA table_info(requests)")}
     assert "fallback" in columns
     assert [tuple(row) for row in store._conn.execute("SELECT fallback FROM requests")] == [(0,)]
+
+
+def test_new_platform_forwards_the_original_query_and_marks_paid_fallback(make, upstream):
+    c = make()
+    r = c.get("/v1/twitter/profile", params={"handle": "public-fixture", "cursor": "provider-page"})
+    assert r.status_code == 200 and r.headers[fallback.HEADER] == fallback.PROVIDER
+    assert len(upstream.requests) == 1 and upstream.requests[0]["path"] == "/v1/twitter/profile"
+    assert upstream.requests[0]["query"] == [("handle", "public-fixture"), ("cursor", "provider-page")]
+    before = len(upstream.requests)
+    own = c.get("/v1/twitter/profile", params={"handle": "public-fixture"}, headers={fallback.HEADER: "off"})
+    assert own.status_code == 501 and len(upstream.requests) == before
+
+
+def test_documented_root_array_is_preserved_only_on_its_own_endpoint(make, upstream):
+    upstream.reply(200, [{"data": {"clip": {"id": "clip1"}}}])
+    r = make().get("/v1/twitch/clip", params={"url": "https://clips.twitch.tv/clip1"})
+    assert r.status_code == 200 and r.json() == [{"data": {"clip": {"id": "clip1"}}}]
+    assert r.headers[fallback.HEADER] == fallback.PROVIDER
+
+
+def test_local_account_identity_and_usage_never_proxy_to_upstream_owner(make, upstream):
+    c = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all")
+    assert c.get("/v1/account/credit-balance").json()["unlimited"]
+    assert c.get("/v1/account/get-api-usage").status_code == 403
+    assert c.get("/v1/account/get-daily-usage-count").status_code == 403
+    assert c.get("/v1/account/get-most-used-routes").status_code == 403
+    assert not upstream.requests
+
+
+def test_mcp_native_only_request_does_not_spend_fallback_credits(make, upstream):
+    c = make()
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "v1_twitter_profile", "arguments": {"handle": "public-fixture"}}}
+    result = c.post("/mcp", headers={fallback.HEADER: "off"}, json=call).json()["result"]
+    assert result["isError"] and json.loads(result["content"][0]["text"])["error"] == "not_supported"
+    assert not upstream.requests
+    result = c.post("/mcp", json=call).json()["result"]
+    assert "isError" not in result and json.loads(result["content"][0]["text"]) == SC_OK
+    assert len(upstream.requests) == 1

@@ -33,7 +33,12 @@ def _walk(obj: Any, path: str, acc: dict[str, set[str]]) -> None:
 
 def load_contract(sc_path: str) -> dict[str, list[str]]:
     name = sc_path.strip("/").replace("/", "__")
-    return json.loads((CONTRACTS / f"{name}.json").read_text())["fields"]
+    path = CONTRACTS / f"{name}.json"
+    if path.exists():
+        return json.loads(path.read_text())["fields"]
+    from socialscrape.catalog import UPSTREAM_OPERATIONS
+    return next(operation["response_fields"] for operation in UPSTREAM_OPERATIONS
+                if operation["path"] == sc_path)
 
 
 @dataclass

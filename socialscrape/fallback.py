@@ -35,7 +35,7 @@ from starlette.responses import Response
 from . import cursor, ytdlp
 from .cache import CACHE_PARAM
 from .catalog import CATALOG
-from .config import PLATFORMS, ConfigError, _env, get_settings
+from .config import PLATFORMS as PROXY_PLATFORMS, ConfigError, _env, get_settings
 from .errors import ApiError
 from .portal import PortalStore, _csrf, _owner
 from .responses import LenientJSONResponse
@@ -52,7 +52,10 @@ DEFAULT_TRIGGERS = ("unsupported", "errors")
 MAX_BODY_BYTES = 16 * 1024 * 1024
 API_KEY_SETTING = "scrapecreators.api_key"
 OPTIONS_SETTING = "scrapecreators.options"
-_CATALOG_METHODS = {entry["path"]: frozenset(entry.get("methods", ("GET",))) for entry in CATALOG}
+PLATFORMS = tuple(dict.fromkeys((*PROXY_PLATFORMS, *(entry["path"].split("/")[2] for entry in CATALOG))))
+_CATALOG_METHODS = {entry["path"]: frozenset(entry.get("methods", ("GET",))) for entry in CATALOG
+                    if entry["path"] != "/v1/detect-age-gender"}
+_ARRAY_RESPONSES = {entry["path"] for entry in CATALOG if entry.get("response_kind") == "array"}
 # The compatibility POST is registered separately from the catalog's GET
 # profile operation, and ScrapeCreators accepts the same JSON-body request.
 _CATALOG_METHODS["/v1/instagram/profile"] |= {"POST"}
@@ -466,6 +469,16 @@ class FallbackMiddleware(BaseHTTPMiddleware):
             headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
         code = local.get("error")
         status, answer_body, problem = await self._ask(request, c.api_key or "", body)
+        # Twitch clip is documented as a root GraphQL array. Accept that shape
+        # only on explicitly documented array routes, and only for a 2xx answer.
+        if problem is None and status is not None and 200 <= status < 300 and path in _ARRAY_RESPONSES:
+            try:
+                array = json.loads(answer_body)
+            except (ValueError, RecursionError):
+                array = None
+            if isinstance(array, list):
+                log.info("%s: local %s %s, served by ScrapeCreators (%s)", path, local_status, code, status)
+                return Response(answer_body, status, headers={HEADER: PROVIDER}, media_type="application/json")
         answer = _json_object(answer_body) if problem is None else None
         no_local_answer = local_status == 501 or code == "bad_cursor"
         if answer is not None and status is not None and (
