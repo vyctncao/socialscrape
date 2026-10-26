@@ -320,7 +320,10 @@ class MediaUnavailable(NotFound):
 #     flagged: pageID feedPage, a DTSGInitialData token, xdt_viewer.user.id == the ds_user_id cookie
 #     unknown session / no session: pageID CAAIGLoginHomepage (the login form), no DTSG token
 # Neither the profile shell nor topsearch's 404 nor a 429 tells a dead session from throttling: never read them as
-# a verdict.
+# a verdict. The flagged session is not dead (sessions.check reports it as status "limited"): on 2026-10-25 it still
+# served basic-profile, post/comment/replies, search, search/profiles, audio/reels and user/tagged-posts. Instagram
+# rejects a session only with the 401 that deletes sessionid, the login/checkpoint/suspended redirects and the
+# logged-out home page.
 _ACCOUNT_API = f"{WEB}/api/v1/accounts/current_user/?edit=true"
 _DTSG_TOKEN = re.compile(r'\["DTSGInitialData",\[\],\{"token":"[^"\s]+"')
 _LOGGED_OUT_PAGES = {"CAAIGLoginHomepage", "loginPage", "LoginAndSignupPage"}
@@ -2191,8 +2194,14 @@ _EMBED_APP = re.compile(r'"PolarisEmbedSimple"')
               "404 when the embed page has no profile to show (an unknown name, as Instagram answers it); an empty "
               "or block page in its place is a 503 upstream_blocked, not HTML returned as success.")
 async def instagram_user_embed(handle: str = Query(...)) -> dict[str, Any]:
+    # Asked without account cookies: Instagram renders the visitor's own tokens into the page (the csrftoken cookie
+    # as csrf_token, ds_user_id as appScopedIdentity, ig_did as qeid, mid as machine_id; seen 2026-10-25), and the
+    # route returns that HTML verbatim, so a signed-in jar would hand the server account's tokens and id to every
+    # API caller. The page is public: logged out it is the same profile embed. (A comment, not a docstring: the
+    # docstring would become the route's OpenAPI description.)
     name = clean_handle(handle)
-    html, final_url = await with_ydl(PLATFORM, _page_flow("InstagramUser", f"{WEB}/{name}/embed/", name))
+    html, final_url = await with_ydl(PLATFORM, _page_flow("InstagramUser", f"{WEB}/{name}/embed/", name),
+                                     use_cookies=False)
     if InstagramBaseIE._is_login_redirect(final_url):
         raise UpstreamBlocked(_LOGIN_WALL)
     if _EMBED_PROFILE.search(html):

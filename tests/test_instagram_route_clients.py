@@ -46,7 +46,7 @@ def test_anonymous_request_keeps_proxy_but_imports_no_saved_file_or_browser_cook
     monkeypatch.setattr(
         portal,
         "active_platform_pool",
-        lambda platform: (["http://proxy.example:8080"], [COOKIE]),
+        lambda platform: (["http://proxy.example:8080"], [("entry1", COOKIE)]),
     )
 
     def inspect(ydl):

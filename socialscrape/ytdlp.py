@@ -166,6 +166,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
     dashboard_proxy = opts.pop("_dashboard_proxy", None)
     dashboard_cookies = opts.pop("_dashboard_cookies", None)
     account = opts.pop("_account", None)  # the sessions.Account the call carries, for its health
+    report = opts.pop("_report", None)  # with_ydl's: set report["session_lost"] when the session cookie vanished
     merged = base_options(platform, dashboard_proxy, dashboard_cookies is not None)
     extractor_args = opts.pop("extractor_args", None)
     merged.update(opts)
@@ -198,10 +199,16 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             signed_in = account is not None and sessions.has_session(platform, ydl.cookiejar)
             return fn(ydl)
         finally:
-            # The platform deleting the session cookie in an answer (Instagram does for a session it no longer
-            # knows; YouTube clears LOGIN_INFO) ended the session: what the call got is a logged-out answer.
+            # The session cookie vanished during the call: the platform deleted it in an answer (Instagram does
+            # for a session it no longer knows; YouTube clears LOGIN_INFO), or yt-dlp cleared it itself
+            # (InstagramIE does after an HTTP error on a URL it counts as a login redirect, the home page
+            # included, where Instagram sends a restricted but working session). What the call got is a
+            # logged-out answer. With an account check that is a reason to run it (with_ydl), not a verdict.
             if signed_in and not sessions.has_session(platform, ydl.cookiejar):
-                sessions.lost(account)
+                if not sessions.has_probe(platform):
+                    sessions.lost(account)
+                elif report is not None:
+                    report["session_lost"] = True
             # The operator's cookies.txt is input only. Without this, close() saves the session's jar over it
             # with a plain open(path, "w") from every worker thread at once, truncating it for its readers.
             ydl.params["cookiefile"] = None
@@ -529,7 +536,7 @@ def _cookie_sendable(cookie: Cookie) -> bool:
 
 # An account call failing with one of these may be the account's fault: a dead or flagged session gets errors,
 # block pages, partial pages and empty answers where a working one gets data. The account is checked (sessions.
-# verify) and the call made once more without account cookies.
+# verify) and, unless the check clears it, the call made without account cookies.
 _DOUBT = {
     "upstream_error", "upstream_blocked", "forbidden", "no_profile_data", "cookies_rejected", "session_invalid",
     "profile_id_unavailable", "profile_identity_mismatch", "query_unavailable", "no_session_token",
@@ -543,15 +550,25 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
     Attempt i pairs proxy i with the i-th usable signed-in account (each clamped to the last one). An account is
     one of the dashboard's cookie entries, else the env cookie file, else browser cookies (sessions.accounts), and is
     skipped while it cools down after the platform rejected it. A dead or restricted account must never make a call
-    worse than no account (sessions.py):
+    worse than no account (sessions.py). When a call carrying an account fails with an error a dead session could
+    explain (SessionInvalid or a _DOUBT code; a 404 too from an account the platform restricts), or its session
+    cookie vanished, the account is checked (cached per account), and:
 
-      - a failure that a dead session could explain (SessionInvalid, _DOUBT, or a 404 from a restricted account)
-        has the account checked (cached); a rejected account is skipped and the attempt repeated with the next
-        account, or without account cookies, through the same proxy;
-      - the call's last failure with an account is retried once without account cookies, same proxy rules;
-      - a route that needs a login (its pre-flight raises LoginRequired without a session cookie, before any
-        request) then answers the 501 naming the rejected or restricted account instead of the account's
-        500/404/empty answer; with a working account it keeps the account's own error.
+      - rejected: the account is skipped and the attempt repeated through the same proxy with the next account,
+        or without account cookies;
+      - restricted, inconclusive, or a SessionInvalid the check did not contradict: the attempt is repeated
+        without account cookies through the same proxy, and the rest of the call goes on without them through the
+        remaining proxies, as a call with no account would;
+      - working (or no check for the platform, as on YouTube, whose signed-in session is what gets past its bot
+        checks): the account keeps its proxy rotation, and its last failure is retried once without account
+        cookies, except a throttle (upstream_blocked) of a working account, which a logged-out call through the
+        same egress shares.
+
+    A call without account cookies on a route that needs a login fails at once in its pre-flight (LoginRequired,
+    before any request). The accounts then take over again from where they failed, and their final failure is
+    answered: the 501 naming the account when the evidence is about the session (sessions.login_error: all
+    rejected, or a session-level failure of a restricted or unchecked account), else the account's own error,
+    so a bad input or a broken route keeps its own status and code.
 
     confirm_not_found is opt-in for public profile lookups: Instagram and TikTok
     can report a real user as missing on some egresses. Confirm using the finite
@@ -574,16 +591,20 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
     attempts = max(len(proxies), len(usable), 1)
     loop = asyncio.get_running_loop()
     index = 0
-    failure: tuple[ApiError, BaseException] | None = None  # the last failure of an attempt carrying an account
-    limited: sessions.Account | None = None
+    # The last failure of an attempt carrying an account: (account, error, cause, retryable).
+    failure: tuple[sessions.Account, ApiError, BaseException, bool] | None = None
+    login_only = False  # a call without account cookies failed its login pre-flight: the route needs an account
+    fallback = False  # the account's failures leave a call without account cookies to try
     while True:
         proxy = proxies[min(index, len(proxies) - 1)] if proxies else None
         account = None if cookieless or not usable else usable[min(index, len(usable) - 1)]
         options = dict(ydl_opts)
+        report: dict[str, bool] = {}
         if proxy is not None:
             options["_dashboard_proxy"] = proxy
         if account is not None:
             options["_account"] = account
+            options["_report"] = report
             if account.value is not None:
                 options["_dashboard_cookies"] = account.value
         elif cookieless:
@@ -591,7 +612,7 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
             # configured proxy pool.
             options.update(_dashboard_cookies=NO_COOKIES, cookiefile=None, cookiesfrombrowser=None)
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 loop.run_in_executor(_pool(), _run, platform, fn, options),
                 timeout=get_settings().request_timeout,
             )
@@ -602,44 +623,91 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
             error, cause = exc, exc
         except (YoutubeDLError, RequestError) as exc:
             error, cause = translate_error(exc), exc
-        without_account = False
+        else:
+            if account is not None and report.get("session_lost"):
+                sessions.verify_soon(platform, account, proxy)  # the answer was logged out: check the account
+            return result
+        retryable = _retry_profile(error) or (confirm_not_found and isinstance(error, NotFound))
         if account is not None:
-            failure = (error, cause)
+            failure = (account, error, cause, retryable)
             invalid = isinstance(error, SessionInvalid)
             if isinstance(error, LoginRequired):  # the route's pre-flight found no session cookie in the account
                 name = sessions.NAMES.get(platform, platform)
                 sessions.record(account, sessions.Verdict("rejected", f"its cookies hold no {name} session cookie"))
-            if invalid or error.code in _DOUBT or error.code == "not_found":
-                verdict = await sessions.verify(platform, account, proxy)  # cached per account
-                if verdict is not None and verdict.limited:
-                    limited = account
-                without_account = invalid or error.code in _DOUBT or limited is account
-            if not sessions.usable(account):  # rejected: by the check, or by the call itself (sessions.lost)
+            verdict = None
+            lost = report.get("session_lost", False)
+            if invalid or lost or error.code in _DOUBT or error.code == "not_found":
+                verdict = await sessions.verify(platform, account, proxy, evidence=lost)  # cached per account
+            if not sessions.usable(account):  # rejected: by the check, the pre-flight or the call (sessions.lost)
                 usable.remove(account)
                 attempts = max(len(proxies), len(usable), 1)
                 log.info("%s: %s is skipped; repeating the attempt %s", platform, account.label,
                          "with the next account" if usable else "without account cookies")
                 cookieless = not usable
                 continue  # same index and proxy: the proxy was not at fault
-        retryable = _retry_profile(error) or (confirm_not_found and isinstance(error, NotFound))
+            restricted = verdict is not None and verdict.limited
+            doubtful = invalid or lost or error.code in _DOUBT or restricted and error.code == "not_found"
+            suspect = doubtful and (invalid or verdict is not None and (verdict.status != "alive" or restricted))
+            if suspect and not login_only:
+                log.info("%s: the call with %s failed with %s (%s); repeating it without account cookies",
+                         platform, account.label, error.code,
+                         "restricted account" if restricted else "the account check did not clear it")
+                cookieless = True
+                continue  # same index and proxy, then on through the remaining proxies without cookies
+            if doubtful and not (verdict is not None and verdict.status == "alive" and not restricted
+                                 and error.code == "upstream_blocked"):
+                fallback = True
+            if retryable and index + 1 < attempts:
+                log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1, error.code,
+                            index + 2)
+                index += 1
+                continue
+            if fallback and not login_only:
+                log.info("%s: the call with %s failed with %s; retrying it without account cookies", platform,
+                         account.label, error.code)
+                fallback, cookieless = False, True
+                continue
+            if login_only:
+                raise _login_answer(platform, accounts, failure)
+            raise error from cause
+        if isinstance(error, LoginRequired) and accounts:
+            if usable and failure is not None and not login_only:
+                # The route needs a login: the call without account cookies can't stand in for the account,
+                # which takes over again from where it failed.
+                login_only, cookieless = True, False
+                if failure[3] and index + 1 < attempts:
+                    log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1,
+                                failure[1].code, index + 2)
+                    index += 1
+                    continue
+            raise _login_answer(platform, accounts, failure, (error, cause))
         if retryable and index + 1 < attempts:
             log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1, error.code,
                         index + 2)
             index += 1
             continue
-        if without_account and not cookieless:
-            log.info("%s: the call with %s failed with %s; retrying it without account cookies", platform,
-                     account.label if account is not None else "an account", error.code)
-            cookieless = True
-            continue
-        if account is None and accounts and isinstance(error, LoginRequired):
-            # The route needs a login: answer for the accounts it had (rejected, restricted), else their failure.
-            rejected = sessions.login_error(platform, accounts, limited, failure[0] if failure else None)
-            if rejected is not None:
-                raise rejected from (failure[1] if failure else cause)
-            if failure is not None:
-                raise failure[0] from failure[1]
         raise error from cause
+
+
+def _login_answer(platform: str, accounts: list[Any], failure: tuple[Any, ApiError, BaseException, bool] | None,
+                  cookieless: tuple[ApiError, BaseException] | None = None) -> ApiError:
+    """What a route that needs a login answers once its accounts failed: the 501 naming the account when the
+    evidence is about the session (sessions.login_error), else the account's own failure (with details.
+    account_health "limited" when the platform restricts it), else the call without cookies' own 501."""
+    from . import sessions
+
+    failed, error, cause = (failure[0], failure[1], failure[2]) if failure else (None, None, None)
+    if (rejected := sessions.login_error(platform, accounts, failed, error)) is not None:
+        rejected.__cause__ = cause if cause is not None else (cookieless[1] if cookieless else None)
+        return rejected
+    if error is None:
+        assert cookieless is not None
+        error, cause = cookieless
+    elif failed is not None and sessions.health(failed).limited:
+        error.details.setdefault("account_health", "limited")
+    if cause is not error:
+        error.__cause__ = cause
+    return error
 
 
 def _retry_profile(error: ApiError) -> bool:

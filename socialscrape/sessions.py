@@ -11,12 +11,15 @@ never make a route worse than having no account, so with_ydl (ytdlp.py) asks thi
     ends;
   - whether an account that just failed is dead (verify()): the platform's account check (PROBES), run with the
     account's own cookies and proxy, cached per account;
-  - what a route that needs a login answers once no account is usable (login_error()): a 501 setup error naming
-    the account and where to replace it.
+  - what a route that needs a login answers once its accounts failed (login_error()): a 501 setup error naming
+    the account and where to replace it when the evidence is about the session, else the account's own error.
 
 Platform code reports what it sees: SessionInvalid for an answer that shows the session is not accepted, confirm()
-before a login-only call whose failures would not tell (TikTok's app API). _run reports a session cookie the
-platform cleared in its answer (lost()).
+before a login-only call whose failures would not tell (TikTok's app API). _run reports a session cookie that
+vanished from the jar during a call: on a platform with an account check it is a reason to check the account
+(verify(evidence=True)), never a verdict by itself, because yt-dlp clears Instagram's sessionid itself after an
+HTTP error on a URL it counts as a login redirect, which includes the home page a restricted but working session is
+sent to; on a platform without one (YouTube, Facebook) it is the only signal there is (lost()).
 
 Health lives here, in memory (it covers the env file and API-only servers too). Dashboard entries' health is also
 saved next to the encrypted pool, in the portal database (portal.PortalStore), so it survives restarts and the
@@ -119,8 +122,16 @@ class Health:
 _health: dict[tuple[str, str], Health] = {}
 _lock = threading.Lock()
 _check_locks: dict[tuple[str, str], threading.Lock] = {}
+# Dashboard entries removed while a check of theirs may still be finishing (entry ids are random, never reused):
+# a late verdict for one is dropped, so it can't bring back the entry's health or its saved row.
+_forgotten: set[tuple[str, str]] = set()
 # Saves a dashboard entry's health (None: forget it); set by portal.install_portal.
 _persist: Callable[[str, str, dict[str, Any] | None], None] | None = None
+# One save at a time, each writing the entry's state at that moment: two verdicts recorded together can't be saved in
+# the opposite order (an older rejection over a newer working verdict would come back at the next start).
+_persist_lock = threading.Lock()
+# verify_soon()'s checks, kept referenced until they finish (the event loop only keeps weak references to tasks).
+_background: set[asyncio.Task[Any]] = set()
 
 
 def reset() -> None:
@@ -128,6 +139,7 @@ def reset() -> None:
     with _lock:
         _health.clear()
         _check_locks.clear()
+        _forgotten.clear()
 
 
 def attach(rows: Iterable[tuple[str, str, dict[str, Any]]], persist: Callable[[str, str, dict[str, Any] | None],
@@ -217,6 +229,8 @@ def record(account: Account, verdict: Verdict, now: float | None = None) -> Heal
     now = time.time() if now is None else now
     name = NAMES.get(account.platform, account.platform)
     with _lock:
+        if (account.platform, account.key) in _forgotten:  # removed from the dashboard meanwhile
+            return Health()
         h = _health.setdefault((account.platform, account.key), Health())
         before = h.status
         if verdict.status == "alive":
@@ -244,24 +258,43 @@ def record(account: Account, verdict: Verdict, now: float | None = None) -> Heal
     elif before != snapshot.status and snapshot.status == "alive":
         log.info("%s account %s checked: %s%s", account.platform, account.label, "signed in",
                  f" ({name} restricts it: {snapshot.reason})" if snapshot.limited else "")
-    if account.source == "dashboard" and _persist is not None:
-        try:
-            _persist(account.platform, account.key, dataclasses.asdict(snapshot))
-        except Exception:  # the portal database is unavailable: the verdict still holds in memory
-            log.exception("could not save the health of %s account %s", account.platform, account.label)
+    if account.source == "dashboard":
+        _save(account.platform, account.key)
     return snapshot
+
+
+def _save(platform: str, entry_id: str) -> None:
+    """Save a dashboard entry's health as it is now (None once it is forgotten)."""
+    persist = _persist
+    if persist is None:
+        return
+    with _persist_lock:
+        with _lock:
+            h = _health.get((platform, entry_id))
+            data = dataclasses.asdict(h) if h is not None else None
+        try:
+            persist(platform, entry_id, data)
+        except Exception:  # the portal database is unavailable: the verdict still holds in memory
+            log.exception("could not save the health of %s dashboard entry %s", platform, entry_id)
 
 
 def forget(platform: str, entry_id: str) -> None:
     """A removed dashboard entry's health."""
     with _lock:
         _health.pop((platform, entry_id), None)
-    if _persist is not None:
-        _persist(platform, entry_id, None)
+        _forgotten.add((platform, entry_id))
+    _save(platform, entry_id)
+
+
+def has_probe(platform: str) -> bool:
+    """Whether `platform` has an account check (PROBES), without importing it."""
+    return platform in PROBES
 
 
 def lost(account: Account) -> None:
-    """The platform deleted the session cookie in one of its answers: it ended the session."""
+    """The platform deleted the session cookie in one of its answers: it ended the session. Only for a platform
+    without an account check (YouTube clears LOGIN_INFO when it no longer honours the session); with a check, a
+    vanished cookie is verify(evidence=True)'s question instead."""
     record(account, Verdict("rejected", f"{NAMES.get(account.platform, account.platform)} deleted the session "
                                         "cookie in its answer: the session expired or was logged out"))
 
@@ -274,16 +307,16 @@ def _probe_for(platform: str) -> Callable[[Any], Verdict] | None:
     return getattr(importlib.import_module(f".platforms.{module}", __package__), name)
 
 
-def check_now(ydl: Any, account: Account, *, force: bool = False) -> Verdict:
-    """The account's verdict, checked with `ydl` (its cookies and proxy) unless a fresh one is kept. One check at a
-    time per account: a call arriving meanwhile waits and reuses its verdict."""
+def check_now(ydl: Any, account: Account, *, force: bool = False, evidence: bool = False) -> Verdict:
+    """The account's verdict, checked with `ydl` (its cookies and proxy) unless a fresh one is kept (_kept). One
+    check at a time per account: a call arriving meanwhile waits and reuses its verdict."""
     probe = _probe_for(account.platform)
     if probe is None:
         return Verdict("unknown", f"No account check is available for {NAMES.get(account.platform, account.platform)}")
     with _lock:
         guard = _check_locks.setdefault((account.platform, account.key), threading.Lock())
     with guard:
-        if not force and (kept := cached(account)) is not None:
+        if not force and (kept := _kept(account, evidence)) is not None:
             return kept
         try:
             verdict = probe(ydl)
@@ -306,14 +339,31 @@ def confirm(ydl: Any, platform: str) -> None:
         raise SessionInvalid(platform, verdict.reason or "the account check rejected the session")
 
 
-async def verify(platform: str, account: Account, proxy: str | None, *, force: bool = False) -> Verdict | None:
+def _kept(account: Account, evidence: bool) -> Verdict | None:
+    """The cached verdict verify() may reuse. With `evidence` (the session cookie vanished during a call) a working,
+    unrestricted verdict older than UNKNOWN_SECONDS is not: the platform may just have ended the session. A
+    restricted one still is (yt-dlp clears the cookie of a restricted session sent to the home page, which its
+    verdict already explains), as are a rejection and a recent inconclusive check."""
+    with _lock:
+        h = _health.get((account.platform, account.key)) or Health()
+        now = time.time()
+        kept = _fresh(h, now)
+        if (evidence and kept is not None and kept.status == "alive" and not kept.limited
+                and h.checked_at is not None and now - h.checked_at >= UNKNOWN_SECONDS):
+            return None
+        return kept
+
+
+async def verify(platform: str, account: Account, proxy: str | None, *, force: bool = False,
+                 evidence: bool = False) -> Verdict | None:
     """The account's verdict after a call carrying it failed (None: the platform has no account check). The check
-    runs with the account's cookies through `proxy`, as the call did."""
+    runs with the account's cookies through `proxy`, as the call did. evidence: the call saw the session cookie
+    vanish (_kept)."""
     from . import ytdlp
 
     if _probe_for(platform) is None:
         return None
-    if not force and (kept := cached(account)) is not None:
+    if not force and (kept := _kept(account, evidence)) is not None:
         return kept
     options: dict[str, Any] = {"_account": account}
     if proxy is not None:
@@ -323,7 +373,8 @@ async def verify(platform: str, account: Account, proxy: str | None, *, force: b
     loop = asyncio.get_running_loop()
     try:
         return await asyncio.wait_for(loop.run_in_executor(
-            ytdlp._pool(), ytdlp._run, platform, lambda ydl: check_now(ydl, account, force=force), options),
+            ytdlp._pool(), ytdlp._run, platform, lambda ydl: check_now(ydl, account, force=force, evidence=evidence),
+            options),
             timeout=CHECK_TIMEOUT)
     except Exception as exc:  # a check never fails the call it was made for
         reason = ("The account check timed out" if isinstance(exc, asyncio.TimeoutError)
@@ -333,14 +384,28 @@ async def verify(platform: str, account: Account, proxy: str | None, *, force: b
         return verdict
 
 
+def verify_soon(platform: str, account: Account, proxy: str | None) -> None:
+    """verify(evidence=True) in the background, for a call that succeeded although its session cookie vanished
+    (what it got was a logged-out answer): the verdict serves the next calls, this one isn't delayed."""
+    if _probe_for(platform) is None or _kept(account, True) is not None:
+        return
+    task = asyncio.get_running_loop().create_task(verify(platform, account, proxy, evidence=True))
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
 async def check(platform: str, account: Account, proxy: str | None) -> dict[str, Any]:
     """The dashboard's Check: a fresh verdict for one entry -> {ok, status, reason, checked_at, account, limited,
-    latency_ms, health}. ok is null when the check was inconclusive or the platform has none."""
+    latency_ms, health}. status is alive, limited (signed in, but the platform restricts the account: some
+    signed-in requests are refused), rejected or unknown; ok is true only for alive, false for rejected, and null
+    otherwise (restricted, inconclusive, or no check for the platform), so a script reading `ok` never takes a
+    restricted account for a healthy one."""
     started = time.monotonic()
     verdict = await verify(platform, account, proxy, force=True)
     if verdict is None:
         verdict = Verdict("unknown", f"No account check is available for {NAMES.get(platform, platform)}")
-    return {"ok": {"alive": True, "rejected": False}.get(verdict.status), "status": verdict.status,
+    status = "limited" if verdict.status == "alive" and verdict.limited else verdict.status
+    return {"ok": {"alive": True, "rejected": False}.get(status), "status": status,
             "reason": verdict.reason, "account": verdict.account, "limited": verdict.limited,
             "checked_at": time.time(), "latency_ms": round((time.monotonic() - started) * 1000),
             "supported": _probe_for(platform) is not None, "health": health(account).public()}
@@ -376,10 +441,20 @@ def _named(account: Account) -> str:
 _RETRY_LATER = re.compile(r"[;,.]\s*(?:try again|retry) later.*$", re.I)
 
 
-def login_error(platform: str, accounts: list[Account], limited: Account | None,
+def _about_session(failure: ApiError | None) -> bool:
+    """Whether a signed-in call's failure is evidence about its session rather than about the request: the platform
+    sent it to the login page or (Instagram's answer to a session it restricts) its home page, served it the
+    logged-out page, or said the session expired (SessionInvalid; Instagram's SessionRejected is
+    cookies_rejected). A 404, a throttle or a field error answered to the session says nothing about it."""
+    return isinstance(failure, SessionInvalid) or getattr(failure, "code", None) == "cookies_rejected"
+
+
+def login_error(platform: str, accounts: list[Account], failed: Account | None,
                 failure: ApiError | None) -> AccountRejected | None:
-    """The 501 for a route that needs a signed-in account, once the call without account cookies asked for one,
-    or None when there is no evidence against the accounts (the caller re-raises the account's own failure)."""
+    """The 501 for a route that needs a signed-in account, once the call without account cookies asked for one
+    (`failed` is the account whose call failed last, with `failure`), or None when there is no evidence against
+    the accounts: the caller re-raises the account's own failure, so a bad input or a broken route keeps its own
+    status and code."""
     rejected = [account for account in accounts if health(account).status == "rejected"]
     if rejected and len(rejected) == len(accounts):  # else a working account's own failure says more
         account, h = rejected[0], health(rejected[0])
@@ -387,19 +462,20 @@ def login_error(platform: str, accounts: list[Account], limited: Account | None,
         return AccountRejected(
             f"{_named(account)}{more} was rejected: {h.reason}{_when(h.rejected_at)}. {_replace_hint(account)}.",
             platform=platform, reason="account_rejected", account_source=account.source)
-    if limited is not None:
-        h = health(limited)
-        name = NAMES.get(platform, platform)
+    if failed is None or not _about_session(failure):
+        return None
+    h = health(failed)
+    name = NAMES.get(platform, platform)
+    if h.status == "alive" and h.limited:
         answered = (f" ({name} answered: {_RETRY_LATER.split(failure.message)[0].rstrip('. ')})"
                     if failure is not None and failure.message else "")
         return AccountRejected(
-            f"{_named(limited)} could not use this endpoint{answered}. {name} restricts this account: "
-            f"{h.reason or 'some signed-in requests are refused'}. {_replace_hint(limited)}.",
-            platform=platform, reason="account_limited", account_source=limited.source)
-    if isinstance(failure, SessionInvalid) and accounts:
-        return AccountRejected(f"{_named(accounts[0])} was not accepted: {failure.reason}. "
-                               f"{_replace_hint(accounts[0])}.", platform=platform, reason="account_rejected",
-                               account_source=accounts[0].source)
+            f"{_named(failed)} could not use this endpoint{answered}. {name} restricts this account: "
+            f"{h.reason or 'some signed-in requests are refused'}. {_replace_hint(failed)}.",
+            platform=platform, reason="account_limited", account_source=failed.source)
+    if h.status != "alive" and isinstance(failure, SessionInvalid):  # no check passed that would contradict it
+        return AccountRejected(f"{_named(failed)} was not accepted: {failure.reason}. {_replace_hint(failed)}.",
+                               platform=platform, reason="account_rejected", account_source=failed.source)
     return None
 
 

@@ -169,8 +169,11 @@ Signed-in accounts in the settings dialog show the health the server recorded, n
 badge in words (Working, Restricted by …, Rejected by … · time, Check inconclusive, Not checked yet, No account
 check), then the platform's reason, the last check time and any cooldown. A rejection is attributed to the platform
 only when the platform's own answer said so. Check follows Test: a pending button wide enough for its label, focus
-kept on it, the row updated in place, a toast for the result, and the summary cards behind the dialog updated in
-place. A failed check keeps the last verdict and adds an inline error line.
+kept on it, the row updated in place with the result in its own visually hidden `role="status"` line inside the
+dialog (the health lines already show the verdict), a toast that repeats it, and the summary cards behind the dialog updated in place. A failed check keeps the last verdict and adds an
+inline `role="alert"` error line. A modal dialog makes everything outside it inert, so while one is open the toast
+region is moved into it (`hostToasts`) and back to `<body>` when it closes: toasts stay visible, announced and
+dismissible above the dialog.
 
 Portal mutations report only what the server confirmed: revoking a key, removing a
 member, and removing or moving a proxy or account return `404` with a fixed `detail`

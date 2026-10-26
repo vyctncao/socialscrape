@@ -69,30 +69,60 @@ accounts**, each account in a platform's signed-in account dialog has a status b
 (the check got no verdict, for example through an unreachable proxy) or **Not checked yet**. Below it are the reason the
 platform gave, when the account was last checked and, for a rejected account, until when requests skip it. Instagram
 and TikTok accounts have a **Check** action, like a proxy's **Test**: the button shows its progress and keeps focus,
-the row updates in place and a toast reports the result. A new account is checked as soon as it is added; it is kept
-whatever the check says, and a rejection shows as a warning. A platform's summary card reads **Account rejected** while
-any of its accounts was last rejected. YouTube, Facebook and Google accounts read **No account check**. The checks are
-one or two requests made with the account's own cookies and the proxy of its pool position:
+the row updates in place, its result is announced from a live region inside the dialog, and a toast repeats it. While a dialog is open the toasts are shown inside it, so they stay visible and can be dismissed. A
+new account is checked as soon as it is added; it is kept whatever the check says, and a rejection shows as a warning.
+A platform's summary card reads **Account rejected** while any of its accounts was last rejected. YouTube, Facebook and
+Google accounts read **No account check**. The checks are one or two requests made with the account's own cookies and
+the proxy of its pool position:
 
 - **TikTok**: the web passport API (`/passport/web/account/info/`). `session_expired` rejects the account. TikTok's app
   API answers a dead session exactly as it answers no cookies (`Please upgrade your TikTok app.`, status 5, empty lists),
   so routes that need a login check the account before the call (the verdict is reused for 10 minutes).
-- **Instagram**: the account API (`/api/v1/accounts/current_user/`). An answer that deletes the session cookie, or a
-  redirect to the login, checkpoint or suspended page, rejects the account. A redirect to the home page is settled by
-  the signed-in home page: when its viewer is the account, the session still works but Instagram restricts it (some
-  signed-in calls are refused); the logged-out home page rejects it.
+- **Instagram**: the account API (`/api/v1/accounts/current_user/`). Instagram rejects a session in only these ways: a
+  `401 require_login` answer that deletes the `sessionid` cookie (a session it no longer knows), a redirect to the
+  login, checkpoint or suspended page, or its logged-out home page served to the session. A redirect to the home page is
+  settled by the signed-in home page: when its viewer is the account, the session still works but Instagram restricts
+  it. Such a session is not dead: it still serves login-only routes such as `basic-profile`, `post/comment/replies`,
+  `search`, `search/profiles`, `audio/reels` and `user/tagged-posts`, while other signed-in calls are refused.
 
-In traffic, a call carrying an account that fails in a way a dead session could explain has the account checked
-(cached). A rejected account is skipped for 6 hours (24 hours after a repeated rejection) and logged at WARNING with the
-platform and entry id, never a cookie value. A passing check or a replaced file ends the cooldown. The call is then made
-once more without account cookies, through the same proxy: routes that work logged out answer as they do with no
-account. Routes that need a login answer a setup error instead of the account's 500/404/empty answer:
-`501 platform_auth_required` with `reason: "account_rejected"` (or `"account_limited"` for a restricted account) and a
-message naming the account and where to replace it. Instagram's topic pages (`search/hashtag`, `search/popular`,
-`reels/search`, `reels/trending`) are always read without account cookies: a signed-in session is sent to Instagram's
-signed-in keyword search, which carries none of their data. YouTube and Facebook accounts are rejected when the platform
-deletes their session cookie (`LOGIN_INFO`, `c_user`); a failing call on any platform is retried once without account
-cookies.
+The check endpoint (`POST /portal/api/settings/platforms/<platform>/cookies/<id>/check`, and the `check` field of the
+answer to adding an account) returns `status` `alive`, `limited` (signed in, but restricted), `rejected` or `unknown`.
+`ok` is `true` only for `alive`, `false` for `rejected` and `null` otherwise, so a script reading `ok` never takes a
+restricted account for a healthy one.
+
+In traffic, a call carrying an account is checked (the verdict is cached: 10 minutes when it works, 1 minute when it
+was inconclusive) when it fails with a session error (`session_invalid`, `cookies_rejected`), `upstream_error`,
+`upstream_blocked`, `forbidden` or one of Instagram's partial-answer codes (`no_profile_data`, `profile_id_unavailable`,
+`profile_identity_mismatch`, `query_unavailable`, `no_session_token`), with a `404` from a restricted account, or when
+its session cookie vanished during the call. Timeouts, network and proxy errors, bad input and other `404`s are not
+the account's fault: they follow the proxy rotation only. Then:
+
+- **Rejected**: the account is skipped for 6 hours (24 hours after a repeated rejection) and logged at WARNING with the
+  platform and entry id, never a cookie value; a passing check or a replaced file ends the cooldown. The attempt is
+  repeated through the same proxy with the next account, or without account cookies.
+- **Restricted, inconclusive, or a session error the check did not contradict**: the attempt is repeated without account
+  cookies through the same proxy, and the call goes on without them through the remaining proxies, as a call with no
+  account would.
+- **Working** (or no check for the platform): the account keeps its proxy rotation, and its last failure is retried once
+  without account cookies through the last proxy, except a throttle (`upstream_blocked`) answered to a working account,
+  which a logged-out call through the same egress would share.
+
+Routes that work logged out therefore answer as they do with no account. A route that needs a login fails a call
+without account cookies at once, before any request; the account then takes over again where it failed (on the next
+proxy if its error was retryable). When it still fails, the answer is a setup error only when the evidence is about the
+session: `501 platform_auth_required` with `reason: "account_rejected"` (every account rejected, or a session error from
+an account no check cleared) or `"account_limited"` (Instagram sent the restricted session to its home or login page),
+and a message naming the account and where to replace it. Any other failure (a `404` for a bad id, a throttle, a field
+error) keeps its own status and code, with `account_health: "limited"` when the account is restricted.
+
+A session cookie that vanishes during a call is a reason to check the account (in the background when the call
+succeeded), not a verdict: yt-dlp clears Instagram's `sessionid` itself after an HTTP error on a URL it counts as a
+login redirect, the home page included. YouTube and Facebook accounts, which have no check, are rejected when their
+session cookie (`LOGIN_INFO`, `c_user`) is deleted. Instagram's topic pages (`search/hashtag`, `search/popular`,
+`reels/search`, `reels/trending`) and the profile embed page (`user/embed`) are always read without account cookies: a
+signed-in session is sent to Instagram's signed-in keyword search, which carries none of the topic data, and Instagram
+renders the visitor's own `csrftoken`, `ds_user_id`, `ig_did` and `mid` into the embed HTML, which the route returns
+verbatim.
 
 Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
 

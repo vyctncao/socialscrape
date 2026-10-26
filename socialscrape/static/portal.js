@@ -67,7 +67,10 @@ async function api(url, options = {}) {
   return response.json();
 }
 
-const toastQueue = [], visibleToasts = new Set();
+const toastQueue = [], visibleToasts = new Set(), toastRegion = $('#toasts');
+// A modal dialog makes everything outside it inert and covers it: while one is open the toast region lives inside it
+// (openDialog), so its toasts stay visible, announced and dismissible; it returns to <body> when the dialog closes.
+function hostToasts(host = document.body) { if (toastRegion.parentElement !== host) host.append(toastRegion); }
 function showQueuedToast(item) {
   const element = document.createElement('div'), assertive = ['error','warning'].includes(item.type);
   item.element = element; element.className = `toast ${item.type}`; element.setAttribute('role', assertive ? 'alert' : 'status'); element.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
@@ -75,7 +78,7 @@ function showQueuedToast(item) {
   element.innerHTML = `${icon(glyph)}<span>${esc(item.message)}</span>`;
   const close = () => { if (!visibleToasts.delete(item)) return; element.remove(); if (toastQueue.length) showQueuedToast(toastQueue.shift()); };
   if (item.persistent || item.type === 'error') { const button=document.createElement('button'); button.className='toast-close icon-button'; button.setAttribute('aria-label','Dismiss notification'); button.innerHTML=icon('x'); button.addEventListener('click',close); element.append(button); }
-  $('#toasts').append(element); visibleToasts.add(item);
+  toastRegion.append(element); visibleToasts.add(item);
   if (!item.persistent && item.type !== 'error') setTimeout(close, 4000);
 }
 function toast(message, {type = 'success', persistent = false} = {}) {
@@ -225,7 +228,7 @@ function accountCoolingDown(health) { return health?.status === 'rejected' && Bo
 // only verdicts the server reached, with their times. Badge HTML is escaped here; lines are plain text.
 function accountHealth(platform, health = {}) {
   const name = platformName(platform), lines = [];
-  const inconclusive = health?.inconclusive_at ? `The check at ${fmt(health.inconclusive_at)} was inconclusive: ${clause(health.inconclusive_reason) || 'no verdict.'} The verdict above still stands.` : '';
+  const inconclusive = health?.inconclusive_at ? `The check at ${fmt(health.inconclusive_at)} was inconclusive. ${sentence(health.inconclusive_reason) || 'It reached no verdict.'} The verdict above still stands.` : '';
   if (health?.status === 'rejected') {
     const by = rejectedByPlatform(platform, health.reason) ? ` by ${esc(name)}` : '';
     const at = health.rejected_at || health.checked_at;
@@ -242,7 +245,7 @@ function accountHealth(platform, health = {}) {
     return {tone:health.limited ? 'warn' : 'good', badge:health.limited ? `Restricted by ${esc(name)}` : 'Working', checked:health.checked_at, lines};
   }
   if (health?.inconclusive_at) return {tone:'', badge:'Check inconclusive', checked:health.inconclusive_at, lines:[sentence(health.inconclusive_reason) || 'The check reached no verdict.', 'Requests still use this account. Check again in a minute.']};
-  if (!accountChecks.has(platform)) return {tone:'', badge:'No account check', checked:null, lines:[`SocialScrape cannot check ${name} sessions. A request that fails with this account is retried without cookies.`]};
+  if (!accountChecks.has(platform)) return {tone:'', badge:'No account check', checked:null, lines:[`SocialScrape cannot check ${name} sessions. A request that fails with this account the way a dead session would (blocked, an error or an incomplete answer) is retried once without cookies.`]};
   return {tone:'', badge:'Not checked yet', checked:null, lines:[`Check asks ${name} whether this session still works.`]};
 }
 function accountSummary(platform, item) {
@@ -253,15 +256,15 @@ function accountSummary(platform, item) {
 function accountCheckToast(platform, position, result, saved = false) {
   const name = platformName(platform), slot = `${poolPosition(position)} account`, lead = saved ? `Signed-in account saved for ${name}. ` : '';
   const signedIn = result?.account ? ` · signed in as @${result.account}` : '';
-  if (result?.status === 'alive' && result.limited) return [`${lead}${name} restricts the ${slot}: ${result.reason || 'some signed-in requests are refused'}.`.replace(/\.\.$/, '.'), 'warning', false];
+  if (result?.status === 'limited' || result?.status === 'alive' && result.limited) return [`${lead}${name} restricts the ${slot}: ${result.reason || 'some signed-in requests are refused'}.`.replace(/\.\.$/, '.'), 'warning', false];
   if (result?.status === 'alive') return [saved ? `${lead}It works${signedIn}.` : `The ${name} ${slot} works${signedIn}.`, 'success', false];
   if (result?.status === 'rejected') { const until = accountCoolingDown(result.health) ? ` Requests skip it until ${fmt(result.health.retry_at)}.` : ''; const what = rejectedByPlatform(platform, result.reason) ? `${name} rejected the ${slot}: ${clause(result.reason)}` : `the ${name} ${slot} was rejected: ${clause(result.reason) || 'the session is not accepted.'}`; return [`${saved ? 'Saved, but ' : ''}${saved ? what : sentence(what)}${until} Replace it with a fresh cookies.txt export.`, 'warning', true]; }
   if (result?.supported === false) return [`${lead}SocialScrape cannot check ${name} sessions.`, saved ? 'success' : 'info', false];
-  return [`${lead}The check of the ${name} ${slot} was inconclusive: ${clause(result?.reason) || 'no verdict.'}`, 'warning', false];
+  return [`${lead}The check of the ${name} ${slot} was inconclusive. ${sentence(result?.reason) || 'It reached no verdict.'}`, 'warning', false];
 }
 function poolList(platform, kind, items) {
   const noun = kind === 'proxy' ? 'proxy' : 'signed-in account';
-  return items.length ? `<ol class="manager-list">${items.map(item => `<li data-entry="${esc(item.id)}"${kind === 'cookies' ? ` class="account-row" data-position="${item.position}" data-updated="${esc(item.updated_at)}"` : ''}><div class="manager-position">${kind === 'proxy' ? `<strong>${poolPosition(item.position)}</strong><span>Updated ${esc(fmt(item.updated_at))}</span><span data-proxy-status role="status"></span>` : accountSummary(platform, item)}</div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${kind === 'cookies' && accountChecks.has(platform) ? `<button class="ghost" type="button" data-check-account data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Check ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Check</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} up to ${poolPosition(item.position - 1)}"><span aria-hidden="true">↑</span></button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} down to ${poolPosition(item.position + 1)}"><span aria-hidden="true">↓</span></button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Remove ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No signed-in accounts configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway signed-in account below.');
+  return items.length ? `<ol class="manager-list">${items.map(item => `<li data-entry="${esc(item.id)}"${kind === 'cookies' ? ` class="account-row" data-position="${item.position}" data-updated="${esc(item.updated_at)}"` : ''}><div class="manager-position">${kind === 'proxy' ? `<strong>${poolPosition(item.position)}</strong><span>Updated ${esc(fmt(item.updated_at))}</span><span data-proxy-status role="status"></span>` : `${accountSummary(platform, item)}<span class="sr-only" data-account-status role="status"></span>`}</div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${kind === 'cookies' && accountChecks.has(platform) ? `<button class="ghost" type="button" data-check-account data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Check ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Check</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} up to ${poolPosition(item.position - 1)}"><span aria-hidden="true">↑</span></button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} down to ${poolPosition(item.position + 1)}"><span aria-hidden="true">↓</span></button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Remove ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No signed-in accounts configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway signed-in account below.');
 }
 function managerFocus(entry, action) {
   return () => { const row=$(`#dialog .manager-list li[data-entry="${CSS.escape(String(entry))}"]`); return row?.querySelector(action) || row?.querySelector('[data-move-setting]') || row?.querySelector('[data-remove-setting]') || row?.querySelector('[data-test-proxy], [data-check-account]') || $('#dialog .manager-form input, #dialog [data-dialog-close]'); };
@@ -680,6 +683,7 @@ function openDialog({title, description, body, footer, guard = null, restoreFocu
   dialogGuard = guard; dialogRestoreFocus = restoreFocus;
   dialog.innerHTML = `<header class="modal-head"><div><h2 id="dialog-title">${esc(title)}</h2><p id="dialog-description">${esc(description)}</p></div><button class="icon-button" data-dialog-close aria-label="Close dialog">${icon('x')}</button></header><div class="modal-body">${body}<div class="field-error" id="dialog-error" role="alert" hidden></div></div><footer class="modal-foot">${footer}</footer>`;
   if (!alreadyOpen) dialog.showModal();
+  hostToasts(dialog);
   const focusTarget = typeof initialFocus === 'function' ? initialFocus() : initialFocus ? dialog.querySelector(initialFocus) : alreadyOpen ? dialog.querySelector('[data-dialog-close]') : null;
   focusTarget?.focus({preventScroll:true});
 }
@@ -749,18 +753,34 @@ async function testPlatformProxy(button) {
   finally { done(); }
 }
 
-// Check keeps focus on its own button: only the row's health text changes, and the result is also announced in a toast.
+// Check keeps focus on its own button: only the row's health text changes, and the result is written into the row's
+// own live region (inside the dialog, like the proxy Test's; visually hidden, since the health lines already show the
+// verdict) as well as a toast.
+function accountRowStatus(row, message) {
+  const live = row?.querySelector('[data-account-status]');
+  if (live) live.textContent = message;
+}
+// Adds health HTML to an account row ahead of its live region, which stays in place so its next update is announced.
+function accountRowInsert(row, html) {
+  const box = row?.querySelector('.manager-position'), live = box?.querySelector('[data-account-status]');
+  if (live) live.insertAdjacentHTML('beforebegin', html); else box?.insertAdjacentHTML('beforeend', html);
+}
 async function checkPlatformAccount(button) {
   const done = pendingButton(button, 'Checking…');
   if (!done) return;
   const {platform, entry} = button.dataset, position = Number(button.closest('li')?.dataset.position) || 1;
   const row = () => $(`#dialog .manager-content[data-platform="${platform}"][data-kind="cookies"] li[data-entry="${CSS.escape(entry)}"]`);
   row()?.querySelector('[data-account-check-error]')?.remove();
+  accountRowStatus(row(), '');
   try {
     const result = await api(`/portal/api/settings/platforms/${platform}/cookies/${entry}/check`, {method:'POST', timeout:30000});
-    const current = row();
-    if (current) current.querySelector('.manager-position').innerHTML = accountSummary(platform, {position:Number(current.dataset.position), updated_at:Number(current.dataset.updated), health:result.health});
-    const [message, type, persistent] = accountCheckToast(platform, position, result); toast(message, {type, persistent});
+    const current = row(), [message, type, persistent] = accountCheckToast(platform, position, result);
+    if (current) {
+      for (const child of [...current.querySelector('.manager-position').children]) if (!child.matches('[data-account-status]')) child.remove();
+      accountRowInsert(current, accountSummary(platform, {position:Number(current.dataset.position), updated_at:Number(current.dataset.updated), health:result.health}));
+      accountRowStatus(current, message);
+    }
+    toast(message, {type, persistent});
     api('/portal/api/settings/platforms').then(syncProviderSummaries).catch(() => {});
   } catch (error) {
     if (error.status === 404) {
@@ -769,7 +789,7 @@ async function checkPlatformAccount(button) {
       return;
     }
     const message = error.timeout ? 'The account check timed out after 30 seconds. Try again in a minute.' : error.message;
-    row()?.querySelector('.manager-position').insertAdjacentHTML('beforeend', `<span class="account-check-error" data-account-check-error>Check failed: ${esc(sentence(message))} The status above is from the last completed check.</span>`);
+    accountRowInsert(row(), `<span class="account-check-error" data-account-check-error role="alert">Check failed: ${esc(sentence(message))} The status above is from the last completed check.</span>`);
     toast(`Could not check the ${platformName(platform)} ${poolPosition(position)} account: ${message}`, {type:'error', persistent:true});
   } finally { done(); }
 }
@@ -791,7 +811,12 @@ async function savePlatformSetting(form) {
     // A new signed-in account is checked by the server before it answers (up to ~25 s); it is kept whatever the check says.
     const data = await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}, timeout:kind === 'cookies' ? 45000 : null});
     await openPlatformManager(platform, kind, dialogTrigger, managerFocus(data.id, '[data-move-setting], [data-remove-setting], [data-test-proxy], [data-check-account]'));
-    if (kind === 'cookies') { const added = $(`#dialog .manager-list li[data-entry="${CSS.escape(String(data.id))}"]`); const [message, type, persistent] = accountCheckToast(platform, Number(added?.dataset.position) || 1, data.check, true); toast(message, {type, persistent}); }
+    if (kind === 'cookies') {
+      const added = $(`#dialog .manager-list li[data-entry="${CSS.escape(String(data.id))}"]`); const [message, type, persistent] = accountCheckToast(platform, Number(added?.dataset.position) || 1, data.check, true);
+      // The row was just drawn: fill its live region a moment later, once assistive technology tracks it.
+      setTimeout(() => accountRowStatus(added, message), 150);
+      toast(message, {type, persistent});
+    }
     else toast(`Proxy saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; if (err.field || [400,422].includes(err.status)) { input.setAttribute('aria-invalid','true'); input.focus(); } }
   finally { done(); }
@@ -1034,12 +1059,13 @@ if (PORTAL.public) {
 if (PORTAL.role !== 'owner') document.querySelectorAll('#nav [data-owner-only]').forEach(link => link.remove());
 const mobileNav=$('#nav').cloneNode(true); mobileNav.removeAttribute('id'); mobileNav.querySelectorAll('[aria-describedby]').forEach(control=>control.removeAttribute('aria-describedby')); mobileNav.querySelectorAll('.control-tooltip').forEach(tooltip=>tooltip.remove()); $('#mobile-nav').append(mobileNav);
 const mobileMenu=$('#mobile-menu'), navDialog=$('#nav-dialog');
-mobileMenu.addEventListener('click', () => { navDialog.showModal(); mobileMenu.setAttribute('aria-expanded','true'); });
-navDialog.addEventListener('close', () => { mobileMenu.setAttribute('aria-expanded','false'); if (innerWidth <= 760) mobileMenu.focus({preventScroll:true}); });
+mobileMenu.addEventListener('click', () => { navDialog.showModal(); hostToasts(navDialog); mobileMenu.setAttribute('aria-expanded','true'); });
+navDialog.addEventListener('close', () => { hostToasts($('#dialog').open ? $('#dialog') : document.body); mobileMenu.setAttribute('aria-expanded','false'); if (innerWidth <= 760) mobileMenu.focus({preventScroll:true}); });
 $('#dialog').addEventListener('close', () => {
   state.historyRequest = null;
   delete $('#dialog').dataset.oneTimeSecret; $('#dialog').classList.remove('history-dialog');
   cancelReveals();
+  hostToasts();
   $('#dialog').replaceChildren();
   const fallback = $('#view').querySelector('input, button, a') || $('#view');
   const restored = dialogRestoreFocus?.();
