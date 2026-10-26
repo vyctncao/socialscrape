@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import json
 import re
+from time import monotonic
 from typing import Any
 from urllib.parse import unquote, urlencode, urlsplit
 
 import yt_dlp
 from fastapi import APIRouter, Query
 from yt_dlp.networking import Request
-from yt_dlp.networking.exceptions import HTTPError
+from yt_dlp.networking.exceptions import HTTPError, TransportError
 
+from ..config import get_settings
 from ..errors import BadRequest, Forbidden, NotFound, UpstreamBlocked, UpstreamError
 from ..registry import sc_get
 from ..ytdlp import with_ydl
@@ -39,14 +41,34 @@ def actor(value: str | None) -> str:
     raise BadRequest("handle must be a Bluesky handle or DID")
 
 
+def _read_public(ydl: yt_dlp.YoutubeDL, request: Request) -> bytes:
+    settings = get_settings()
+    deadline = monotonic() + settings.request_timeout
+    for attempt in range(2):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise UpstreamError("Timed out waiting for Bluesky", code="timeout")
+        request.extensions["timeout"] = min(settings.socket_timeout, remaining)
+        try:
+            with ydl.urlopen(request) as response:
+                return response.read(MAX_RESPONSE_BYTES + 1)
+        except HTTPError as exc:
+            if attempt or exc.status not in (500, 502, 503, 504):
+                raise
+            exc.response.close()
+        except TransportError:
+            if attempt:
+                raise
+    raise AssertionError("unreachable")
+
+
 def _json(ydl: yt_dlp.YoutubeDL, method: str, params: dict[str, Any]) -> dict[str, Any]:
     request = Request(
         ORIGIN + method + "?" + urlencode(params),
         headers={"Accept": "application/json"},
     )
     try:
-        with ydl.urlopen(request) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
+        raw = _read_public(ydl, request)
     except HTTPError as exc:
         if exc.status == 429:
             raise UpstreamBlocked("Bluesky is rate-limiting this connection") from exc
