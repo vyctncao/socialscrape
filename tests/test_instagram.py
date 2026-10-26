@@ -648,7 +648,7 @@ def stubbed(monkeypatch):
         calls.append(url)
         return (copy.deepcopy(CAROUSEL), None) if CAROUSEL_CODE in url else (copy.deepcopy(REEL), REEL_MEDIA)
 
-    async def fetch_profile(handle, tab=""):
+    async def fetch_profile(handle, tab="", **opts):
         calls.append(f"{handle}/{tab}")
         return copy.deepcopy(REELS_TAB if tab == "reels" else PROFILE), PROFILE_HTML
 
@@ -763,7 +763,7 @@ def test_private_account_without_reels_or_highlights_is_403(client, stubbed, mon
                    "edges": []}}
 
     def serve(user):
-        monkeypatch.setattr(ig, "fetch_profile", lambda handle, tab="": _async((copy.deepcopy(user), "")))
+        monkeypatch.setattr(ig, "fetch_profile", lambda handle, tab="", **opts: _async((copy.deepcopy(user), "")))
         monkeypatch.setattr(ig, "fetch_feed", lambda handle, tab="", cursor=None: _async(
             _feed(copy.deepcopy(user), "polaris_clips_connection")))
 

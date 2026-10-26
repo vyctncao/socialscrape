@@ -177,6 +177,8 @@ The other 14 return 501: comments and replies, followers and following, audience
 
 ### Instagram: 14 / 20
 
+With account cookies configured in Platform settings, profiles, post counts, posts, reels, highlights, basic profile lookup and search use Instagram's signed-in web client. Its page supplies the requested profile's ID and request tokens; the response must identify that same profile. Profile counts are exact when exposed, every native feed item and continuation cursor is kept, and reels receive dates/captions from authenticated media info. `require_play_counts=true` on posts/reels rejects incomplete play counts. Missing counts remain unknown. Search uses the current GraphQL query; the retired top-search URL is no longer used. Account cookies do not establish that every gated route is working: the live endpoint tests and coverage notes remain the readiness check.
+
 Anonymous Instagram is heavily restricted. Most endpoints return **only the first page** of what Instagram's logged-out pages show, and passing a pagination token returns 501; `user/posts` and `user/reels` page through the profile's tabs the way the logged-out web client scrolls them.
 
 | Endpoint | Notes |
