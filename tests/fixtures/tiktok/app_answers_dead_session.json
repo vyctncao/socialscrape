@@ -1,0 +1,8 @@
+{
+ "_about": "TikTok app-API answers (api16-normal-c-useast1a.tiktokv.com/aweme/v1/<endpoint>/) recorded 2026-10-25 with an expired session's cookies; each is byte-for-byte what no cookies get, so none is a session verdict (impr_id redacted).",
+ "comment/list": {"status_code": 2146, "status_msg": "Please upgrade your TikTok app.", "log_pb": {"impr_id": "<redacted>"}},
+ "comment/list/reply": {"status_code": 5, "status_msg": "", "log_pb": {"impr_id": "<redacted>"}},
+ "search/general/full": {"status_code": 1, "message": "Url does not match"},
+ "search/sug": {"status_code": 0, "status_msg": "", "sug_list": [], "original_query": "travel"},
+ "user/followers/list": {"status_code": 0, "status_msg": "url doesn't match", "log_pb": {"impr_id": "<redacted>"}}
+}

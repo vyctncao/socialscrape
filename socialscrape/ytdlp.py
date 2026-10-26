@@ -45,8 +45,8 @@ from yt_dlp.utils import (
 from yt_dlp.utils import _utils as yt_dlp_utils
 
 from .config import get_settings
-from .errors import (ApiError, BadRequest, Forbidden, Misconfigured, NotFound, UpstreamBlocked, UpstreamError,
-                     UpstreamUnreachable)
+from .errors import (ApiError, BadRequest, Forbidden, LoginRequired, Misconfigured, NotFound, SessionInvalid,
+                     UpstreamBlocked, UpstreamError, UpstreamUnreachable)
 from .util import requestable_url
 
 log = logging.getLogger("socialscrape.ytdlp")
@@ -140,9 +140,7 @@ def base_options(platform: str, dashboard_proxy: str | None = None,
     if proxy:
         opts["proxy"] = proxy
     if not dashboard_cookies and (cookie_file := s.cookie_file(platform)):
-        if problem := cookie_file_problem(cookie_file):
-            raise Misconfigured(f"The server's {platform} cookie file (SOCIALSCRAPE_COOKIES_{platform.upper()}) "
-                                f"{problem}", code="cookies_error")
+        _check_cookie_file(platform, cookie_file)
         opts["cookiefile"] = cookie_file
     elif not dashboard_cookies and s.cookies_from_browser:
         browser, _, profile = s.cookies_from_browser.partition(":")
@@ -150,9 +148,24 @@ def base_options(platform: str, dashboard_proxy: str | None = None,
     return opts
 
 
+# _dashboard_cookies for a call that carries no account at all: no dashboard, env-file or browser cookies.
+NO_COOKIES = ""
+
+
+def _check_cookie_file(platform: str, cookie_file: str) -> None:
+    """500 cookies_error for a configured env cookie file that can't be used: a server setting to fix, reported on
+    every call of the platform (also those made without account cookies)."""
+    if problem := cookie_file_problem(cookie_file):
+        raise Misconfigured(f"The server's {platform} cookie file (SOCIALSCRAPE_COOKIES_{platform.upper()}) "
+                            f"{problem}", code="cookies_error")
+
+
 def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any]) -> T:
+    from . import sessions
+
     dashboard_proxy = opts.pop("_dashboard_proxy", None)
     dashboard_cookies = opts.pop("_dashboard_cookies", None)
+    account = opts.pop("_account", None)  # the sessions.Account the call carries, for its health
     merged = base_options(platform, dashboard_proxy, dashboard_cookies is not None)
     extractor_args = opts.pop("extractor_args", None)
     merged.update(opts)
@@ -166,6 +179,7 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
                 raise Misconfigured(
                     f"The saved {platform} cookies.txt file cannot be loaded", code="cookies_error"
                 ) from exc
+        ydl._socialscrape_account = account  # read by sessions.confirm
         if platform == "youtube":
             for key in ("Youtube", "YoutubeTab"):
                 ie = ydl.get_info_extractor(key)
@@ -176,12 +190,18 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
             ie._invalid_player_response = partial(_youtube_player_response, ie._invalid_player_response)
             ie._download_initial_data = partial(_youtube_initial_data, ie, ie._download_initial_data)
             ie._html_search_meta = partial(_youtube_meta, ie._html_search_meta)
+        signed_in = False
         try:
             # Left out, as yt-dlp leaves out a cookies.txt line it can't read (_cookie_parse_problem logs which).
             for cookie in [c for c in ydl.cookiejar if not _cookie_sendable(c)]:
                 ydl.cookiejar.clear(cookie.domain, cookie.path, cookie.name)
+            signed_in = account is not None and sessions.has_session(platform, ydl.cookiejar)
             return fn(ydl)
         finally:
+            # The platform deleting the session cookie in an answer (Instagram does for a session it no longer
+            # knows; YouTube clears LOGIN_INFO) ended the session: what the call got is a logged-out answer.
+            if signed_in and not sessions.has_session(platform, ydl.cookiejar):
+                sessions.lost(account)
             # The operator's cookies.txt is input only. Without this, close() saves the session's jar over it
             # with a plain open(path, "w") from every worker thread at once, truncating it for its readers.
             ydl.params["cookiefile"] = None
@@ -507,32 +527,69 @@ def _cookie_sendable(cookie: Cookie) -> bool:
     return True
 
 
+# An account call failing with one of these may be the account's fault: a dead or flagged session gets errors,
+# block pages, partial pages and empty answers where a working one gets data. The account is checked (sessions.
+# verify) and the call made once more without account cookies.
+_DOUBT = {
+    "upstream_error", "upstream_blocked", "forbidden", "no_profile_data", "cookies_rejected", "session_invalid",
+    "profile_id_unavailable", "profile_identity_mismatch", "query_unavailable", "no_session_token",
+}
+
+
 async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confirm_not_found: bool = False,
-                   use_cookies: bool = True,
-                   **ydl_opts: Any) -> T:
+                   use_cookies: bool = True, **ydl_opts: Any) -> T:
     """Run `fn(ydl)` in the worker pool, retrying configured connection profiles.
+
+    Attempt i pairs proxy i with the i-th usable signed-in account (each clamped to the last one). An account is
+    one of the dashboard's cookie entries, else the env cookie file, else browser cookies (sessions.accounts), and is
+    skipped while it cools down after the platform rejected it. A dead or restricted account must never make a call
+    worse than no account (sessions.py):
+
+      - a failure that a dead session could explain (SessionInvalid, _DOUBT, or a 404 from a restricted account)
+        has the account checked (cached); a rejected account is skipped and the attempt repeated with the next
+        account, or without account cookies, through the same proxy;
+      - the call's last failure with an account is retried once without account cookies, same proxy rules;
+      - a route that needs a login (its pre-flight raises LoginRequired without a session cookie, before any
+        request) then answers the 501 naming the rejected or restricted account instead of the account's
+        500/404/empty answer; with a working account it keeps the account's own error.
 
     confirm_not_found is opt-in for public profile lookups: Instagram and TikTok
     can report a real user as missing on some egresses. Confirm using the finite
     configured pool before returning 404. Other lookups keep missing content final.
+
+    use_cookies=False never sends account cookies (dashboard, env file or browser), for flows that read logged-out
+    pages or public clients a signed-in session is served differently (Instagram's topic and embed pages, its
+    public post and reels-tab clients). It checks no account and records no health, but an env cookie file that
+    can't be used is still the loud 500 cookies_error (a server setting to fix).
     """
+    from . import sessions
     from .portal import active_platform_pool
 
-    proxies, cookies = active_platform_pool(platform)
-    if not use_cookies:
-        cookies = []
-    attempts = max(len(proxies), len(cookies), 1)
+    proxies, entries = active_platform_pool(platform)
+    if not use_cookies and not entries and (cookie_file := get_settings().cookie_file(platform)):
+        _check_cookie_file(platform, cookie_file)
+    accounts = sessions.accounts(platform, entries) if use_cookies else []
+    usable = [account for account in accounts if sessions.usable(account)]
+    cookieless = not use_cookies or bool(accounts) and not usable
+    attempts = max(len(proxies), len(usable), 1)
     loop = asyncio.get_running_loop()
-    for index in range(attempts):
+    index = 0
+    failure: tuple[ApiError, BaseException] | None = None  # the last failure of an attempt carrying an account
+    limited: sessions.Account | None = None
+    while True:
+        proxy = proxies[min(index, len(proxies) - 1)] if proxies else None
+        account = None if cookieless or not usable else usable[min(index, len(usable) - 1)]
         options = dict(ydl_opts)
-        if proxies:
-            options["_dashboard_proxy"] = proxies[min(index, len(proxies) - 1)]
-        if cookies:
-            options["_dashboard_cookies"] = cookies[min(index, len(cookies) - 1)]
-        elif not use_cookies:
-            # Empty is an explicit anonymous jar: _run also skips environment
-            # files/browser imports, while keeping the configured proxy pool.
-            options.update(_dashboard_cookies="", cookiefile=None, cookiesfrombrowser=None)
+        if proxy is not None:
+            options["_dashboard_proxy"] = proxy
+        if account is not None:
+            options["_account"] = account
+            if account.value is not None:
+                options["_dashboard_cookies"] = account.value
+        elif cookieless:
+            # An explicit anonymous jar: _run also skips the env file and browser cookies, while keeping the
+            # configured proxy pool.
+            options.update(_dashboard_cookies=NO_COOKIES, cookiefile=None, cookiesfrombrowser=None)
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(_pool(), _run, platform, fn, options),
@@ -545,16 +602,50 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
             error, cause = exc, exc
         except (YoutubeDLError, RequestError) as exc:
             error, cause = translate_error(exc), exc
+        without_account = False
+        if account is not None:
+            failure = (error, cause)
+            invalid = isinstance(error, SessionInvalid)
+            if isinstance(error, LoginRequired):  # the route's pre-flight found no session cookie in the account
+                name = sessions.NAMES.get(platform, platform)
+                sessions.record(account, sessions.Verdict("rejected", f"its cookies hold no {name} session cookie"))
+            if invalid or error.code in _DOUBT or error.code == "not_found":
+                verdict = await sessions.verify(platform, account, proxy)  # cached per account
+                if verdict is not None and verdict.limited:
+                    limited = account
+                without_account = invalid or error.code in _DOUBT or limited is account
+            if not sessions.usable(account):  # rejected: by the check, or by the call itself (sessions.lost)
+                usable.remove(account)
+                attempts = max(len(proxies), len(usable), 1)
+                log.info("%s: %s is skipped; repeating the attempt %s", platform, account.label,
+                         "with the next account" if usable else "without account cookies")
+                cookieless = not usable
+                continue  # same index and proxy: the proxy was not at fault
         retryable = _retry_profile(error) or (confirm_not_found and isinstance(error, NotFound))
-        if index + 1 >= attempts or not retryable:
-            raise error from cause
-        log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1, error.code, index + 2)
-    raise AssertionError("unreachable")
+        if retryable and index + 1 < attempts:
+            log.warning("%s profile %d failed with %s; retrying profile %d", platform, index + 1, error.code,
+                        index + 2)
+            index += 1
+            continue
+        if without_account and not cookieless:
+            log.info("%s: the call with %s failed with %s; retrying it without account cookies", platform,
+                     account.label if account is not None else "an account", error.code)
+            cookieless = True
+            continue
+        if account is None and accounts and isinstance(error, LoginRequired):
+            # The route needs a login: answer for the accounts it had (rejected, restricted), else their failure.
+            rejected = sessions.login_error(platform, accounts, limited, failure[0] if failure else None)
+            if rejected is not None:
+                raise rejected from (failure[1] if failure else cause)
+            if failure is not None:
+                raise failure[0] from failure[1]
+        raise error from cause
 
 
 def _retry_profile(error: ApiError) -> bool:
     return error.code in {
         "upstream_blocked", "upstream_error", "network_error", "proxy_error", "forbidden", "cookies_rejected",
+        "session_invalid",
         "no_profile_data",  # Instagram served a partial profile page rather than its resolved user.
     }
 

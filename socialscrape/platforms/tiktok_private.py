@@ -6,29 +6,38 @@ from typing import Any
 import yt_dlp
 from fastapi import APIRouter, Query
 
-from ..errors import BadRequest, NotSupported, UpstreamError
+from .. import sessions
+from ..errors import BadRequest, LoginRequired, UpstreamError
 from ..registry import sc_get
 from ..ytdlp import with_ydl
 from . import _tiktok_map as M
-from .tiktok import _APP_API, _handle, _profile
+from .tiktok import _APP_API, SESSION_COOKIES, _handle, _profile
 
 router = APIRouter()
 P = "tiktok"
 
 
+def _signed_in(ydl: yt_dlp.YoutubeDL) -> None:
+    """The pre-flight of a route that needs a signed-in account: LoginRequired (501) without a session cookie,
+    before any request; else the account must pass TikTok's account check (cached, sessions.confirm). The app API
+    answers a dead session exactly as it answers no cookies ("Please upgrade your TikTok app.", status 5, an empty
+    list), so its answers can't show it: the check is made before the call."""
+    ie = ydl.get_info_extractor("TikTok")
+    if not any(name in ie._get_cookies("https://www.tiktok.com/") for name in SESSION_COOKIES):
+        raise LoginRequired("Add TikTok account cookies in Platform settings to use this endpoint", platform=P)
+    sessions.confirm(ydl, P)
+
+
 def _app(path: str, item_id: str, query: dict[str, Any]):
     def go(ydl: yt_dlp.YoutubeDL):
+        _signed_in(ydl)
         ie = ydl.get_info_extractor("TikTok")
-        cookies = ie._get_cookies("https://www.tiktok.com/")
-        if not any(name in cookies for name in ("sessionid", "sessionid_ss", "sid_tt")):
-            raise NotSupported("Add TikTok account cookies in Platform settings to use this endpoint",
-                               code="platform_auth_required", platform=P)
         data = ie._call_api(path, item_id, query=query, fatal=False)
         if not isinstance(data, dict):
             raise UpstreamError("TikTok returned no API data")
         status = data.get("status_code")
         if status:
-            raise UpstreamError(f"TikTok API failed: {data.get('status_msg') or status}")
+            raise UpstreamError(f"TikTok API failed: {data.get('status_msg') or data.get('message') or status}")
         return data
     return go
 
@@ -65,13 +74,8 @@ async def comment_replies(comment_id: str = Query(...), url: str = Query(...), c
 
 
 async def _require_account() -> None:
-    def check(ydl: yt_dlp.YoutubeDL):
-        ie = ydl.get_info_extractor("TikTok")
-        if not any(name in ie._get_cookies("https://www.tiktok.com/")
-                   for name in ("sessionid", "sessionid_ss", "sid_tt")):
-            raise NotSupported("Add TikTok account cookies in Platform settings to use this endpoint",
-                               code="platform_auth_required", platform=P)
-    await with_ydl(P, check)
+    """501 unless a usable signed-in TikTok account is configured (AccountRejected when TikTok rejected it)."""
+    await with_ydl(P, _signed_in)
 
 
 async def _graph(kind: str, handle: str | None, user_id: str | None, cursor: str | None):

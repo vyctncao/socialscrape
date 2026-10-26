@@ -1,0 +1,13 @@
+{
+ "_about": "Instagram's account check answers, recorded 2026-10-25 (redacted: statuses, final URLs, content types and the non-secret JSON bodies; no cookie value, id or username). 'flagged' is a session Instagram restricts: its signed-in web client still works (the home page's viewer is the account). 'unknown_session' is the same jar with a session id Instagram doesn't know. 'working' is synthetic: no healthy session was available, it is the answer Instagram's web client expects.",
+ "current_user": {
+  "flagged": {"redirect": 302, "status": 200, "final_url": "https://www.instagram.com/", "content_type": "text/html; charset=\"utf-8\"", "body": "", "session_cookie_kept": true},
+  "unknown_session": {"status": 401, "final_url": "https://www.instagram.com/api/v1/accounts/current_user/?edit=true", "content_type": "application/json; charset=utf-8", "body": {"message": "Please wait a few minutes before you try again.", "require_login": true, "igweb_rollout": true, "status": "fail"}, "session_cookie_kept": false},
+  "no_session": {"status": 401, "final_url": "https://www.instagram.com/api/v1/accounts/current_user/?edit=true", "content_type": "application/json; charset=utf-8", "body": {"message": "Please wait a few minutes before you try again.", "require_login": true, "igweb_rollout": true, "status": "fail"}},
+  "working": {"_synthetic": true, "status": 200, "final_url": "https://www.instagram.com/api/v1/accounts/current_user/?edit=true", "content_type": "application/json; charset=utf-8", "body": {"user": {"pk": "<ds_user_id>", "pk_id": "<ds_user_id>", "username": "sample.account"}, "status": "ok"}}
+ },
+ "home": {
+  "flagged": {"status": 200, "final_url": "https://www.instagram.com/", "file": "account_home_signed_in.html", "session_cookie_kept": true},
+  "unknown_session": {"status": 200, "final_url": "https://www.instagram.com/", "file": "account_home_logged_out.html", "session_cookie_kept": false}
+ }
+}

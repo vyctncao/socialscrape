@@ -61,6 +61,34 @@ retryable block or network/login failure, the service advances to the next proxy
 jars. Use only dedicated throwaway accounts; the dashboard accepts Netscape `cookies.txt` exports and never stores
 platform passwords.
 
+### Signed-in account health
+
+A dead or flagged signed-in account never makes a route worse than having no account. Each Instagram and TikTok
+account in the pool shows its health (working, restricted or rejected, with the reason and when it was checked) and has
+a **Check** action, like a proxy's **Test**; a new account is checked as soon as it is added, and it is kept whatever
+the check says. The checks are one or two requests made with the account's own cookies and the proxy of its pool
+position:
+
+- **TikTok**: the web passport API (`/passport/web/account/info/`). `session_expired` rejects the account. TikTok's app
+  API answers a dead session exactly as it answers no cookies (`Please upgrade your TikTok app.`, status 5, empty lists),
+  so routes that need a login check the account before the call (the verdict is reused for 10 minutes).
+- **Instagram**: the account API (`/api/v1/accounts/current_user/`). An answer that deletes the session cookie, or a
+  redirect to the login, checkpoint or suspended page, rejects the account. A redirect to the home page is settled by
+  the signed-in home page: when its viewer is the account, the session still works but Instagram restricts it (some
+  signed-in calls are refused); the logged-out home page rejects it.
+
+In traffic, a call carrying an account that fails in a way a dead session could explain has the account checked
+(cached). A rejected account is skipped for 6 hours (24 hours after a repeated rejection) and logged at WARNING with the
+platform and entry id, never a cookie value. A passing check or a replaced file ends the cooldown. The call is then made
+once more without account cookies, through the same proxy: routes that work logged out answer as they do with no
+account. Routes that need a login answer a setup error instead of the account's 500/404/empty answer:
+`501 platform_auth_required` with `reason: "account_rejected"` (or `"account_limited"` for a restricted account) and a
+message naming the account and where to replace it. Instagram's topic pages (`search/hashtag`, `search/popular`,
+`reels/search`, `reels/trending`) are always read without account cookies: a signed-in session is sent to Instagram's
+signed-in keyword search, which carries none of their data. YouTube and Facebook accounts are rejected when the platform
+deletes their session cookie (`LOGIN_INFO`, `c_user`); a failing call on any platform is retried once without account
+cookies.
+
 Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
 
 | Variable | Purpose |
@@ -68,7 +96,7 @@ Configuration is through environment variables (the `socialscrape` command takes
 | `SOCIALSCRAPE_PORTAL_PATH` | Persistent SQLite database for invite-only sign-in, member API keys, history, usage, playground and docs. Empty disables the dashboard. |
 | `SOCIALSCRAPE_API_KEYS` | Comma-separated accepted `x-api-key` values. Empty means auth is off; set it before exposing the server. ASCII only: a non-ASCII key stops startup. |
 | `SOCIALSCRAPE_PROXY` | Outbound proxy URL (`http`, `https`, `socks4(a)` or `socks5(h)`). Platforms throttle datacenter IPs quickly. |
-| `SOCIALSCRAPE_COOKIES_{YOUTUBE,TIKTOK,INSTAGRAM,FACEBOOK,GOOGLE}` | Netscape `cookies.txt` per platform. Use throwaway accounts. An unusable file makes that platform answer `500 cookies_error`. |
+| `SOCIALSCRAPE_COOKIES_{YOUTUBE,TIKTOK,INSTAGRAM,FACEBOOK,GOOGLE}` | Netscape `cookies.txt` per platform. Use throwaway accounts. An unusable file makes that platform answer `500 cookies_error`. The file's account gets the same health checks, skipping and logged-out retry as a dashboard account ([Signed-in account health](#signed-in-account-health)); `/health` shows its verdict under `cookie_health`, and a replaced file starts fresh. |
 | `SOCIALSCRAPE_TRANSCRIBE` | `none` (default), `faster-whisper` or `mlx-whisper` enables AI transcription (`uv sync --extra whisper` / `--extra mlx`). Without the package, transcription answers `501 transcription_unavailable`. The Docker image sets `faster-whisper` and bakes in the `small` model (`docker build --build-arg WHISPER_MODEL=base` bakes another); `SOCIALSCRAPE_TRANSCRIBE=none` turns it off. |
 | `SOCIALSCRAPE_CACHE_PATH` | SQLite file backing `cache_max_age` (default `.cache/socialscrape.sqlite3`). Blank disables the cache. |
 | `SOCIALSCRAPE_SCRAPECREATORS_API_KEY` | ScrapeCreators key for the [fallback](#scrapecreators-fallback). Empty disables it unless an owner saves one in the dashboard. Ignored without `SOCIALSCRAPE_API_KEYS` or the portal. |
@@ -90,8 +118,8 @@ Configuration is through environment variables (the `socialscrape` command takes
   | `404` | Nonexistent or removed content, or a path with no endpoint here (`not_found`, e.g. another platform's ScrapeCreators path) |
   | `405` | A method the operation does not support (`method_not_allowed`, with an `Allow` header). Most endpoints are GET-only; Facebook ad search and company ads also accept POST JSON bodies. |
   | `422` | `/v1/instagram/profile/post-count` only: Instagram shows an abbreviated count and `allow_estimated` isn't true (`estimate_only`, with `estimated_media_count`) |
-  | `500` | Unclassified upstream error (`upstream_error`) or timeout (`timeout`), an unusable server setting (`cookies_error`, `config_error`, or `cookies_rejected` when Instagram logs the configured session out), a failing Whisper model (`transcription_failed`), or an internal error (`server_error`; the traceback is in the server log) |
-  | `501` | Endpoint not supported (`not_supported`, with the reason), or transcription off (`transcription_disabled`) or not installed (`transcription_unavailable`) |
+  | `500` | Unclassified upstream error (`upstream_error`) or timeout (`timeout`), an unusable server setting (`cookies_error`, `config_error`), a failing Whisper model (`transcription_failed`), or an internal error (`server_error`; the traceback is in the server log) |
+  | `501` | Endpoint not supported (`not_supported`, with the reason), transcription off (`transcription_disabled`) or not installed (`transcription_unavailable`), or a route that needs a signed-in account when none is configured or the platform rejected it (`platform_auth_required`; with `reason: "account_rejected"` or `"account_limited"` when an account is configured, see [Signed-in account health](#signed-in-account-health)) |
   | `502` | No answer from the platform: `proxy_error` through a proxy (socket timeouts included), otherwise `network_error`. Retryable; details are in the server log |
   | `503` | The platform rate-limited or bot-checked us (`upstream_blocked`). Retry later or use a proxy; a `Retry-After` header, when present, says how many seconds this server will wait before asking the platform again |
 
@@ -230,7 +258,7 @@ checks; with no configured backups a missing user remains final.
 
 - **Approximate values.** Some values are YouTube's display text, not exact figures: relative times (`"3 weeks ago"`) turned into dates, and abbreviated counts (`"2.5K"`). The notes say where.
 - **Rate limits.** Every platform throttles, and the ad libraries quickly: Google answers a burst from one IP with its "sorry" CAPTCHA page for a while, and Meta can block an IP after a few dozen Ad Library requests. Use `SOCIALSCRAPE_PROXY` or the per-platform proxy pools (residential works best) and `cache_max_age`. Blocks surface as `503`. After Google refuses an egress (HTTP 429 or a redirect to `google.com/sorry`), the Google routes leave that IP or proxy alone for a cooling window of 60 seconds that doubles, up to 15 minutes, while Google keeps refusing (or Google's own `Retry-After`, if longer): calls inside it answer `503 upstream_blocked` with a `Retry-After` header and no request, so a burst can't keep the flag fresh, and with a Google proxy pool the next proxy is tried. A clean answer ends the window.
-- **Cookies.** Optional. They unlock login-gated paths (e.g. Instagram comments via `media/<pk>/comments/`), but those paths were **not verified** here, since only anonymous access was tested. Never use your personal account. An Instagram session that has been logged out answers `500 cookies_rejected` (replace the file); the files are never written. Check `/health` `cookie_errors` after changing one.
+- **Cookies.** Optional. They unlock login-gated paths (e.g. Instagram comments via `media/<pk>/comments/`), but those paths were **not verified** here, since only anonymous access was tested. Never use your personal account. A session the platform rejects is skipped and the call answered as without cookies, or with `501 platform_auth_required` (`reason: "account_rejected"`) on a route that needs a login ([Signed-in account health](#signed-in-account-health)); replace the file. The files are never written. Check `/health` `cookie_errors` and `cookie_health` after changing one.
 - **TikTok sound API.** `/v2/tiktok/video` (app path), `/profile/region` and `/song*` rely on the app API behind `TikTokSoundIE`, which yt-dlp marks as broken. They work today but could stop without notice.
 - **No JS runtime needed.** YouTube stream URLs would need a JS runtime (deno), but no endpoint returns them, so metadata, comments and captions all work without one.
 - **Timeouts.** A request that hits `SOCIALSCRAPE_REQUEST_TIMEOUT` answers `500 timeout`, but yt-dlp can't be interrupted: its call keeps a worker thread until it ends. Stopping the server (Ctrl-C included) doesn't wait for those calls: it gives them a second at most. With few `SOCIALSCRAPE_MAX_WORKERS`, calls queued behind a timed-out one share its wait and can time out too; they are dropped, not run late. This mainly happens when `SOCIALSCRAPE_REQUEST_TIMEOUT` <= `SOCIALSCRAPE_SOCKET_TIMEOUT`.

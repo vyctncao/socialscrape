@@ -9,7 +9,8 @@ from fastapi import APIRouter, Query
 from yt_dlp.extractor.instagram import InstagramIE
 from yt_dlp.utils import traverse_obj
 
-from ..errors import BadRequest, NotSupported, require_one
+from .. import sessions
+from ..errors import BadRequest, LoginRequired, require_one
 from ..registry import sc_get
 from ..util import compact
 from ..ytdlp import with_ydl
@@ -19,16 +20,19 @@ router = APIRouter()
 P = "instagram"
 
 
-def _require_login(ie: Any) -> None:
+def _require_login(ydl: yt_dlp.YoutubeDL, ie: Any) -> None:
+    """The pre-flight of a route that needs a signed-in account: LoginRequired (501) without a session cookie,
+    before any request; else the account must pass Instagram's account check (cached, sessions.confirm). A session
+    Instagram restricts still passes: its signed-in pages work, so only the calls it refuses fail."""
     if not ie._is_logged_in:
-        raise NotSupported("Add Instagram account cookies in Platform settings to use this endpoint",
-                           code="platform_auth_required", platform=P)
+        raise LoginRequired("Add Instagram account cookies in Platform settings to use this endpoint", platform=P)
+    sessions.confirm(ydl, P)
 
 
 def _mobile(path: str, item_id: str, query: dict[str, Any] | None = None):
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
-        _require_login(ie)
+        _require_login(ydl, ie)
         return _api_json(ydl, ie, f"{ie._API_BASE_URL}/{path.lstrip('/')}", item_id,
                          f"Downloading Instagram {item_id}", query=query or {})
     return go
@@ -43,7 +47,7 @@ async def basic_profile(userId: str | None = None) -> dict[str, Any]:
 
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
-        _require_login(ie)
+        _require_login(ydl, ie)
         from . import instagram_authenticated
         from .instagram import _check_page, _page_flow
 
@@ -58,7 +62,7 @@ async def topsearch(query: str, context: str) -> Any:
     """Current signed-in GraphQL search (context user or blended); 501 without saved account cookies."""
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
-        _require_login(ie)
+        _require_login(ydl, ie)
         from . import instagram_authenticated
         from .instagram import _check_page, _page_flow
 
@@ -109,7 +113,7 @@ async def tagged_posts(user_id: str = Query(...), cursor: str | None = None):
 
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
-        _require_login(ie)
+        _require_login(ydl, ie)
         from . import instagram_authenticated
         from .instagram import _check_page, _page_flow
 
@@ -128,7 +132,7 @@ async def audio_reels(audio_id: str = Query(...), cursor: str | None = None):
 
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
-        _require_login(ie)
+        _require_login(ydl, ie)
         from . import instagram_authenticated
         from .instagram import _check_page, _page_flow
 

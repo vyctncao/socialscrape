@@ -1,0 +1,6 @@
+{
+ "_about": "GET https://www.tiktok.com/passport/web/account/info/?aid=1459&app_language=en&app_name=tiktok_web&device_platform=web_pc, recorded 2026-10-25. The body is verbatim (no secrets) and identical with an expired session's cookies and with no cookies at all; the answer deletes the store-idc, tt-target-idc, store-country-code and store-country-code-src cookies.",
+ "status": 200,
+ "content_type": "application/json; charset=utf-8",
+ "body": {"data": {"description": "session expired, please sign in again", "error_code": 13, "name": "session_expired"}, "message": "error"}
+}

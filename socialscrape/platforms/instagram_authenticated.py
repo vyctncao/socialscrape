@@ -16,7 +16,7 @@ from typing import Any
 
 from yt_dlp.utils import traverse_obj, urlencode_postdata
 
-from ..errors import Forbidden, NotFound, UpstreamBlocked, UpstreamError
+from ..errors import Forbidden, NotFound, SessionInvalid, UpstreamBlocked, UpstreamError
 from . import instagram as ig
 
 _DTSG = re.compile(r'\["DTSGInitialData",\[\],\{"token":"([^"\s]+)"')
@@ -98,6 +98,12 @@ class Session(ig.WebSession):
         super().__init__(ie, html, referer)
         token = _DTSG.search(html)
         if not self.lsd or not token:
+            if ig.served_logged_out(html):
+                # The session cookie was sent, but Instagram answered as it answers a logged-out visitor.
+                raise SessionInvalid(
+                    ig.PLATFORM,
+                    "Instagram served its logged-out page to the signed-in session",
+                )
             raise UpstreamBlocked(
                 "Instagram did not return the signed-in page's request tokens"
             )

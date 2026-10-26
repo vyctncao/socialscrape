@@ -211,12 +211,30 @@ function poolLabel(kind, count) {
   return `${count} ${kind === 'proxy' ? (count === 1 ? 'proxy' : 'proxies') : (count === 1 ? 'signed-in account' : 'signed-in accounts')}`;
 }
 function poolPosition(position) { return position === 1 ? 'Primary' : `Backup ${position - 1}`; }
+// Platforms whose signed-in accounts the server can check (sessions.PROBES).
+const accountChecks = new Set(['instagram', 'tiktok']);
+function accountRejected(health) { return health?.status === 'rejected' && Boolean(health.retry_at) && health.retry_at * 1000 > Date.now(); }
+function accountTone(health) { return health?.status === 'rejected' ? 'bad' : health?.limited ? 'warn' : health?.status === 'alive' ? 'good' : ''; }
+function accountStatus(platform, health) {
+  const inconclusive = health?.inconclusive_at ? ` · Last check inconclusive: ${health.inconclusive_reason || 'no verdict'}` : '';
+  if (health?.status === 'rejected') return `Rejected ${fmt(health.rejected_at)} · ${health.reason || `${platformName(platform)} rejected the session`} · ${accountRejected(health) ? `Requests skip it until ${fmt(health.retry_at)}` : 'Requests try it again'}${inconclusive}`;
+  if (health?.status === 'alive') return `${health.limited ? 'Signed in, restricted' : 'Working'}${health.account ? ` · @${health.account}` : ''} · Checked ${fmt(health.checked_at)}${health.limited && health.reason ? ` · ${health.reason}` : ''}${inconclusive}`;
+  if (health?.inconclusive_at) return `Not verified · ${health.inconclusive_reason || 'The last check was inconclusive'}`;
+  return accountChecks.has(platform) ? 'Not checked yet' : 'No account check for this platform';
+}
+function accountCheckToast(platform, result, saved = false) {
+  const name = platformName(platform), lead = saved ? `Signed-in account saved for ${name}` : 'Account check completed';
+  if (result?.status === 'alive') return [`${lead}${result.account ? ` · signed in as @${result.account}` : ''}${result.limited ? `. ${name} restricts it: ${result.reason}` : '.'}`, result.limited ? 'warning' : 'success', Boolean(result.limited)];
+  if (result?.status === 'rejected') return [`${saved ? 'Saved, but the account was rejected' : 'Account rejected'}: ${result.reason}. Requests skip it; replace it with a fresh cookies.txt export.`, 'error', true];
+  if (result && result.supported === false) return [saved ? `${lead}.` : `No account check is available for ${name}.`, saved ? 'success' : 'info', false];
+  return [`${lead}. The account check was inconclusive${result?.reason ? `: ${result.reason}` : ''}.`, 'warning', true];
+}
 function poolList(platform, kind, items) {
   const noun = kind === 'proxy' ? 'proxy' : 'signed-in account';
-  return items.length ? `<ol class="manager-list">${items.map(item => `<li data-entry="${esc(item.id)}"><div class="manager-position"><strong>${poolPosition(item.position)}</strong><span>Updated ${esc(fmt(item.updated_at))}</span>${kind === 'proxy' ? '<span data-proxy-status role="status"></span>' : ''}</div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} up to ${poolPosition(item.position - 1)}"><span aria-hidden="true">↑</span></button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} down to ${poolPosition(item.position + 1)}"><span aria-hidden="true">↓</span></button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Remove ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No signed-in accounts configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway signed-in account below.');
+  return items.length ? `<ol class="manager-list">${items.map(item => `<li data-entry="${esc(item.id)}"><div class="manager-position"><strong>${poolPosition(item.position)}</strong><span>Updated ${esc(fmt(item.updated_at))}</span>${kind === 'proxy' ? '<span data-proxy-status role="status"></span>' : `<span class="account-status ${accountTone(item.health)}" data-account-status role="status">${esc(accountStatus(platform, item.health))}</span>`}</div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${kind === 'cookies' && accountChecks.has(platform) ? `<button class="ghost" type="button" data-check-account data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Check ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Check</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} up to ${poolPosition(item.position - 1)}"><span aria-hidden="true">↑</span></button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} down to ${poolPosition(item.position + 1)}"><span aria-hidden="true">↓</span></button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Remove ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No signed-in accounts configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway signed-in account below.');
 }
 function managerFocus(entry, action) {
-  return () => { const row=$(`#dialog .manager-list li[data-entry="${CSS.escape(String(entry))}"]`); return row?.querySelector(action) || row?.querySelector('[data-move-setting]') || row?.querySelector('[data-remove-setting]') || row?.querySelector('[data-test-proxy]') || $('#dialog .manager-form input, #dialog [data-dialog-close]'); };
+  return () => { const row=$(`#dialog .manager-list li[data-entry="${CSS.escape(String(entry))}"]`); return row?.querySelector(action) || row?.querySelector('[data-move-setting]') || row?.querySelector('[data-remove-setting]') || row?.querySelector('[data-test-proxy], [data-check-account]') || $('#dialog .manager-form input, #dialog [data-dialog-close]'); };
 }
 async function openPlatformManager(platform, kind, trigger = document.activeElement, initialFocus = null) {
   const data = await api('/portal/api/settings/platforms'), items = data[platform][kind];
@@ -236,7 +254,7 @@ function openCredentialDialog(button) {
 async function settingsPage() {
   if (PORTAL.role !== 'owner') return ownerOnly('Settings');
   const [data, credentials] = await Promise.all([api('/portal/api/settings/platforms'), api('/portal/api/settings/platform-credentials')]);
-  const cards = platforms.map(platform => { const item=data[platform]; return `<section class="card provider-summary"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2><span class="badge ${item.proxy.length || item.cookies.length ? 'good' : ''}">${item.proxy.length || item.cookies.length ? 'Configured' : 'Not configured'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Signed-in accounts</strong><small>${poolLabel('cookies',item.cookies.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage signed-in accounts</button></div></section>`; }).join('');
+  const cards = platforms.map(platform => { const item=data[platform], rejected=item.cookies.filter(entry => entry.health?.status === 'rejected').length; return `<section class="card provider-summary"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2><span class="badge ${rejected ? 'warn' : item.proxy.length || item.cookies.length ? 'good' : ''}">${rejected ? (rejected === 1 ? 'Account rejected' : 'Accounts rejected') : item.proxy.length || item.cookies.length ? 'Configured' : 'Not configured'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Signed-in accounts</strong><small>${poolLabel('cookies',item.cookies.length)}${rejected ? ` · ${rejected} rejected` : ''}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage signed-in accounts</button></div></section>`; }).join('');
   const research=credentials['tiktok.research_token'], shop=credentials['tiktok.shop_credentials'];
   const credentialRow=(key,label,copy,status) => `<div class="provider-setting-row"><div>${icon('key')}<span><strong>${label}</strong><small>${status.configured ? `Configured · updated ${esc(fmt(status.updated_at))}` : copy}</small></span></div><button class="ghost" data-manage-credential="${key}" data-credential-label="${esc(label)}" data-configured="${status.configured}">${status.configured ? 'Replace' : 'Configure'}</button></div>`;
   const tiktokCredentials=`<section class="card provider-summary credential-summary"><div class="provider-summary-head"><h2>${platformLabel('tiktok')} API credentials</h2><span class="badge ${research.configured || shop.configured ? 'good' : ''}">${research.configured || shop.configured ? 'Partially configured' : 'Not configured'}</span></div>${credentialRow('tiktok-research_token','Research & Ad Library OAuth','Needs research.data.basic / research.adlib.basic',research)}${credentialRow('tiktok-shop_credentials','TikTok Shop app','JSON bundle: app_key, app_secret, access_token, shop_cipher',shop)}</section>`;
@@ -677,6 +695,18 @@ async function testPlatformProxy(button) {
   finally { done(); }
 }
 
+async function checkPlatformAccount(button) {
+  const done = pendingButton(button, 'Checking…');
+  if (!done) return;
+  const platform = button.dataset.platform, status = button.closest('li').querySelector('[data-account-status]');
+  try {
+    const result = await api(`/portal/api/settings/platforms/${platform}/cookies/${button.dataset.entry}/check`, {method:'POST', timeout:30000});
+    status.textContent = accountStatus(platform, result.health); status.className = `account-status ${accountTone(result.health)}`;
+    const [message, type, persistent] = accountCheckToast(platform, result); toast(message, {type, persistent});
+  } catch (error) { const message = error.timeout ? 'The account check timed out after 30 seconds. Try again in a minute.' : error.message; status.textContent = message; toast(message, {type:'error', persistent:true}); }
+  finally { done(); }
+}
+
 async function savePlatformSetting(form) {
   const button = form.querySelector('button[type=submit]'), error = form.querySelector('.field-error'), input = form.querySelector('input');
   const platform = form.dataset.platform, kind = form.dataset.kind;
@@ -691,9 +721,11 @@ async function savePlatformSetting(form) {
       if (file.size > 2 * 1024 * 1024) throw Object.assign(Error('Choose a cookies.txt file no larger than 2 MiB.'), {field:true});
       value = await file.text();
     } else { value = form.elements.value.value.trim(); if (!value) throw Object.assign(Error('Enter a complete proxy URL.'), {field:true}); }
-    const data = await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}});
-    await openPlatformManager(platform, kind, dialogTrigger, managerFocus(data.id, '[data-move-setting], [data-remove-setting], [data-test-proxy]'));
-    toast(`${kind === 'proxy' ? 'Proxy' : 'Signed-in account'} saved for ${platformName(platform)}.`);
+    // A new signed-in account is checked by the server before it answers (up to ~25 s); it is kept whatever the check says.
+    const data = await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}, timeout:kind === 'cookies' ? 45000 : null});
+    await openPlatformManager(platform, kind, dialogTrigger, managerFocus(data.id, '[data-move-setting], [data-remove-setting], [data-test-proxy], [data-check-account]'));
+    if (kind === 'cookies') { const [message, type, persistent] = accountCheckToast(platform, data.check, true); toast(message, {type, persistent}); }
+    else toast(`Proxy saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; if (err.field || [400,422].includes(err.status)) { input.setAttribute('aria-invalid','true'); input.focus(); } }
   finally { done(); }
 }
@@ -982,6 +1014,8 @@ document.addEventListener('click', event => {
   if (managePlatform) { openPlatformManager(managePlatform.dataset.managePlatform, managePlatform.dataset.manageKind, managePlatform).catch(error => toast(error.message, {type:'error'})); return; }
   const testProxy = event.target.closest('[data-test-proxy]');
   if (testProxy) testPlatformProxy(testProxy);
+  const checkAccount = event.target.closest('[data-check-account]');
+  if (checkAccount) checkPlatformAccount(checkAccount);
   const moveSetting = event.target.closest('[data-move-setting]');
   if (moveSetting) movePlatformSetting(moveSetting);
   const removeSetting = event.target.closest('[data-remove-setting]');

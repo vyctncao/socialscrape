@@ -111,6 +111,13 @@ class PortalStore:
                 updated_at REAL NOT NULL,
                 updated_by INTEGER REFERENCES members(id) ON DELETE SET NULL
             );
+            CREATE TABLE IF NOT EXISTS platform_account_health (
+                platform TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                health TEXT NOT NULL,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (platform, entry_id)
+            );
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY,
                 member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
@@ -273,17 +280,58 @@ class PortalStore:
         return row[0].decode() if row else None
 
     def platform_status(self, owner: Principal) -> dict[str, Any]:
+        from . import sessions
+
         if owner.role != "owner":
             raise PermissionError
         return {platform: {
-            kind: [{"id": item["id"], "position": index + 1, "updated_at": item["updated_at"]}
+            kind: [{"id": item["id"], "position": index + 1, "updated_at": item["updated_at"],
+                    **({"health": sessions.entry_health(platform, item["id"])} if kind == "cookies" else {})}
                    for index, item in enumerate(self._pool(platform, kind))]
             for kind in ("proxy", "cookies")
         } for platform in PLATFORMS}
 
-    def platform_pool(self, platform: str) -> tuple[list[str], list[str]]:
+    def platform_pool(self, platform: str) -> tuple[list[str], list[tuple[str, str]]]:
+        """(proxy URLs, (entry id, cookies.txt) pairs), each in pool order."""
         return ([item["value"] for item in self._pool(platform, "proxy")],
-                [item["value"] for item in self._pool(platform, "cookies")])
+                [(item["id"], item["value"]) for item in self._pool(platform, "cookies")])
+
+    def platform_account(self, owner: Principal, platform: str, entry_id: str) -> tuple[Any, str | None]:
+        """A dashboard cookie entry as the sessions.Account with_ydl uses, and the proxy of its pool position."""
+        from . import sessions
+
+        if owner.role != "owner":
+            raise PermissionError
+        cookies = self._pool(platform, "cookies")
+        position = next((i for i, item in enumerate(cookies) if item["id"] == entry_id), None)
+        if position is None:
+            raise ValueError("Platform setting not found")
+        proxies = [item["value"] for item in self._pool(platform, "proxy")]
+        account = sessions.Account(platform, entry_id, "dashboard", cookies[position]["value"], position + 1)
+        return account, proxies[min(position, len(proxies) - 1)] if proxies else None
+
+    def account_health_rows(self) -> list[tuple[str, str, dict[str, Any]]]:
+        """The saved health of dashboard accounts (no secrets: statuses, reasons, times, the platform's username)."""
+        with self._lock:
+            rows = self._conn.execute("SELECT platform, entry_id, health FROM platform_account_health").fetchall()
+        out = []
+        for row in rows:
+            try:
+                out.append((row["platform"], row["entry_id"], json.loads(row["health"])))
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def save_account_health(self, platform: str, entry_id: str, health: dict[str, Any] | None) -> None:
+        with self._lock:
+            if health is None:
+                self._conn.execute("DELETE FROM platform_account_health WHERE platform=? AND entry_id=?",
+                                   (platform, entry_id))
+            else:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO platform_account_health(platform,entry_id,health,updated_at) "
+                    "VALUES(?,?,?,?)", (platform, entry_id, json.dumps(health), time.time()))
+            self._conn.commit()
 
     def add_platform_setting(self, owner: Principal, platform: str, kind: str, value: str) -> str:
         if owner.role != "owner":
@@ -318,6 +366,10 @@ class PortalStore:
         if len(kept) == len(pool):
             return False
         self._save_pool(owner, platform, kind, kept)
+        if kind == "cookies":
+            from . import sessions
+
+            sessions.forget(platform, entry_id)
         return True
 
     def move_platform_setting(self, owner: Principal, platform: str, kind: str, entry_id: str,
@@ -909,18 +961,25 @@ def active_platform_credential(name: str) -> str | None:
     return _active_store.credential(name) if _active_store else None
 
 
-def active_platform_pool(platform: str) -> tuple[list[str], list[str]]:
+def active_platform_pool(platform: str) -> tuple[list[str], list[tuple[str, str]]]:
+    """The dashboard's proxies and (entry id, cookies.txt) accounts for `platform`, in pool order."""
     return _active_store.platform_pool(platform) if _active_store else ([], [])
 
 
 def clear_active_portal() -> None:
+    from . import sessions
+
     global _active_store
     _active_store = None
+    sessions.detach()
 
 
 def install_portal(app, store: PortalStore) -> None:
+    from . import sessions
+
     global _active_store
     _active_store = store
+    sessions.attach(store.account_health_rows(), store.save_account_health)
     app.state.portal = store
     assets = Path(__file__).with_name("static")
     app.mount("/assets", PortalStaticFiles(directory=assets), name="assets")
@@ -1142,7 +1201,34 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
             entry_id = store.add_platform_setting(p, platform, kind, str(data.get("value", "")))
         except (ConfigError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from None
-        return {"id": entry_id}
+        if kind != "cookies":
+            return {"id": entry_id}
+        # The new account is checked at once. The entry is kept whatever the check says: a rejected account is
+        # skipped by requests until it passes a later check, and the dashboard shows why.
+        return {"id": entry_id, "check": await _check_account(p, platform, entry_id)}
+
+    async def _check_account(p: Principal, platform: str, entry_id: str) -> dict[str, Any]:
+        from . import sessions
+
+        try:
+            account, proxy = store.platform_account(p, platform, entry_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from None
+        try:
+            return await sessions.check(platform, account, proxy)
+        except Exception as exc:  # the check never fails the request that asked for it
+            return {"ok": None, "status": "unknown", "reason": f"The account check failed ({type(exc).__name__})",
+                    "account": None, "limited": False, "checked_at": time.time(), "latency_ms": None,
+                    "supported": True, "health": sessions.entry_health(platform, entry_id)}
+
+    @router.post("/portal/api/settings/platforms/{platform}/cookies/{entry_id}/check")
+    async def check_platform_account(request: Request, platform: str, entry_id: str):
+        """Ask the platform whether the saved account's session still works (its account check, run with the
+        account's cookies through the proxy of its pool position) and keep the verdict as the account's health."""
+        p = _owner(request)
+        _csrf(request, p)
+        _check_platform_setting(platform, "cookies")
+        return await _check_account(p, platform, entry_id)
 
     @router.post("/portal/api/settings/platforms/{platform}/proxy/{entry_id}/test")
     async def test_platform_proxy(request: Request, platform: str, entry_id: str):

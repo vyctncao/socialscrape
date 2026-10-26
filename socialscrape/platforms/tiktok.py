@@ -39,6 +39,7 @@ from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError
 
 from ..errors import (
+    AccountRejected,
     ApiError,
     BadRequest,
     Forbidden,
@@ -96,6 +97,46 @@ _cooling: dict[str, tuple[float, float]] = {}  # egress -> (monotonic end of its
 _cooling_lock = threading.Lock()
 _regions: dict[str, tuple[float, str | ApiError]] = {}  # handle -> (expiry, region or the error it answered)
 _regions_lock = threading.Lock()
+
+
+# --- the account check (sessions.PROBES) -------------------------------------------------------------------------
+# TikTok's web passport API says whether the cookies it got are a live session. Recorded 2026-10-25
+# (tests/fixtures/tiktok/passport_*.json): an expired session's cookies and no cookies at all both get
+#   200 {"data": {"description": "session expired, please sign in again", "error_code": 13,
+#                 "name": "session_expired"}, "message": "error"}
+# so the answer is a verdict only when a session cookie was sent. A live session gets message "success" and its
+# data.user_id/username (synthetic fixture: no live account was available). The app-API answers a dead session gets
+# (2146 "Please upgrade your TikTok app.", 5, 1 "Url does not match", an empty sug_list) are byte-for-byte what no
+# cookies get, so they are never read as a verdict. The answer deletes the store-* region cookies: run only on an
+# in-memory jar (_run never writes a jar back to the operator's file).
+SESSION_COOKIES = ("sessionid", "sessionid_ss", "sid_tt")
+_PASSPORT = "https://www.tiktok.com/passport/web/account/info/"
+_PASSPORT_QUERY = {"aid": "1459", "app_language": "en", "app_name": "tiktok_web", "device_platform": "web_pc"}
+
+
+def account_check(ydl: yt_dlp.YoutubeDL) -> Any:
+    """Whether TikTok still honours the session `ydl` carries -> sessions.Verdict (one ~120-byte request)."""
+    from ..sessions import Verdict
+
+    ie = ydl.get_info_extractor("TikTok")
+    if not any(name in ie._get_cookies("https://www.tiktok.com/") for name in SESSION_COOKIES):
+        return Verdict("rejected", "its cookies hold no TikTok session cookie (sessionid, sessionid_ss or sid_tt)")
+    body, urlh = ie._download_webpage_handle(_PASSPORT, None, note=False, query=_PASSPORT_QUERY, impersonate=True,
+                                            expected_status=lambda _: True)
+    try:
+        data = json.loads(body)
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        return Verdict("unknown", f"TikTok answered the account check (HTTP {urlh.status}) with {_not_json(body)}")
+    info = M.obj(data.get("data"))
+    if data.get("message") == "success" and (info.get("user_id") or info.get("user_id_str")):
+        return Verdict("alive", account=M.text(info.get("username")) or None)
+    if data.get("message") == "error" and (info.get("name") == "session_expired" or info.get("error_code") == 13):
+        said = M.text(info.get("description")) or "session_expired"
+        return Verdict("rejected", f"TikTok says the session expired ({said})")
+    return Verdict("unknown", f"TikTok answered the account check with HTTP {urlh.status} "
+                              f"({M.text(info.get('name')) or M.text(data.get('message')) or 'no verdict'})")
 
 
 # --- params ------------------------------------------------------------------
@@ -1097,6 +1138,7 @@ async def _regional_feed(request: Request, country: str) -> dict[str, Any]:
     except NotSupported as exc:
         if exc.code != "platform_auth_required":
             raise
+        rejected = exc if isinstance(exc, AccountRejected) else None  # the saved account no longer works
     if request.headers.get(fallback.HEADER, "").strip().lower() != "off":
         status, feed, problem = await fallback.ask_path(request.app, "/v1/tiktok/get-trending-feed",
                                                         {"region": country})
@@ -1105,6 +1147,8 @@ async def _regional_feed(request: Request, country: str) -> dict[str, Any]:
                 raise UpstreamError(f"The compatibility provider's {country} trending feed is unavailable "
                                     f"({problem or status})")
             return feed
+    if rejected is not None:
+        raise rejected
     raise NotSupported("Popular creators are ranked from TikTok's regional recommended feed, which TikTok only "
                        "serves to a signed-in account (Creative Center's creator chart now needs a TikTok One "
                        "login): add TikTok account cookies in Platform settings to use this endpoint",

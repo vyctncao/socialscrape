@@ -90,6 +90,39 @@ class UpstreamBlocked(ApiError):
     code = "upstream_blocked"
 
 
+class SessionInvalid(ApiError):
+    """An answer showing that the platform no longer honours the signed-in session a call carried (a logged-in
+    request sent to the login page, the logged-out page served to a session, an account check saying the session
+    expired). with_ydl catches it: it confirms the verdict with the platform's account check (sessions.py), skips the
+    account if it is dead and makes the call again without account cookies. `reason` is our own short text, never a
+    platform body or a cookie value."""
+
+    status = 500
+    code = "session_invalid"
+
+    def __init__(self, platform: str, reason: str, message: str | None = None, **details: Any) -> None:
+        super().__init__(message or f"The {platform.title()} session was not accepted: {reason}", **details)
+        self.platform = platform
+        self.reason = reason
+
+
+class LoginRequired(NotSupported):
+    """The pre-flight of a route that needs a signed-in account, raised inside with_ydl before any request when the
+    call's cookies hold no session. with_ydl reads it as "this route needs a login": an account without a session
+    cookie is rejected, and a call made without account cookies answers for the accounts it had (AccountRejected)."""
+
+    code = "platform_auth_required"
+
+
+class AccountRejected(NotSupported):
+    """A route that needs a signed-in account, when no configured account is usable: the platform rejected each one
+    (or restricts it). A setup error like the 501 without any account (same code, so dashboards and clients treat it
+    as "needs setup"), with details.reason account_rejected or account_limited and a message naming which account to
+    replace and where."""
+
+    code = "platform_auth_required"
+
+
 class ErrorResponse(BaseModel):  # ApiError.body(), for the OpenAPI spec (the docstring is its description)
     """Every error response. Some add fields, e.g. a 501's endpoint."""
 
@@ -106,7 +139,8 @@ _ERROR_DOCS: dict[int | str, str] = {
     403: "Private, login-gated, age-restricted or geo-blocked content",
     404: "Nonexistent or removed content",
     500: "Unclassified upstream error or timeout, an unusable server setting, or an internal error",
-    501: "Not supported here (the message says why): the endpoint, a param value, or AI transcription",
+    501: "Not supported here (the message says why): the endpoint, a param value, AI transcription, or a route that "
+         "needs a signed-in account when none is configured or the platform rejected it",
     502: "No answer from the platform: the proxy or the connection failed",
     503: "The platform rate-limited or bot-checked the server",
     "default": "Any other error, in the same envelope",

@@ -511,6 +511,10 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .manager-position{display:grid;gap:2px;min-width:0}
 .manager-position strong{font-size:var(--fs-sm)}
 .manager-position span{font-size:var(--fs-xs);color:var(--text-2)}
+.manager-position .account-status{max-width:52ch;overflow-wrap:anywhere}
+.manager-position .account-status.good{color:var(--success)}
+.manager-position .account-status.warn{color:var(--warning)}
+.manager-position .account-status.bad{color:var(--danger)}
 .manager-actions{display:flex;align-items:center;gap:var(--space-2);flex:none}
 .member-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
 .manager-actions .icon-button{width:40px;min-height:40px}
@@ -552,6 +556,7 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .toast.error>.icon{color:var(--danger)}
 .toast-close{width:32px;min-height:32px;padding:7px;margin:-8px}
 :root[data-theme=light] .badge.warn{color:var(--text-1)}
+:root[data-theme=light] .manager-position .account-status.warn{color:var(--text-1)}
 .standalone-action{display:inline-flex;align-items:center;min-height:40px;margin-top:var(--space-3)}
 .select-control{position:relative;display:block}
 .select-control select{position:relative;z-index:1;background:transparent}

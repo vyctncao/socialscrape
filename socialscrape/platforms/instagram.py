@@ -49,9 +49,9 @@ from ..errors import (
     BadRequest,
     ErrorResponse,
     Forbidden,
-    Misconfigured,
     NotFound,
     NotSupported,
+    SessionInvalid,
     UpstreamBlocked,
     UpstreamError,
     error_responses,
@@ -284,9 +284,10 @@ class RestrictedProfile(Forbidden):
         self.html = html
 
 
-class SessionRejected(Misconfigured):
+class SessionRejected(SessionInvalid):
     """Instagram sent a request made with the server's session cookies to its login page: the session is dead.
-    Retrying never helps (unlike the logged-out rate limit the same redirect means without a session)."""
+    Retrying with the same account never helps (unlike the logged-out rate limit the same redirect means without a
+    session): with_ydl confirms it with account_check, skips the account and asks again without cookies."""
 
     code = "cookies_rejected"
 
@@ -295,13 +296,124 @@ class SessionRejected(Misconfigured):
         _, dashboard_cookies = active_platform_pool(PLATFORM)
         source = ("Platform settings" if dashboard_cookies else "SOCIALSCRAPE_COOKIES_INSTAGRAM"
                   if get_settings().cookie_file(PLATFORM) else "SOCIALSCRAPE_COOKIES_FROM_BROWSER")
-        super().__init__(f"Instagram rejected the server's session cookies ({source}): it sent the logged-in "
+        super().__init__(PLATFORM, "Instagram sent the signed-in request to its login page",
+                         f"Instagram rejected the server's session cookies ({source}): it sent the logged-in "
                          "request to its login page, so the session has expired or was logged out. Replace them "
                          "with a fresh session's cookies")
 
 
 class MediaUnavailable(NotFound):
     """The authenticated media API's unavailable answer; public lookup confirms it."""
+
+
+# --- the account check (sessions.PROBES) ----------------------------------------------------------------------
+# Recorded 2026-10-25 with three jars (tests/fixtures/instagram/account_*): a session Instagram flags (its account
+# API refuses it, its signed-in web client still works), the same jar with a session id Instagram doesn't know,
+# and no session.
+#   GET /api/v1/accounts/current_user/?edit=true (web API headers):
+#     flagged: 302 to https://www.instagram.com/ (empty body, sessionid kept)
+#     unknown session: 401 {"require_login": true, "message": "Please wait a few minutes...", "status": "fail"}
+#       and the answer deletes the sessionid cookie
+#     no session: the same 401 (Instagram's anonymous rate-limit answer), so 401/403 alone prove nothing
+#     a working session: 200 {"user": {"pk": <ds_user_id>, "username": ...}} (expected; none was available)
+#   GET / (the home page):
+#     flagged: pageID feedPage, a DTSGInitialData token, xdt_viewer.user.id == the ds_user_id cookie
+#     unknown session / no session: pageID CAAIGLoginHomepage (the login form), no DTSG token
+# Neither the profile shell nor topsearch's 404 nor a 429 tells a dead session from throttling: never read them as
+# a verdict.
+_ACCOUNT_API = f"{WEB}/api/v1/accounts/current_user/?edit=true"
+_DTSG_TOKEN = re.compile(r'\["DTSGInitialData",\[\],\{"token":"[^"\s]+"')
+_LOGGED_OUT_PAGES = {"CAAIGLoginHomepage", "loginPage", "LoginAndSignupPage"}
+_ENDED = ("Instagram ended the session (its answer deleted the session cookie): it expired or was logged out")
+_LIMITED = ("its account API sends the session to the home page, though its signed-in pages still work, so some "
+            "signed-in requests fail")
+
+
+def _redirect_verdict(final_url: str) -> Any:
+    """The verdict a signed-in request's final URL proves, else None."""
+    from ..sessions import Verdict
+
+    path = urllib.parse.urlsplit(final_url).path
+    if path.startswith("/accounts/login"):
+        return Verdict("rejected", "Instagram sent the signed-in account check to its login page: the session "
+                                   "expired or was logged out")
+    if path.startswith("/challenge"):
+        return Verdict("rejected", "Instagram wants this account to pass a security checkpoint (sign in with it "
+                                   "in a browser and complete the challenge, then export fresh cookies)")
+    if path.startswith(("/accounts/suspended", "/accounts/disabled")):
+        return Verdict("rejected", "Instagram suspended or disabled this account")
+    return None
+
+
+def served_logged_out(html: str) -> bool:
+    """Whether a page is one Instagram serves logged-out visitors: its login home, or a page preloading the
+    logged-out web client's queries (PolarisLoggedOut*) or carrying their profile data (xig_user_by_username). Served
+    to a request with a session cookie, the session was not recognised."""
+    page = _PAGE_ID.search(html)
+    if page and page.group(1) in _LOGGED_OUT_PAGES:
+        return True
+    if any(name.startswith("PolarisLoggedOut") for _, _, name in _PRELOADER.findall(html)):
+        return True
+    return any(isinstance(r.get("data"), dict) and ("xig_user_by_username" in r["data"]
+                                                     or "caa_login_form_data" in r["data"])
+               for r in page_relay(html))
+
+
+def _viewer(html: str) -> dict[str, Any] | None:
+    """The signed-in home page's viewer (xdt_viewer.user: id, username)."""
+    return next((user for result in page_relay(html)
+                 if (user := traverse_obj(result, ("data", "xdt_viewer", "user", {dict})))), None)
+
+
+def account_check(ydl: yt_dlp.YoutubeDL) -> Any:
+    """Whether Instagram still honours the session `ydl` carries -> sessions.Verdict. One cheap request (the
+    account API, read up to its headers) decides most cases; only its redirect to the home page (a flagged session)
+    or a 401/403 (also Instagram's rate-limit answer) is settled by the signed-in home page."""
+    from ..sessions import Verdict
+
+    ie = ydl.get_info_extractor("Instagram")
+    if not ie._is_logged_in:
+        return Verdict("rejected", "its cookies hold no Instagram session cookie (sessionid)")
+    viewer_cookie = ie._get_cookies(WEB).get("ds_user_id")  # the signed-in account's id (a Morsel)
+    viewer_id = viewer_cookie.value if viewer_cookie is not None and viewer_cookie.value else None
+    response = ie._request_webpage(_ACCOUNT_API, None, note=False, headers=ie._api_headers,
+                                   impersonate=ie._can_impersonate, expected_status=lambda _: True)
+    status, final_url = response.status, response.url
+    data = None
+    if (status == 200 and urllib.parse.urlsplit(final_url).path.startswith("/api/")
+            and "json" in (response.headers.get("Content-Type") or "")):
+        try:
+            data = json.loads(response.read().decode("utf-8", "replace"))
+        except ValueError:
+            data = None
+    response.close()  # the home page a redirect lands on is ~1 MB: only its URL matters here
+    if not ie._is_logged_in:
+        return Verdict("rejected", _ENDED)
+    if verdict := _redirect_verdict(final_url):
+        return verdict
+    user = traverse_obj(data, ("user", {dict}))
+    if user and (str(user.get("pk") or user.get("pk_id")) == viewer_id or not viewer_id and user.get("pk")):
+        return Verdict("alive", account=user.get("username") if isinstance(user.get("username"), str) else None)
+    home = urllib.parse.urlsplit(final_url).path == "/"
+    if not (home or status in (401, 403)):
+        return Verdict("unknown", f"Instagram answered the account check with HTTP {status}")
+    html, urlh = ie._download_webpage_handle(WEB + "/", None, note=False, impersonate=ie._can_impersonate,
+                                            expected_status=lambda _: True)
+    if not ie._is_logged_in:
+        return Verdict("rejected", _ENDED)
+    if verdict := _redirect_verdict(urlh.url):
+        return verdict
+    page = _PAGE_ID.search(html)
+    viewer = _viewer(html) or {}
+    signed_in = bool(viewer) and bool(_DTSG_TOKEN.search(html))
+    if signed_in and (not viewer_id or str(viewer.get("id") or viewer.get("pk")) == viewer_id):
+        name = viewer.get("username") if isinstance(viewer.get("username"), str) else None
+        return Verdict("alive", _LIMITED if home else None, name, limited=home)
+    if page and page.group(1) in _LOGGED_OUT_PAGES:
+        return Verdict("rejected", "Instagram serves this session its logged-out home page: the session expired "
+                                   "or was logged out")
+    return Verdict("unknown", "Instagram's home page did not show whether the session is signed in"
+                   + (f" (HTTP {urlh.status})" if urlh.status != 200 else ""))
 
 
 def _check_session(logged_in: bool, rec: _Recorder) -> None:
@@ -436,7 +548,8 @@ def _check_page(html: str, final_url: str, what: str, *, allow_home: bool = Fals
 
 async def fetch_page(ie_name: str, url: str, item_id: str, what: str, *, use_cookies: bool = True
                      ) -> tuple[str, list[dict[str, Any]]]:
-    """Download a logged-out page the way `ie_name` does -> (html, relay results)."""
+    """Download a logged-out page the way `ie_name` does -> (html, relay results). use_cookies=False: without
+    account cookies, for a page a signed-in session is served differently (with_ydl)."""
     def go(ydl: yt_dlp.YoutubeDL) -> tuple[str, list[dict[str, Any]]]:
         html, final_url = _page_flow(ie_name, url, item_id)(ydl)
         # Classify the HTTP-200 login/block page before leaving the retry layer,
@@ -512,13 +625,16 @@ async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
 
     Instagram sends tags it has no Popular page for (and most non-ASCII ones) from /explore/tags/ to the
     login page, so that redirect is retried once on the /popular/ page it normally lands on, which then
-    answers with a real 404 page. (With a rejected session the /popular/ page redirects too.)"""
+    answers with a real 404 page. Both are asked without account cookies: a signed-in session (working or not) is
+    sent to the signed-in keyword search (/explore/search/keyword/, pageID KeywordSearchExplorePage), whose page
+    carries none of the topic's data."""
     quoted = urllib.parse.quote(query)
     try:
         html, results = await fetch_page("InstagramTag", f"{WEB}/explore/tags/{quoted}/", query, "Topic",
                                          use_cookies=False)
     except (UpstreamBlocked, SessionRejected):
-        html, results = await fetch_page("InstagramTag", f"{WEB}/popular/{quoted}/", query, "Topic", use_cookies=False)
+        html, results = await fetch_page("InstagramTag", f"{WEB}/popular/{quoted}/", query, "Topic",
+                                         use_cookies=False)
     data = next((r["data"] for r in results
                  if isinstance(r.get("data"), dict) and any(k in r["data"] for k in _TOPIC_KEYS)), None)
     if data is None:

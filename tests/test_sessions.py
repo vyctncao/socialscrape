@@ -1,0 +1,552 @@
+"""A dead or restricted signed-in account never makes a route worse than having no account (sessions.py).
+
+Account checks run against recorded, redacted answers (tests/fixtures/instagram/account_*, tests/fixtures/tiktok/
+passport_*); with_ydl's skip/retry/501 logic runs with a stand-in _run and stand-in checks. Nothing here asks a
+platform.
+"""
+import asyncio
+import json
+import logging
+import os
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from fastapi.testclient import TestClient
+
+from socialscrape import portal, sessions, ytdlp
+from socialscrape.errors import (AccountRejected, LoginRequired, NotFound, SessionInvalid, UpstreamBlocked,
+                                 UpstreamError)
+from socialscrape.platforms import instagram as ig
+from socialscrape.platforms import instagram_authenticated, tiktok
+from socialscrape.sessions import Account, Verdict
+from tests.e2e import app_with, patched_env
+
+FIXTURES = Path(__file__).parent / "fixtures"
+CURRENT_USER = json.loads((FIXTURES / "instagram" / "account_check.json").read_text())["current_user"]
+SIGNED_IN_HOME = (FIXTURES / "instagram" / "account_home_signed_in.html").read_text()
+LOGGED_OUT_HOME = (FIXTURES / "instagram" / "account_home_logged_out.html").read_text()
+PASSPORT_EXPIRED = json.loads((FIXTURES / "tiktok" / "passport_session_expired.json").read_text())
+PASSPORT_OK = json.loads((FIXTURES / "tiktok" / "passport_ok.json").read_text())
+APP_ANSWERS = json.loads((FIXTURES / "tiktok" / "app_answers_dead_session.json").read_text())
+VIEWER = "4242424242"
+SECRET = "SECRET-SESSION-VALUE"
+IG_COOKIES = ("# Netscape HTTP Cookie File\n"
+              f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{SECRET}\n"
+              f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tds_user_id\t{VIEWER}\n")
+TT_COOKIES = ("# Netscape HTTP Cookie File\n"
+              f".tiktok.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{SECRET}\n"
+              f".tiktok.com\tTRUE\t/\tTRUE\t2147483647\tsid_tt\t{SECRET}\n")
+
+
+# --- the platforms' account checks, on recorded answers ----------------------------------------------------------
+
+class _Cookie(SimpleNamespace):
+    pass
+
+
+class _CheckIE:
+    """An extractor stand-in for the account checks: a cookie jar (name -> value) and canned answers by URL. An
+    answer can delete cookies, as Instagram's Set-Cookie does for a session it doesn't know."""
+
+    def __init__(self, cookies: dict[str, str], answers: dict[str, dict]):
+        self.cookies, self.answers, self.asked = dict(cookies), answers, []
+        self._api_headers, self._can_impersonate = {"X-IG-App-ID": "936619743392459"}, True
+
+    @property
+    def _is_logged_in(self) -> bool:
+        return bool(self.cookies.get("sessionid"))
+
+    def _get_cookies(self, url):
+        return {name: _Cookie(value=value) for name, value in self.cookies.items()}
+
+    def _answer(self, url):
+        key = next(k for k in self.answers if url.startswith(k))
+        self.asked.append(key)
+        answer = self.answers[key]
+        for name in answer.get("deletes", ()):
+            self.cookies.pop(name, None)
+        return answer
+
+    def _request_webpage(self, url, video_id, **kwargs):
+        answer = self._answer(url)
+        body = answer.get("body", "")
+        raw = (body if isinstance(body, str) else json.dumps(body)).encode()
+        return SimpleNamespace(status=answer["status"], url=answer["final_url"],
+                               headers={"Content-Type": answer.get("content_type", "text/html")},
+                               read=lambda: raw, close=lambda: None)
+
+    def _download_webpage_handle(self, url, video_id, **kwargs):
+        answer = self._answer(url)
+        body = answer["body"]
+        return (body if isinstance(body, str) else json.dumps(body)), SimpleNamespace(
+            status=answer["status"], url=answer.get("final_url", url))
+
+
+def _ydl(ie):
+    return SimpleNamespace(get_info_extractor=lambda name: ie)
+
+
+ACCOUNT_API = "https://www.instagram.com/api/v1/accounts/current_user/"
+HOME = "https://www.instagram.com/"
+
+
+def _current_user(name, **extra):
+    answer = dict(CURRENT_USER[name], **extra)
+    if isinstance(answer.get("body"), dict):
+        answer["body"] = json.loads(json.dumps(answer["body"]).replace("<ds_user_id>", VIEWER))
+    if answer.get("session_cookie_kept") is False:
+        answer["deletes"] = ["sessionid"]
+    return answer
+
+
+def _home(html, **extra):
+    return {"status": 200, "final_url": HOME, "body": html.replace("<ds_user_id>", VIEWER), **extra}
+
+
+def test_instagram_flagged_session_is_signed_in_but_restricted():
+    """Recorded: the account API sends the flagged session to the home page, whose viewer is the account."""
+    ie = _CheckIE({"sessionid": SECRET, "ds_user_id": VIEWER},
+                  {ACCOUNT_API: _current_user("flagged"), HOME: _home(SIGNED_IN_HOME)})
+    verdict = ig.account_check(_ydl(ie))
+    assert (verdict.status, verdict.limited, verdict.account) == ("alive", True, "sample.account")
+    assert "home page" in verdict.reason and ie.asked == [ACCOUNT_API, HOME]
+
+
+def test_instagram_unknown_session_is_rejected_in_one_request():
+    """Recorded: a session id Instagram doesn't know gets the 401 and has its session cookie deleted."""
+    ie = _CheckIE({"sessionid": SECRET, "ds_user_id": VIEWER}, {ACCOUNT_API: _current_user("unknown_session")})
+    verdict = ig.account_check(_ydl(ie))
+    assert verdict.status == "rejected" and "deleted the session cookie" in verdict.reason
+    assert ie.asked == [ACCOUNT_API]
+
+
+def test_instagram_logged_out_home_is_rejected_but_a_401_alone_is_not():
+    """The 401 is also Instagram's anonymous rate-limit answer: only the logged-out home page settles it."""
+    answers = {ACCOUNT_API: _current_user("no_session"), HOME: _home(LOGGED_OUT_HOME)}
+    verdict = ig.account_check(_ydl(_CheckIE({"sessionid": SECRET, "ds_user_id": VIEWER}, answers)))
+    assert verdict.status == "rejected" and "logged-out home page" in verdict.reason
+    answers[HOME] = _home("<html><title>Instagram</title></html>")  # no pageID: a block page, not a verdict
+    assert ig.account_check(_ydl(_CheckIE({"sessionid": SECRET}, answers))).status == "unknown"
+
+
+def test_instagram_working_session_and_inconclusive_answers():
+    working = _CheckIE({"sessionid": SECRET, "ds_user_id": VIEWER}, {ACCOUNT_API: _current_user("working")})
+    verdict = ig.account_check(_ydl(working))
+    assert (verdict.status, verdict.limited, verdict.account) == ("alive", False, "sample.account")
+    assert working.asked == [ACCOUNT_API]
+    for status in (429, 500, 502):
+        ie = _CheckIE({"sessionid": SECRET}, {ACCOUNT_API: {"status": status, "final_url": ACCOUNT_API}})
+        assert ig.account_check(_ydl(ie)).status == "unknown" and ie.asked == [ACCOUNT_API]
+    for path, says in (("/accounts/login/?next=%2F", "login page"), ("/challenge/action/", "checkpoint"),
+                       ("/accounts/suspended/", "suspended")):
+        ie = _CheckIE({"sessionid": SECRET}, {ACCOUNT_API: {"status": 200, "final_url": HOME.rstrip("/") + path}})
+        verdict = ig.account_check(_ydl(ie))
+        assert verdict.status == "rejected" and says in verdict.reason
+    ie = _CheckIE({"csrftoken": "x"}, {})
+    assert ig.account_check(_ydl(ie)).status == "rejected" and ie.asked == []  # no session cookie: no request
+
+
+PASSPORT = "https://www.tiktok.com/passport/web/account/info/"
+
+
+def test_tiktok_passport_check():
+    expired = _CheckIE({"sessionid": SECRET, "sid_tt": SECRET}, {PASSPORT: PASSPORT_EXPIRED})
+    verdict = tiktok.account_check(_ydl(expired))
+    assert verdict.status == "rejected" and "session expired, please sign in again" in verdict.reason
+    verdict = tiktok.account_check(_ydl(_CheckIE({"sid_tt": SECRET}, {PASSPORT: PASSPORT_OK})))
+    assert (verdict.status, verdict.account) == ("alive", "sample.account")
+    # the same session_expired body answers no cookies at all: without a session cookie it is never asked
+    nothing = _CheckIE({"tt_csrf_token": "x"}, {PASSPORT: PASSPORT_EXPIRED})
+    assert tiktok.account_check(_ydl(nothing)).status == "rejected" and nothing.asked == []
+    for answer in ({"status": 429, "body": ""}, {"status": 200, "body": "<html><title>Please wait...</title>"},
+                   {"status": 200, "body": {"message": "error", "data": {"name": "other", "error_code": 7}}}):
+        assert tiktok.account_check(_ydl(_CheckIE({"sid_tt": SECRET}, {PASSPORT: answer}))).status == "unknown"
+
+
+# --- with_ydl: skip, retry without cookies, 501 for login-only routes ---------------------------------------------
+
+class _Call:
+    """A stand-in _run: records each route call's connection and runs `fn` on a ydl stand-in that says which
+    account (if any) it carries; account checks (sessions.verify) go through it too and are counted apart."""
+
+    def __init__(self, monkeypatch, proxies=(), entries=()):
+        self.calls, self.checks = [], []
+        monkeypatch.setattr(portal, "active_platform_pool", lambda platform: (list(proxies), list(entries)))
+        monkeypatch.setattr(ytdlp, "_run", self.run)
+
+    def run(self, platform, fn, opts):
+        account = opts.get("_account")
+        ydl = SimpleNamespace(_socialscrape_account=account, cookies=opts.get("_dashboard_cookies"),
+                              proxy=opts.get("_dashboard_proxy"))
+        if getattr(fn, "__name__", "") == "<lambda>" and fn.__qualname__.startswith("verify"):
+            self.checks.append((account.key if account else None, ydl.proxy))
+        else:
+            self.calls.append((account.key if account else None, ydl.cookies, ydl.proxy))
+        return fn(ydl)
+
+
+def _probe(platform, verdicts):
+    """sessions.PROBES[platform] answering `verdicts` (key -> Verdict) for the account the ydl carries."""
+    return {platform: lambda ydl: verdicts[ydl._socialscrape_account.key]}
+
+
+def _logged_out_route(ydl):
+    """A route that works without cookies; with an account it gets what a dead session gets."""
+    if ydl._socialscrape_account is not None:
+        raise SessionInvalid("instagram", "Instagram served its logged-out page to the signed-in session")
+    return "public data"
+
+
+def test_rejected_account_is_skipped_and_the_call_made_without_cookies(monkeypatch, caplog):
+    call = _Call(monkeypatch, ["http://proxy-a:1"], [("entry1", IG_COOKIES)])
+    monkeypatch.setattr(sessions, "PROBES", _probe("instagram", {"entry1": Verdict("rejected", "dead session")}))
+    with caplog.at_level(logging.WARNING, logger="socialscrape.sessions"):
+        assert asyncio.run(ytdlp.with_ydl("instagram", _logged_out_route)) == "public data"
+    # the account's call, then the same proxy without account cookies ('' keeps env/browser cookies out too)
+    assert call.calls == [("entry1", IG_COOKIES, "http://proxy-a:1"), (None, ytdlp.NO_COOKIES, "http://proxy-a:1")]
+    assert call.checks == [("entry1", "http://proxy-a:1")]
+    warning = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warning) == 1 and "instagram" in warning[0].getMessage() and "entry1" in warning[0].getMessage()
+    assert SECRET not in caplog.text
+
+    call.calls.clear()  # the next call skips it: one call, no account, no check
+    assert asyncio.run(ytdlp.with_ydl("instagram", _logged_out_route)) == "public data"
+    assert call.calls == [(None, ytdlp.NO_COOKIES, "http://proxy-a:1")] and len(call.checks) == 1
+
+    call.calls.clear()  # once the cooldown is over the account is used (and checked) again
+    later = time.time() + sessions.COOLDOWNS[0] + 1
+    monkeypatch.setattr(sessions.time, "time", lambda: later)
+    assert asyncio.run(ytdlp.with_ydl("instagram", _logged_out_route)) == "public data"
+    assert call.calls[0][0] == "entry1" and len(call.checks) == 2
+    health = sessions.entry_health("instagram", "entry1")
+    assert health["status"] == "rejected" and health["retry_at"] == pytest.approx(later + sessions.COOLDOWNS[1])
+
+
+def test_second_account_is_used_when_the_first_is_rejected(monkeypatch):
+    call = _Call(monkeypatch, [], [("one", IG_COOKIES), ("two", IG_COOKIES.replace(VIEWER, "77"))])
+    monkeypatch.setattr(sessions, "PROBES", _probe("instagram", {"one": Verdict("rejected", "dead"),
+                                                                 "two": Verdict("alive")}))
+
+    def route(ydl):
+        if ydl._socialscrape_account.key == "one":
+            raise UpstreamError("Instagram returned no signed-in profile")
+        return "signed-in data"
+
+    assert asyncio.run(ytdlp.with_ydl("instagram", route)) == "signed-in data"
+    assert [key for key, _, _ in call.calls] == ["one", "two"]  # no call without cookies
+
+
+def _login_route(platform):
+    def route(ydl):
+        if ydl._socialscrape_account is None:  # the route's pre-flight: no session cookie, no request
+            raise LoginRequired(f"Add {platform} account cookies in Platform settings to use this endpoint",
+                                platform=platform)
+        sessions.confirm(ydl, platform)  # checked before the call (cached): its answer wouldn't tell
+        raise UpstreamError("TikTok API failed: Please upgrade your TikTok app.")  # what a dead session gets
+    return route
+
+
+def test_login_route_answers_501_naming_the_rejected_dashboard_account(monkeypatch):
+    call = _Call(monkeypatch, [], [("entry1", TT_COOKIES)])
+    monkeypatch.setattr(sessions, "PROBES", _probe("tiktok", {"entry1": Verdict("rejected", "TikTok says the "
+                                                                                 "session expired")}))
+    with pytest.raises(AccountRejected) as exc:
+        asyncio.run(ytdlp.with_ydl("tiktok", _login_route("tiktok")))
+    err = exc.value
+    assert (err.status, err.code, err.details["reason"]) == (501, "platform_auth_required", "account_rejected")
+    assert "The configured TikTok account (Primary) was rejected: TikTok says the session expired" in err.message
+    assert "Settings → Proxies & accounts" in err.message and SECRET not in err.message
+    assert [cookies for _, cookies, _ in call.calls] == [TT_COOKIES, ytdlp.NO_COOKIES]
+    # while it cools down, the route answers the same 501 at once (the pre-flight makes no request)
+    call.calls.clear()
+    with pytest.raises(AccountRejected):
+        asyncio.run(ytdlp.with_ydl("tiktok", _login_route("tiktok")))
+    assert call.calls == [(None, ytdlp.NO_COOKIES, None)]
+
+
+def test_login_route_keeps_a_working_accounts_own_error(monkeypatch):
+    _Call(monkeypatch, [], [("entry1", TT_COOKIES)])
+    monkeypatch.setattr(sessions, "PROBES", _probe("tiktok", {"entry1": Verdict("alive")}))
+    with pytest.raises(UpstreamError, match="upgrade your TikTok app"):  # the account is fine: the route isn't
+        asyncio.run(ytdlp.with_ydl("tiktok", _login_route("tiktok")))
+
+
+def test_login_route_with_one_working_account_left_keeps_its_error(monkeypatch):
+    call = _Call(monkeypatch, [], [("dead", TT_COOKIES), ("live", TT_COOKIES)])
+    monkeypatch.setattr(sessions, "PROBES", _probe("tiktok", {"dead": Verdict("rejected", "expired"),
+                                                              "live": Verdict("alive")}))
+    with pytest.raises(UpstreamError, match="upgrade your TikTok app"):
+        asyncio.run(ytdlp.with_ydl("tiktok", _login_route("tiktok")))
+    assert [key for key, _, _ in call.calls] == ["dead", "live", None]
+
+
+def test_restricted_account_answers_501_on_login_routes_and_retries_logged_out_ones(monkeypatch):
+    call = _Call(monkeypatch, [], [("entry1", IG_COOKIES)])
+    restricted = Verdict("alive", "its account API sends the session to the home page", "sample", limited=True)
+    monkeypatch.setattr(sessions, "PROBES", _probe("instagram", {"entry1": restricted}))
+
+    def tagged(ydl):
+        if ydl._socialscrape_account is None:
+            raise LoginRequired("Add Instagram account cookies", platform="instagram")
+        raise NotFound("Unable to download JSON metadata: HTTP Error 404: Not Found")
+
+    with pytest.raises(AccountRejected) as exc:
+        asyncio.run(ytdlp.with_ydl("instagram", tagged))
+    assert exc.value.details["reason"] == "account_limited"
+    assert "Instagram restricts this account" in exc.value.message and "HTTP Error 404" in exc.value.message
+    assert sessions.usable(Account("instagram", "entry1", "dashboard"))  # restricted, not skipped
+
+    def profile(ydl):
+        if ydl._socialscrape_account is not None:
+            raise NotFound("Instagram profile not found")
+        return "logged-out profile"
+
+    call.calls.clear()
+    assert asyncio.run(ytdlp.with_ydl("instagram", profile)) == "logged-out profile"
+    assert [cookies for _, cookies, _ in call.calls] == [IG_COOKIES, ytdlp.NO_COOKIES]
+
+
+def test_missing_content_with_a_working_account_stays_one_request(monkeypatch):
+    call = _Call(monkeypatch, ["p1", "p2"], [("entry1", IG_COOKIES)])
+    monkeypatch.setattr(sessions, "PROBES", _probe("instagram", {"entry1": Verdict("alive")}))
+
+    def missing(ydl):
+        raise NotFound("Post not found")
+
+    with pytest.raises(NotFound):
+        asyncio.run(ytdlp.with_ydl("instagram", missing))
+    assert call.calls == [("entry1", IG_COOKIES, "p1")]
+
+
+def test_last_failure_is_retried_without_cookies_for_platforms_without_a_check(monkeypatch):
+    call = _Call(monkeypatch, [], [("entry1", "# Netscape HTTP Cookie File\n")])
+
+    def route(ydl):
+        if ydl._socialscrape_account is not None:
+            raise UpstreamBlocked("Meta refused the request")
+        return "ad library"
+
+    assert asyncio.run(ytdlp.with_ydl("facebook", route)) == "ad library"
+    assert [cookies for _, cookies, _ in call.calls] == ["# Netscape HTTP Cookie File\n", ytdlp.NO_COOKIES]
+    assert call.checks == [] and sessions.entry_health("facebook", "entry1")["status"] == "unchecked"
+
+
+def test_account_without_a_session_cookie_is_rejected_by_the_pre_flight(monkeypatch):
+    _Call(monkeypatch, [], [("entry1", "# Netscape HTTP Cookie File\n.tiktok.com\tTRUE\t/\tTRUE\t0\tttwid\tx\n")])
+
+    def route(ydl):
+        raise LoginRequired("Add TikTok account cookies in Platform settings", platform="tiktok")
+
+    with pytest.raises(AccountRejected, match="hold no TikTok session cookie"):
+        asyncio.run(ytdlp.with_ydl("tiktok", route))
+
+
+def test_env_cookie_file_gets_the_same_protection(monkeypatch, tmp_path):
+    path = tmp_path / "tiktok.txt"
+    path.write_text(TT_COOKIES)
+    calls = []
+
+    def run(platform, fn, opts):
+        account = opts.get("_account")
+        calls.append((account.source if account else None, opts.get("_dashboard_cookies")))
+        return fn(SimpleNamespace(_socialscrape_account=account))
+
+    with patched_env({"SOCIALSCRAPE_COOKIES_TIKTOK": str(path)}, [(ytdlp, "_run", run)]):
+        monkeypatch.setattr(sessions, "PROBES", {"tiktok": lambda ydl: Verdict("rejected", "TikTok says the "
+                                                                                           "session expired")})
+        with pytest.raises(AccountRejected) as exc:
+            asyncio.run(ytdlp.with_ydl("tiktok", _login_route("tiktok")))
+        assert "SOCIALSCRAPE_COOKIES_TIKTOK" in exc.value.message and "fresh export" in exc.value.message
+        assert str(path) not in exc.value.message
+        # the env account's call (base_options adds the file), then one with no cookies at all ('' skips the file)
+        assert calls == [("env", None), (None, ytdlp.NO_COOKIES)]
+        account = sessions.accounts("tiktok", [])[0]
+        assert not sessions.usable(account) and account.label.startswith("SOCIALSCRAPE_COOKIES_TIKTOK")
+        # a replaced file is a new account version: it is used again at once
+        path.write_text(TT_COOKIES + "# refreshed\n")
+        os.utime(path, ns=(time.time_ns(), time.time_ns() + 10**9))
+        assert sessions.usable(sessions.accounts("tiktok", [])[0])
+
+
+def test_session_cookie_deleted_by_the_platform_rejects_the_account(caplog):
+    """_run: the platform deleting the session cookie in an answer ended the session (Instagram does this)."""
+    account = Account("instagram", "entry1", "dashboard", IG_COOKIES)
+
+    def answer_clears_session(ydl):
+        assert sessions.has_session("instagram", ydl.cookiejar)
+        ydl.cookiejar.clear(".instagram.com", "/", "sessionid")
+        return "logged-out answer"
+
+    with caplog.at_level(logging.WARNING, logger="socialscrape.sessions"):
+        assert ytdlp._run("instagram", answer_clears_session,
+                          {"_dashboard_cookies": IG_COOKIES, "_account": account}) == "logged-out answer"
+    assert not sessions.usable(account) and "deleted the session cookie" in sessions.health(account).reason
+    assert SECRET not in caplog.text
+
+
+def test_cookieless_calls_carry_no_account_but_report_an_unusable_cookie_file(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(portal, "active_platform_pool", lambda platform: ([], [("entry1", IG_COOKIES)]))
+    monkeypatch.setattr(ytdlp, "_run", lambda platform, fn, opts: calls.append(dict(opts)) or "page")
+    assert asyncio.run(ytdlp.with_ydl("instagram", lambda ydl: None, use_cookies=False)) == "page"
+    assert calls == [{"_dashboard_cookies": ytdlp.NO_COOKIES, "cookiefile": None, "cookiesfrombrowser": None}]
+    monkeypatch.setattr(portal, "active_platform_pool", lambda platform: ([], []))
+    with patched_env({"SOCIALSCRAPE_COOKIES_INSTAGRAM": str(tmp_path / "missing.txt")}):
+        with pytest.raises(Exception) as exc:
+            asyncio.run(ytdlp.with_ydl("instagram", lambda ydl: None, use_cookies=False))
+        assert getattr(exc.value, "code", None) == "cookies_error"
+
+
+def test_topic_pages_are_read_without_account_cookies(monkeypatch):
+    """A signed-in session asking /explore/tags/<tag>/ is sent to the signed-in keyword search, which carries none
+    of the topic's data (recorded with a flagged session; a working one is served the same client)."""
+    seen = []
+
+    async def fetch_page(ie_name, url, item_id, what, *, use_cookies=True):
+        seen.append((url, use_cookies))
+        return '{"pageID":"popularSearchPage"}', [{"data": {"xig_logged_out_popular_search_media_info": {}}}]
+
+    monkeypatch.setattr(ig, "fetch_page", fetch_page)
+    monkeypatch.setattr(ig, "_TOPIC_KEYS", ("xig_logged_out_popular_search_media_info",))
+    asyncio.run(ig.fetch_topic("cats"))
+    assert seen == [(f"{ig.WEB}/explore/tags/cats/", False)]
+
+
+def test_logged_out_page_served_to_a_session_is_a_session_signal():
+    profile = json.loads((FIXTURES / "instagram" / "profile_page.json").read_text())
+    blob = json.dumps({"require": [["ScheduledServerJS", "handle", None, [{"__bbox": {"require": [
+        ["RelayPrefetchedStreamCache", "next", [], ["adp", {"__bbox": {"result": profile["relay"][0]}}]]]}}]]]})
+    html = (f'<script type="application/json">{{"pageID":"profilePage"}}</script><script>["LSD",[],'
+            f'{{"token":"AVq"}},1]</script><script type="application/json" data-sjs>{blob}</script>')
+    assert ig.served_logged_out(html) and not ig.served_logged_out(SIGNED_IN_HOME)
+    with pytest.raises(SessionInvalid, match="logged-out page"):
+        instagram_authenticated.Session(SimpleNamespace(), html, f"{ig.WEB}/jane/")
+    with pytest.raises(UpstreamBlocked, match="request tokens"):  # a shell without tokens: not a session verdict
+        instagram_authenticated.Session(SimpleNamespace(), '{"pageID":"feedPage"}["LSD",[],{"token":"A"}', ig.WEB)
+
+
+def test_app_api_answers_of_a_dead_session_are_not_verdicts():
+    """Recorded: each is what no cookies get too. They stay the route's own errors; only the passport check (made
+    before the call, tiktok_private._signed_in) decides an account's health."""
+    from socialscrape.platforms import tiktok_private
+
+    for endpoint, answer in APP_ANSWERS.items():
+        if endpoint.startswith("_") or not answer.get("status_code"):
+            continue
+        ie = SimpleNamespace(_get_cookies=lambda url: {"sessionid": _Cookie(value=SECRET)},
+                             _call_api=lambda *args, answer=answer, **kwargs: answer)
+        ydl = SimpleNamespace(get_info_extractor=lambda name, ie=ie: ie, _socialscrape_account=None)
+        with pytest.raises(UpstreamError) as exc:
+            tiktok_private._app(endpoint, "1", {})(ydl)
+        assert not isinstance(exc.value, SessionInvalid)
+        assert exc.value.message.endswith(answer.get("status_msg") or answer.get("message") or str(
+            answer["status_code"]))
+
+
+# --- the dashboard: health next to each entry, Check, the check after adding ------------------------------------
+
+def _owner_client(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    from socialscrape.main import create_app
+
+    monkeypatch.setenv("SOCIALSCRAPE_SETUP_TOKEN", "setup")
+    monkeypatch.setenv("SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("SOCIALSCRAPE_PORTAL_PATH", str(tmp_path / "portal.sqlite3"))
+    monkeypatch.setenv("SOCIALSCRAPE_API_KEYS", "")
+    from socialscrape.config import get_settings
+    get_settings.cache_clear()
+    monkeypatch.setattr(ytdlp, "_executor", None)
+    owner = TestClient(create_app(), base_url="https://testserver", raise_server_exceptions=False)
+    owner.post("/setup", data={"email": "owner@example.com", "password": "correct horse battery",
+                                "setup_token": "setup"})
+    return owner, {"x-csrf-token": owner.get("/portal/api/me").json()["csrf"]}
+
+
+def test_dashboard_checks_accounts_and_keeps_their_health(tmp_path, monkeypatch):
+    from socialscrape.config import get_settings
+    from socialscrape.main import create_app
+
+    owner, headers = _owner_client(tmp_path, monkeypatch)
+    verdicts = {"tiktok": Verdict("rejected", "TikTok says the session expired (session expired, please sign in "
+                                              "again)")}
+    checked = []
+
+    def probe(ydl):
+        checked.append(sessions.has_session("tiktok", ydl.cookiejar))  # the entry's own cookies, loaded by _run
+        return verdicts["tiktok"]
+
+    monkeypatch.setattr(sessions, "PROBES", {"tiktok": probe})
+    added = owner.post("/portal/api/settings/platforms/tiktok/cookies", headers=headers, json={"value": TT_COOKIES})
+    assert added.status_code == 200, added.text
+    body = added.json()
+    entry = body["id"]
+    assert body["check"]["status"] == "rejected" and body["check"]["ok"] is False and checked == [True]
+    assert SECRET not in added.text
+    status = owner.get("/portal/api/settings/platforms").json()["tiktok"]["cookies"]
+    assert len(status) == 1 and status[0]["id"] == entry  # kept, whatever the check said
+    assert status[0]["health"]["status"] == "rejected" and "session expired" in status[0]["health"]["reason"]
+
+    verdicts["tiktok"] = Verdict("alive", account="sample.account")
+    url = f"/portal/api/settings/platforms/tiktok/cookies/{entry}/check"
+    assert owner.post(url).status_code == 403  # CSRF
+    checked_now = owner.post(url, headers=headers).json()
+    assert {k: checked_now[k] for k in ("ok", "status", "account", "supported")} == {
+        "ok": True, "status": "alive", "account": "sample.account", "supported": True}
+    assert checked_now["health"]["retry_at"] is None  # a passing check ends the cooldown
+    assert owner.post("/portal/api/settings/platforms/tiktok/cookies/nope/check", headers=headers).status_code == 404
+    unsupported = owner.post("/portal/api/settings/platforms/youtube/cookies", headers=headers,
+                             json={"value": TT_COOKIES.replace("tiktok.com", "youtube.com")}).json()
+    assert unsupported["check"]["supported"] is False and unsupported["check"]["status"] == "unknown"
+
+    # the health is saved next to the encrypted pool (no secrets) and read back by a new app
+    raw = (tmp_path / "portal.sqlite3").read_bytes()
+    assert SECRET.encode() not in raw
+    sessions.reset()
+    get_settings.cache_clear()
+    again = TestClient(create_app(), base_url="https://testserver")
+    again.post("/login", data={"email": "owner@example.com", "password": "correct horse battery"})
+    health = again.get("/portal/api/settings/platforms").json()["tiktok"]["cookies"][0]["health"]
+    assert (health["status"], health["account"]) == ("alive", "sample.account")
+    csrf = {"x-csrf-token": again.get("/portal/api/me").json()["csrf"]}
+    assert again.delete(f"/portal/api/settings/platforms/tiktok/cookies/{entry}", headers=csrf).json() == {
+        "removed": True}
+    assert sessions.entry_health("tiktok", entry)["status"] == "unchecked"
+    import sqlite3
+    rows = sqlite3.connect(tmp_path / "portal.sqlite3").execute(
+        "SELECT entry_id FROM platform_account_health WHERE platform='tiktok'").fetchall()
+    assert rows == []
+
+    script = again.get("/assets/portal.js").text
+    assert "data-check-account" in script and "Account rejected" in script and "accountCheckToast" in script
+
+
+def test_health_reports_the_env_account_verdict_without_its_path(tmp_path):
+    path = tmp_path / "ig.txt"
+    path.write_text(IG_COOKIES)
+    with app_with({"SOCIALSCRAPE_COOKIES_INSTAGRAM": str(path)}) as c:
+        assert c.get("/health").json()["cookie_health"] == {}  # /health never checks an account itself
+        sessions.record(sessions.accounts("instagram", [])[0], Verdict("rejected", "dead session"))
+        h = c.get("/health").json()["cookie_health"]
+        assert h["instagram"]["status"] == "rejected" and h["instagram"]["source"] == "env"
+        assert str(path) not in json.dumps(h) and SECRET not in json.dumps(h)
+
+
+def test_tiktok_routes_name_the_rejected_env_account(tmp_path, monkeypatch):
+    """The real _run and route code: the env file's session fails TikTok's check (stand-in) before the app call."""
+    path = tmp_path / "tt.txt"
+    path.write_text(TT_COOKIES)
+    monkeypatch.setattr(sessions, "PROBES", {"tiktok": lambda ydl: Verdict(
+        "rejected", "TikTok says the session expired (session expired, please sign in again)")})
+    with app_with({"SOCIALSCRAPE_COOKIES_TIKTOK": str(path)}) as c:
+        for route, params in (("/v1/tiktok/video/comments",
+                               {"url": "https://www.tiktok.com/@a/video/7499229683859426602"}),
+                              ("/v1/tiktok/search/suggestions", {"query": "travel"}),
+                              ("/v1/tiktok/user/following", {"handle": "a"})):
+            r = c.get(route, params=params, headers={"x-socialscrape-fallback": "off"})
+            body = r.json()
+            assert (r.status_code, body["error"], body["reason"]) == (501, "platform_auth_required",
+                                                                     "account_rejected"), (route, body)
+            assert "SOCIALSCRAPE_COOKIES_TIKTOK" in body["message"] and "session expired" in body["message"]

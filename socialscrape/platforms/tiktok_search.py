@@ -32,7 +32,7 @@ from fastapi import APIRouter, Query
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError
 
-from ..errors import ApiError, BadRequest, NotSupported, UpstreamBlocked, UpstreamError
+from ..errors import AccountRejected, ApiError, BadRequest, NotSupported, UpstreamBlocked, UpstreamError
 from ..registry import sc_get
 from ..ytdlp import with_ydl
 from . import _tiktok_map as M
@@ -212,6 +212,8 @@ async def _signed_in(reason: str) -> None:
     """501 platform_auth_required naming `reason`, unless TikTok account cookies are configured."""
     try:
         await tiktok_private._require_account()
+    except AccountRejected:  # an account is configured, and TikTok rejected it: that message says which
+        raise
     except NotSupported as exc:
         raise NotSupported(f"{reason}; TikTok's own search needs a signed-in account: add TikTok account cookies "
                            "in Platform settings", code="platform_auth_required", platform=P) from exc

@@ -1,0 +1,6 @@
+{
+ "_about": "SYNTHETIC: the passport answer a live session is expected to get (no live TikTok account was available to record it). Only message == 'success' with data.user_id/user_id_str is read.",
+ "status": 200,
+ "content_type": "application/json; charset=utf-8",
+ "body": {"data": {"user_id": 7000000000000000001, "user_id_str": "7000000000000000001", "username": "sample.account", "screen_name": "Sample"}, "message": "success"}
+}

@@ -31,7 +31,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 import yt_dlp
 
-from . import account, fallback, platforms, selftest, transcribe, ytdlp
+from . import account, fallback, platforms, selftest, sessions, transcribe, ytdlp
 from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
@@ -270,6 +270,9 @@ def create_app() -> FastAPI:
             "cookies": [p for p in sorted(s.cookie_files) if p not in cookie_errors]
                        + (["browser"] if s.cookies_from_browser else []),
             "cookie_errors": cookie_errors,
+            # The env-file/browser accounts' health once a call or check gave a verdict (sessions.py): never
+            # checked from here, so uptime probes stay offline.
+            "cookie_health": sessions.summary(),
             "fallback": fallback.describe(app),
             "implemented_endpoints": len(IMPLEMENTED),
         }
