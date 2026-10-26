@@ -880,10 +880,23 @@ function confirmAction(title, description, confirmLabel, action, {restoreFocus, 
     } finally { done(); }
   });
 }
+// A copy button briefly shows a check, so the result is visible where the person clicked as well as in the toast.
+const copyTimers = new WeakMap();
+function markCopied(id) {
+  document.querySelectorAll(`[data-copy="${CSS.escape(id)}"]`).forEach(button => {
+    if (button.dataset.pending) return;
+    clearTimeout(copyTimers.get(button));
+    button.dataset.copyRest ??= button.innerHTML;
+    const label = button.textContent.trim();
+    button.innerHTML = `${icon('check')}${label ? 'Copied' : ''}`;
+    button.classList.add('copied');
+    copyTimers.set(button, setTimeout(() => { button.innerHTML = button.dataset.copyRest; delete button.dataset.copyRest; button.classList.remove('copied'); }, 1600));
+  });
+}
 async function copyElement(id) {
   const element = document.getElementById(id); if (!element) return;
   const text = element.value ?? element.textContent;
-  try { await navigator.clipboard.writeText(text); if (id === 'new-secret' && $('#dialog').dataset.oneTimeSecret) $('#dialog').dispatchEvent(new Event('secretcopied')); toast('Copied to clipboard.'); }
+  try { await navigator.clipboard.writeText(text); if (id === 'new-secret' && $('#dialog').dataset.oneTimeSecret) $('#dialog').dispatchEvent(new Event('secretcopied')); markCopied(id); toast('Copied to clipboard.'); }
   catch {
     if (id === 'new-secret') { element.focus(); element.select(); $('#copy-feedback').textContent = 'Copy is unavailable. Select and copy the text above manually.'; }
     else { if (element.hidden) document.querySelector(`[role=tab][aria-controls="${id}"]`)?.click(); const range=document.createRange(); range.selectNodeContents(element); window.getSelection().removeAllRanges(); window.getSelection().addRange(range); toast('Select and copy the highlighted text manually.', {type:'info'}); }
