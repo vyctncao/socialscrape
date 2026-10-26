@@ -61,6 +61,10 @@ retryable block or network/login failure, the service advances to the next proxy
 jars. Use only dedicated throwaway accounts; the dashboard accepts Netscape `cookies.txt` exports and never stores
 platform passwords.
 
+The proxy **Test** checks the selected platform through that proxy; an optional exit-IP lookup does not decide
+whether it works. Results distinguish a failed proxy connection from a reachable proxy whose platform request is
+blocked or inconclusive. A passing probe confirms that request only, not that every extraction endpoint will work.
+
 ### Signed-in account health
 
 A dead or flagged signed-in account never makes a route worse than having no account. In **Settings → Proxies &

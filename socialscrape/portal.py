@@ -907,7 +907,8 @@ def _validate_cookies(platform: str, value: str) -> None:
 
 
 def _test_proxy(platform: str, proxy: str) -> dict[str, Any]:
-    import requests
+    from curl_cffi import CurlOpt, requests
+    from curl_cffi.requests.exceptions import RequestException
 
     targets = {
         "instagram": "https://www.instagram.com/instagram/",
@@ -916,23 +917,53 @@ def _test_proxy(platform: str, proxy: str) -> dict[str, Any]:
         "facebook": "https://www.facebook.com/ads/library/",
         "google": "https://adstransparency.google.com/",
     }
-    proxies = {"http": proxy, "https": proxy}
+    # Match the scraper's accepted URLs, rather than requests' narrower SOCKS handling.
+    proxy = proxy.strip()
+    if "://" not in proxy:
+        proxy = "http://" + proxy.removeprefix("//")
+    scheme, rest = proxy.split("://", 1)
+    proxy = {"socks5": "socks5h", "socks": "socks5h"}.get(scheme.lower(), scheme.lower()) + "://" + rest
     started = monotonic()
+    result: dict[str, Any] = {"ok": False, "connected": False, "status": None, "blocked": False,
+                              "exit_ip": None, "error": None, "message": ""}
     try:
-        exit_response = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=10)
-        exit_response.raise_for_status()
-        exit_ip = exit_response.json().get("ip")
-        response = requests.get(
-            targets[platform], proxies=proxies, timeout=12, allow_redirects=False,
-            headers={"User-Agent": "Mozilla/5.0 SocialScrape proxy test"},
-        )
+        response = requests.get(targets[platform], proxy=proxy, timeout=14, allow_redirects=False,
+                                impersonate="chrome", curl_options={CurlOpt.NOPROXY: ""})
+        result["connected"] = True
+        result["status"] = response.status_code
         location = response.headers.get("location", "").lower()
-        blocked = response.status_code in (401, 403, 429) or "login" in location or "checkpoint" in location
-        return {"ok": response.status_code < 500 and not blocked, "status": response.status_code,
-                "blocked": blocked, "exit_ip": exit_ip, "latency_ms": round((monotonic() - started) * 1000)}
-    except requests.RequestException as exc:
-        return {"ok": False, "status": None, "blocked": False, "exit_ip": None,
-                "latency_ms": round((monotonic() - started) * 1000), "error": type(exc).__name__}
+        body = response.text[:100000].lower()
+        challenge = any(marker in body for marker in ("please complete the captcha", "verify you are human", "checkpoint_required",
+                                                       "unusual traffic", "challenge-platform", "login_required"))
+        result["blocked"] = response.status_code in (401, 403, 429) or any(
+            marker in location for marker in ("login", "checkpoint", "challenge", "/sorry/")) or challenge
+        result["ok"] = 200 <= response.status_code < 300 and not result["blocked"] and bool(response.content)
+        if response.status_code == 407:
+            result.update(connected=False, error="proxy_auth", message="The proxy rejected its username or password.")
+        elif result["blocked"]:
+            result["message"] = "The proxy is reachable, but this platform restricted the request. Try another exit IP."
+        elif not result["ok"]:
+            result["message"] = "The proxy answered, but this request did not confirm platform access."
+    except RequestException as exc:
+        code = getattr(exc, "code", None)
+        if code == 28:
+            result.update(error="timeout", message="The proxy timed out. Check its host, port and network allowlist.")
+        elif code == 97 or "407" in str(exc):
+            result.update(error="proxy_auth", message="Proxy negotiation failed. Check its protocol, credentials and IP allowlist.")
+        else:
+            result.update(error="connection", message="Could not connect through this proxy. Check its protocol, host, port and IP allowlist.")
+    # IP lookup is diagnostic only; some proxy providers deliberately block IP-check services.
+    if result["connected"]:
+        try:
+            answer = requests.get("https://api.ipify.org?format=json", proxy=proxy, timeout=4,
+                                  allow_redirects=False, impersonate="chrome", curl_options={CurlOpt.NOPROXY: ""})
+            if answer.status_code == 200:
+                import ipaddress
+                result["exit_ip"] = str(ipaddress.ip_address(answer.json().get("ip", "")))
+        except (RequestException, ValueError, TypeError, AttributeError):
+            pass
+    result["latency_ms"] = round((monotonic() - started) * 1000)
+    return result
 
 
 def _session(request: Request) -> Principal | None:

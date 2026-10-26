@@ -895,8 +895,10 @@ async function testPlatformProxy(button) {
   if (!done) return;
   try {
     const result = await api(`/portal/api/settings/platforms/${button.dataset.platform}/proxy/${button.dataset.entry}/test`, {method:'POST', timeout:25000});
-    const detail = result.ok ? `Working · ${result.exit_ip || 'exit IP unavailable'} · ${number(result.latency_ms)} ms` : `${result.blocked ? 'Blocked by provider' : 'Connection failed'}${result.status ? ` · HTTP ${result.status}` : ''} · ${number(result.latency_ms)} ms`;
-    const status = button.closest('li').querySelector('[data-proxy-status]'); status.textContent = detail; toast(result.ok ? 'Proxy test completed.' : 'Proxy test failed.', {type:result.ok ? 'success' : 'error'});
+    const label = result.ok ? 'Proxy working' : result.blocked ? 'Proxy connected; platform blocked the request' : result.connected ? 'Proxy connected; platform check inconclusive' : 'Proxy connection failed';
+    const detail = `${label}${result.status ? ` · HTTP ${result.status}` : ''}${result.exit_ip ? ` · Exit IP ${result.exit_ip}` : ''} · ${number(result.latency_ms)} ms${result.message ? `. ${result.message}` : ''}`;
+    const status = button.closest('li')?.querySelector('[data-proxy-status]'); if (status) status.textContent = detail;
+    toast(label, {type:result.ok ? 'success' : result.blocked || result.connected ? 'warning' : 'error'});
   } catch (error) { const message = error.timeout ? 'Proxy test timed out after 25 seconds. Check the proxy and try again.' : error.message; button.closest('li').querySelector('[data-proxy-status]').textContent=message; toast(message, {type:'error', persistent:true}); }
   finally { done(); }
 }
