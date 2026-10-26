@@ -8,6 +8,7 @@ import json
 import pytest
 from yt_dlp.networking import Response
 from yt_dlp.networking.exceptions import HTTPError
+from yt_dlp.networking.exceptions import TransportError
 
 from socialscrape.platforms import bluesky as b
 
@@ -146,11 +147,80 @@ def test_wrong_post_uri_is_not_accepted(client, appview):
     ],
 )
 def test_api_resource_states_are_classified(body, status, expected):
+    calls = []
+
     class Network:
         def urlopen(self, request):
+            calls.append(request.url)
             assert request.url.startswith(b.ORIGIN)
             assert "Authorization" not in request.headers
             raise HTTPError(Response(io.BytesIO(body), request.url, {}, status=status))
 
     with pytest.raises(expected):
         b._json(Network(), "app.bsky.actor.getProfile", {"actor": HANDLE})
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("failure", ["connect", "read", "gateway"])
+def test_transient_failure_restarts_the_complete_public_request(failure):
+    calls = []
+    expected = {"did": DID, "handle": HANDLE}
+
+    class Interrupted(Response):
+        def read(self, *args):
+            raise TransportError("Connection reset after a partial response")
+
+    class Network:
+        def urlopen(self, request):
+            calls.append(request.url)
+            assert 0 < request.extensions["timeout"] <= b.get_settings().socket_timeout
+            if len(calls) == 1:
+                if failure == "connect":
+                    raise TransportError("Temporary connection reset")
+                if failure == "gateway":
+                    raise HTTPError(
+                        Response(
+                            io.BytesIO(b"unavailable"), request.url, {}, status=502
+                        )
+                    )
+                return Interrupted(io.BytesIO(b'{"did":"wrong'), request.url, {})
+            return Response(io.BytesIO(json.dumps(expected).encode()), request.url, {})
+
+    assert (
+        b._json(Network(), "app.bsky.actor.getProfile", {"actor": HANDLE}) == expected
+    )
+    assert len(calls) == 2 and calls[0] == calls[1]
+
+
+def test_network_failure_is_bounded_and_never_becomes_success():
+    calls = []
+
+    class Network:
+        def urlopen(self, request):
+            calls.append(request.url)
+            raise TransportError("Connection unavailable")
+
+    with pytest.raises(TransportError):
+        b._json(Network(), "app.bsky.actor.getProfile", {"actor": HANDLE})
+    assert len(calls) == 2
+
+
+def test_retry_does_not_restart_the_request_deadline(monkeypatch):
+    from types import SimpleNamespace
+
+    ticks = iter((0, 0.75, 1.1))
+    monkeypatch.setattr(
+        b, "get_settings", lambda: SimpleNamespace(request_timeout=1, socket_timeout=20)
+    )
+    monkeypatch.setattr(b, "monotonic", lambda: next(ticks))
+    calls = []
+
+    class Network:
+        def urlopen(self, request):
+            calls.append(request.url)
+            assert request.extensions["timeout"] == 0.25
+            raise TransportError("Temporary interruption")
+
+    with pytest.raises(b.UpstreamError) as error:
+        b._json(Network(), "app.bsky.actor.getProfile", {"actor": HANDLE})
+    assert error.value.code == "timeout" and len(calls) == 1
