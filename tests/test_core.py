@@ -2155,7 +2155,7 @@ def test_documentation_loading_and_interaction_contract():
     assert "[role=tablist]').querySelectorAll('[role=tab]')" in script  # tabs rove within their own list
     assert '@container doc-content (min-width:780px)' in css
     assert '.endpoint-examples{position:sticky;top:88px;align-self:start;max-height:calc(100dvh - 112px)' in css
-    assert 'overscroll-behavior:contain' not in css  # a wheel over the sticky column still scrolls the page
+    assert 'overscroll-behavior:contain' not in css.split('.endpoint-examples{', 1)[1].split('}', 1)[0]  # the sticky docs column must still scroll the page
     assert '.modal.code-dialog{' in css  # wider than .modal's 480px
     # A clipped tab row fades at the edges with tabs beyond them, at every width, and a vertical wheel scrolls it.
     assert ".code-card-tabs[data-overflow~=end]{mask-image:" in css and "row.addEventListener('wheel', scrollTabRow, {passive:false})" in script

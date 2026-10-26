@@ -84,10 +84,24 @@ function showQueuedToast(item) {
   item.element = element; element.className = `toast ${item.type}`; element.setAttribute('role', assertive ? 'alert' : 'status'); element.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
   const glyph = {success:'check',info:'info',warning:'warning-circle',error:'warning-circle'}[item.type];
   element.innerHTML = `${icon(glyph)}<span>${esc(item.message)}</span>`;
-  const close = () => { if (!visibleToasts.delete(item)) return; element.remove(); if (toastQueue.length) showQueuedToast(toastQueue.shift()); };
-  if (item.persistent || item.type === 'error') { const button=document.createElement('button'); button.className='toast-close icon-button'; button.setAttribute('aria-label','Dismiss notification'); button.innerHTML=icon('x'); button.addEventListener('click',close); element.append(button); }
+  let timer, remaining = 6000, started;
+  const persistent = item.persistent || ['error','warning'].includes(item.type);
+  const close = () => {
+    if (!visibleToasts.has(item) || item.closing) return;
+    item.closing = true;
+    clearTimeout(timer);
+    const finish = () => { visibleToasts.delete(item); element.remove(); if (toastQueue.length) showQueuedToast(toastQueue.shift()); };
+    element.classList.remove('toast-visible');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) finish(); else setTimeout(finish, 160);
+  };
+  const pause = () => { if (timer) { clearTimeout(timer); timer = null; remaining = Math.max(0, remaining - (performance.now() - started)); } };
+  const resume = () => { if (persistent || timer || element.matches(':hover') || element.contains(document.activeElement)) return; started = performance.now(); timer = setTimeout(close, remaining); };
+  const button=document.createElement('button'); button.className='toast-close icon-button'; button.setAttribute('aria-label','Dismiss notification'); button.innerHTML=icon('x'); button.addEventListener('click',close); element.append(button);
+  element.addEventListener('pointerenter',pause); element.addEventListener('pointerleave',resume);
+  element.addEventListener('focusin',pause); element.addEventListener('focusout',() => queueMicrotask(resume));
   toastRegion.append(element); visibleToasts.add(item);
-  if (!item.persistent && item.type !== 'error') setTimeout(close, 4000);
+  requestAnimationFrame(() => { if (element.isConnected) element.classList.add('toast-visible'); });
+  resume();
 }
 function toast(message, {type = 'success', persistent = false} = {}) {
   const item = {message:String(message), type, persistent};
@@ -1018,6 +1032,8 @@ function positionPopup(popup, trigger, kind) {
   }
   popup.style.left = `${Math.max(inset, Math.min(left, innerWidth - rect.width - inset))}px`;
   popup.style.top = `${Math.max(inset, Math.min(top, innerHeight - rect.height - inset))}px`;
+  const bounds = popup.getBoundingClientRect();
+  popup.style.transformOrigin = `${Math.max(0, Math.min(bounds.width, anchor.left + anchor.width / 2 - bounds.left))}px ${top < anchor.top ? 'bottom' : 'top'}`;
 }
 function initAccountMenus() {
   const role = PORTAL.role === 'owner' ? 'Workspace owner' : 'Team member';
