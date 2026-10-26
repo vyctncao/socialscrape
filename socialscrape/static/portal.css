@@ -494,9 +494,10 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .media-meta>*{min-width:0;max-width:100%}
 .media-meta .text-link{overflow-wrap:anywhere}
 .pool-full{align-self:start;margin:0;max-width:420px}
-.provider-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-5)}
+.provider-summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,400px),1fr));gap:var(--space-5)}
 .provider-summary{display:grid;gap:0;padding:0;overflow:hidden}
-.provider-summary-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:var(--space-5)}
+.provider-summary-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-4);padding:var(--space-5)}
+.provider-summary-head>.badge{flex:none}
 .provider-summary-head h2{margin:0}
 .provider-setting-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);padding:var(--space-4) var(--space-5);border-top:1px solid var(--border)}
 .provider-setting-row>div{display:flex;align-items:center;gap:var(--space-3);min-width:0}
@@ -510,11 +511,14 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .manager-list li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);min-height:58px;padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-1)}
 .manager-position{display:grid;gap:2px;min-width:0}
 .manager-position strong{font-size:var(--fs-sm)}
-.manager-position span{font-size:var(--fs-xs);color:var(--text-2)}
-.manager-position .account-status{max-width:52ch;overflow-wrap:anywhere}
-.manager-position .account-status.good{color:var(--success)}
-.manager-position .account-status.warn{color:var(--warning)}
-.manager-position .account-status.bad{color:var(--danger)}
+.manager-position>span{font-size:var(--fs-xs);color:var(--text-2)}
+.manager-list li.account-row{align-items:flex-start}
+.account-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1) var(--space-2);min-height:24px}
+.account-head>.badge{max-width:100%}
+.manager-position>.account-detail{max-width:60ch;overflow-wrap:anywhere}
+.manager-position>.account-reason{color:var(--text-1)}
+.manager-position>.account-check-error{max-width:60ch;color:var(--danger)}
+.manager-actions [data-test-proxy],.manager-actions [data-check-account]{min-width:116px}
 .manager-actions{display:flex;align-items:center;gap:var(--space-2);flex:none}
 .member-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
 .manager-actions .icon-button{width:40px;min-height:40px}
@@ -525,7 +529,6 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .manager-form .primary{min-width:120px}
 .manager-pool-error{margin-top:var(--space-3)}
 @media(max-width:760px),(any-pointer:coarse){.manager-actions .icon-button{width:44px;min-width:44px;min-height:44px}.manager-actions .ghost,.manager-actions .danger{min-height:44px}}
-@media(max-width:1100px){.provider-summary-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.provider-setting-row{align-items:flex-start;flex-direction:column}.provider-setting-row .ghost{width:100%}.manager-list li{align-items:flex-start;flex-direction:column}.manager-actions{width:100%;flex-wrap:wrap}.manager-form{grid-template-columns:1fr}.manager-form .primary{width:100%}}
 /* Section tabs for pages that hold related views, and the settings layout. */
 .page-head:has(+.page-tabs){margin-bottom:var(--space-5)}
@@ -556,7 +559,6 @@ a.gallery-label:hover{text-decoration:underline;text-underline-offset:3px}
 .toast.error>.icon{color:var(--danger)}
 .toast-close{width:32px;min-height:32px;padding:7px;margin:-8px}
 :root[data-theme=light] .badge.warn{color:var(--text-1)}
-:root[data-theme=light] .manager-position .account-status.warn{color:var(--text-1)}
 .standalone-action{display:inline-flex;align-items:center;min-height:40px;margin-top:var(--space-3)}
 .select-control{position:relative;display:block}
 .select-control select{position:relative;z-index:1;background:transparent}

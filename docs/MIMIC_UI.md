@@ -165,6 +165,13 @@ clear when another page commits. `normalizeSchema(param)` unwraps nullable OpenA
 parameters for both the Playground and the docs. `api()` honors explicit timeouts for
 writes and retries once after refreshing a stale CSRF token.
 
+Signed-in accounts in the settings dialog show the health the server recorded, never an assumed one: a status
+badge in words (Working, Restricted by …, Rejected by … · time, Check inconclusive, Not checked yet, No account
+check), then the platform's reason, the last check time and any cooldown. A rejection is attributed to the platform
+only when the platform's own answer said so. Check follows Test: a pending button wide enough for its label, focus
+kept on it, the row updated in place, a toast for the result, and the summary cards behind the dialog updated in
+place. A failed check keeps the last verdict and adds an inline error line.
+
 Portal mutations report only what the server confirmed: revoking a key, removing a
 member, and removing or moving a proxy or account return `404` with a fixed `detail`
 when nothing changed, and the client refreshes and says what it observed instead of

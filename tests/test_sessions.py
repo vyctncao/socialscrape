@@ -8,6 +8,8 @@ import asyncio
 import json
 import logging
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -522,6 +524,100 @@ def test_dashboard_checks_accounts_and_keeps_their_health(tmp_path, monkeypatch)
     script = again.get("/assets/portal.js").text
     assert "data-check-account" in script and "Account rejected" in script and "accountCheckToast" in script
 
+
+
+def _account_views(cases: dict) -> dict:
+    """Run the dashboard's account-health helpers (portal.js) in Node on `cases` -> their output, by case name."""
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    source = (Path(__file__).parents[1] / "socialscrape" / "static" / "portal.js").read_text()
+    helpers = [line for line in source.splitlines()
+               if line.startswith(("const esc =", "const dateFormatter =", "const fmt =", "function platformName("))]
+    block = source[source.index("function poolPosition("):source.index("function poolList(")]
+    script = f"""const vm=require('vm'), context=vm.createContext({{}});
+vm.runInContext({json.dumps(chr(10).join(helpers) + chr(10) + block)}, context);
+context.cases={json.dumps(cases)};
+console.log(vm.runInContext(`JSON.stringify(Object.fromEntries(Object.entries(cases).map(([name, c]) => [name,
+  c.toast ? accountCheckToast(c.platform, c.position, c.result, c.saved)
+          : {{...accountHealth(c.platform, c.health),
+              summary: accountSummary(c.platform, {{position: 1, updated_at: 1761440000, health: c.health}})}}])))`,
+  context));"""
+    return json.loads(subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True).stdout)
+
+
+def test_dashboard_names_each_account_health_in_words():
+    """The manager dialog's badge and lines say only what the server recorded, in words (not colour alone)."""
+    now, later, earlier = time.time(), time.time() + 6 * 3600, time.time() - 3600
+    expired = "TikTok says the session expired (session expired, please sign in again)"
+    rejected = {"status": "rejected", "reason": expired, "checked_at": now, "rejected_at": now, "retry_at": later}
+    views = _account_views({
+        "unchecked": {"platform": "tiktok", "health": {"status": "unchecked"}},
+        "no_probe": {"platform": "youtube", "health": {"status": "unchecked"}},
+        "working": {"platform": "tiktok", "health": {"status": "alive", "account": "sample.account",
+                                                     "checked_at": now}},
+        "restricted": {"platform": "instagram", "health": {"status": "alive", "limited": True, "checked_at": now,
+                                                           "reason": "its account API sends the session home"}},
+        "rejected": {"platform": "tiktok", "health": rejected},
+        "no_session": {"platform": "instagram", "health": {
+            "status": "rejected", "reason": "its cookies hold no Instagram session cookie (sessionid)",
+            "checked_at": now, "rejected_at": now, "retry_at": later}},
+        "cooled": {"platform": "tiktok", "health": {**rejected, "rejected_at": earlier - 7 * 3600,
+                                                    "retry_at": earlier}},
+        "inconclusive": {"platform": "instagram", "health": {
+            "status": "unchecked", "inconclusive_at": now,
+            "inconclusive_reason": "The account check could not reach Instagram (ProxyError)"}},
+        "rejected_then_inconclusive": {"platform": "tiktok", "health": {
+            **rejected, "inconclusive_at": now, "inconclusive_reason": "TikTok answered with HTTP 503"}},
+        "escaped": {"platform": "instagram", "health": {"status": "rejected", "reason": "Instagram said <b>no</b>",
+                                                        "checked_at": now, "rejected_at": now, "retry_at": later}},
+        "toast_saved_rejected": {"toast": True, "platform": "tiktok", "position": 1, "saved": True,
+                                 "result": {"status": "rejected", "ok": False, "reason": expired,
+                                            "supported": True, "health": rejected}},
+        "toast_checked_no_session": {"toast": True, "platform": "instagram", "position": 2, "result": {
+            "status": "rejected", "ok": False, "reason": "its cookies hold no Instagram session cookie (sessionid)",
+            "supported": True, "health": {}}},
+        "toast_working": {"toast": True, "platform": "tiktok", "position": 1, "result": {
+            "status": "alive", "ok": True, "account": "sample.account", "supported": True, "health": {}}},
+        "toast_inconclusive": {"toast": True, "platform": "instagram", "position": 1, "result": {
+            "status": "unknown", "ok": None, "reason": "The account check timed out", "supported": True}},
+        "toast_saved_no_probe": {"toast": True, "platform": "youtube", "position": 1, "saved": True, "result": {
+            "status": "unknown", "ok": None, "supported": False}},
+    })
+    assert (views["unchecked"]["badge"], views["unchecked"]["tone"], views["unchecked"]["checked"]) == (
+        "Not checked yet", "", None)
+    assert "Last checked" not in views["unchecked"]["summary"]
+    assert views["no_probe"]["badge"] == "No account check" and "cannot check YouTube" in views["no_probe"]["lines"][0]
+    assert (views["working"]["badge"], views["working"]["tone"]) == ("Working", "good")
+    assert views["working"]["lines"] == ["Signed in as @sample.account."]
+    assert "Last checked" in views["working"]["summary"]
+    assert (views["restricted"]["badge"], views["restricted"]["tone"]) == ("Restricted by Instagram", "warn")
+    assert views["restricted"]["lines"] == ["Instagram restricts this account: its account API sends the session home."]
+
+    bad = views["rejected"]
+    assert bad["tone"] == "bad" and bad["badge"].startswith("Rejected by TikTok · <time datetime=")
+    assert bad["lines"][0] == f"{expired}." and bad["lines"][1].startswith("Requests skip this account until ")
+    assert 'data-account-badge>Rejected by TikTok · <time' in bad["summary"]
+    # SocialScrape's own finding (no session cookie in the file) is not put in the platform's mouth
+    assert views["no_session"]["badge"].startswith("Rejected · <time")
+    assert views["no_session"]["lines"][0] == "Its cookies hold no Instagram session cookie (sessionid)."
+    assert views["cooled"]["lines"][1].startswith("Its pause has ended")
+    assert views["inconclusive"]["badge"] == "Check inconclusive" and views["inconclusive"]["tone"] == ""
+    assert views["inconclusive"]["lines"][0] == "The account check could not reach Instagram (ProxyError)."
+    both = views["rejected_then_inconclusive"]
+    assert both["badge"].startswith("Rejected by TikTok") and "was inconclusive: TikTok answered" in both["lines"][-1]
+    assert "<b>" not in views["escaped"]["summary"] and "&lt;b&gt;no&lt;/b&gt;" in views["escaped"]["summary"]
+
+    message, kind, persistent = views["toast_saved_rejected"]
+    assert message.startswith(f"Saved, but TikTok rejected the Primary account: {expired}. Requests skip it until ")
+    assert (kind, persistent) == ("warning", True) and message.endswith("Replace it with a fresh cookies.txt export.")
+    message, kind, _ = views["toast_checked_no_session"]
+    assert message.startswith("The Instagram Backup 1 account was rejected: its cookies hold no") and kind == "warning"
+    assert views["toast_working"] == ["The TikTok Primary account works · signed in as @sample.account.", "success",
+                                      False]
+    assert views["toast_inconclusive"] == [
+        "The check of the Instagram Primary account was inconclusive: The account check timed out.", "warning", False]
+    assert views["toast_saved_no_probe"] == [
+        "Signed-in account saved for YouTube. SocialScrape cannot check YouTube sessions.", "success", False]
 
 def test_health_reports_the_env_account_verdict_without_its_path(tmp_path):
     path = tmp_path / "ig.txt"

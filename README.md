@@ -63,11 +63,16 @@ platform passwords.
 
 ### Signed-in account health
 
-A dead or flagged signed-in account never makes a route worse than having no account. Each Instagram and TikTok
-account in the pool shows its health (working, restricted or rejected, with the reason and when it was checked) and has
-a **Check** action, like a proxy's **Test**; a new account is checked as soon as it is added, and it is kept whatever
-the check says. The checks are one or two requests made with the account's own cookies and the proxy of its pool
-position:
+A dead or flagged signed-in account never makes a route worse than having no account. In **Settings → Proxies &
+accounts**, each account in a platform's signed-in account dialog has a status badge in words: **Working**,
+**Restricted by Instagram**, **Rejected by TikTok · Oct 25, 7:04 PM** (when it was rejected), **Check inconclusive**
+(the check got no verdict, for example through an unreachable proxy) or **Not checked yet**. Below it are the reason the
+platform gave, when the account was last checked and, for a rejected account, until when requests skip it. Instagram
+and TikTok accounts have a **Check** action, like a proxy's **Test**: the button shows its progress and keeps focus,
+the row updates in place and a toast reports the result. A new account is checked as soon as it is added; it is kept
+whatever the check says, and a rejection shows as a warning. A platform's summary card reads **Account rejected** while
+any of its accounts was last rejected. YouTube, Facebook and Google accounts read **No account check**. The checks are
+one or two requests made with the account's own cookies and the proxy of its pool position:
 
 - **TikTok**: the web passport API (`/passport/web/account/info/`). `session_expired` rejects the account. TikTok's app
   API answers a dead session exactly as it answers no cookies (`Please upgrade your TikTok app.`, status 5, empty lists),

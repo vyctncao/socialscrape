@@ -213,35 +213,66 @@ function poolLabel(kind, count) {
 function poolPosition(position) { return position === 1 ? 'Primary' : `Backup ${position - 1}`; }
 // Platforms whose signed-in accounts the server can check (sessions.PROBES).
 const accountChecks = new Set(['instagram', 'tiktok']);
-function accountRejected(health) { return health?.status === 'rejected' && Boolean(health.retry_at) && health.retry_at * 1000 > Date.now(); }
-function accountTone(health) { return health?.status === 'rejected' ? 'bad' : health?.limited ? 'warn' : health?.status === 'alive' ? 'good' : ''; }
-function accountStatus(platform, health) {
-  const inconclusive = health?.inconclusive_at ? ` · Last check inconclusive: ${health.inconclusive_reason || 'no verdict'}` : '';
-  if (health?.status === 'rejected') return `Rejected ${fmt(health.rejected_at)} · ${health.reason || `${platformName(platform)} rejected the session`} · ${accountRejected(health) ? `Requests skip it until ${fmt(health.retry_at)}` : 'Requests try it again'}${inconclusive}`;
-  if (health?.status === 'alive') return `${health.limited ? 'Signed in, restricted' : 'Working'}${health.account ? ` · @${health.account}` : ''} · Checked ${fmt(health.checked_at)}${health.limited && health.reason ? ` · ${health.reason}` : ''}${inconclusive}`;
-  if (health?.inconclusive_at) return `Not verified · ${health.inconclusive_reason || 'The last check was inconclusive'}`;
-  return accountChecks.has(platform) ? 'Not checked yet' : 'No account check for this platform';
+const shortDateFormatter = new Intl.DateTimeFormat(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+const shortWhen = time => `<time datetime="${new Date(time * 1000).toISOString()}" title="${esc(fmt(time))}">${esc(shortDateFormatter.format(new Date(time * 1000)))}</time>`;
+// The server's reasons are clauses ("its cookies hold no …", "TikTok says …"): shown on their own, they read as sentences.
+const clause = text => { const value = String(text || '').trim(); return value && !/[.!?]$/.test(value) ? `${value}.` : value; };
+const sentence = text => { const value = clause(text); return value && `${value[0].toUpperCase()}${value.slice(1)}`; };
+// Every platform verdict names the platform first; "its cookies hold no … session cookie" is SocialScrape's own finding.
+const rejectedByPlatform = (platform, reason) => String(reason || '').startsWith(platformName(platform));
+function accountCoolingDown(health) { return health?.status === 'rejected' && Boolean(health.retry_at) && health.retry_at * 1000 > Date.now(); }
+// What the dashboard says about one signed-in account, from the health the server recorded (sessions.Health.public):
+// only verdicts the server reached, with their times. Badge HTML is escaped here; lines are plain text.
+function accountHealth(platform, health = {}) {
+  const name = platformName(platform), lines = [];
+  const inconclusive = health?.inconclusive_at ? `The check at ${fmt(health.inconclusive_at)} was inconclusive: ${clause(health.inconclusive_reason) || 'no verdict.'} The verdict above still stands.` : '';
+  if (health?.status === 'rejected') {
+    const by = rejectedByPlatform(platform, health.reason) ? ` by ${esc(name)}` : '';
+    const at = health.rejected_at || health.checked_at;
+    lines.push(sentence(health.reason) || `${name} did not accept this session.`);
+    lines.push(accountCoolingDown(health) ? `Requests skip this account until ${fmt(health.retry_at)}. Replace it with a fresh cookies.txt export.` : 'Its pause has ended: requests use it again and check it if they fail.');
+    if (inconclusive) lines.push(inconclusive);
+    return {tone:'bad', badge:`Rejected${by}${at ? ` · ${shortWhen(at)}` : ''}`, checked:health.checked_at, lines};
+  }
+  if (health?.status === 'alive') {
+    const signedIn = health.account ? `Signed in as @${health.account}.` : '';
+    if (health.limited) lines.push(`${signedIn ? `${signedIn} ` : ''}${name} restricts this account: ${health.reason || 'some signed-in requests are refused'}.`.replace(/\.\.$/, '.'));
+    else if (signedIn) lines.push(signedIn);
+    if (inconclusive) lines.push(inconclusive);
+    return {tone:health.limited ? 'warn' : 'good', badge:health.limited ? `Restricted by ${esc(name)}` : 'Working', checked:health.checked_at, lines};
+  }
+  if (health?.inconclusive_at) return {tone:'', badge:'Check inconclusive', checked:health.inconclusive_at, lines:[sentence(health.inconclusive_reason) || 'The check reached no verdict.', 'Requests still use this account. Check again in a minute.']};
+  if (!accountChecks.has(platform)) return {tone:'', badge:'No account check', checked:null, lines:[`SocialScrape cannot check ${name} sessions. A request that fails with this account is retried without cookies.`]};
+  return {tone:'', badge:'Not checked yet', checked:null, lines:[`Check asks ${name} whether this session still works.`]};
 }
-function accountCheckToast(platform, result, saved = false) {
-  const name = platformName(platform), lead = saved ? `Signed-in account saved for ${name}` : 'Account check completed';
-  if (result?.status === 'alive') return [`${lead}${result.account ? ` · signed in as @${result.account}` : ''}${result.limited ? `. ${name} restricts it: ${result.reason}` : '.'}`, result.limited ? 'warning' : 'success', Boolean(result.limited)];
-  if (result?.status === 'rejected') return [`${saved ? 'Saved, but the account was rejected' : 'Account rejected'}: ${result.reason}. Requests skip it; replace it with a fresh cookies.txt export.`, 'error', true];
-  if (result && result.supported === false) return [saved ? `${lead}.` : `No account check is available for ${name}.`, saved ? 'success' : 'info', false];
-  return [`${lead}. The account check was inconclusive${result?.reason ? `: ${result.reason}` : ''}.`, 'warning', true];
+function accountSummary(platform, item) {
+  const view = accountHealth(platform, item.health);
+  return `<div class="account-head"><strong>${poolPosition(item.position)}</strong><span class="badge ${view.tone}" data-account-badge>${view.badge}</span></div><span>Updated ${esc(fmt(item.updated_at))}</span>${view.checked ? `<span>Last checked ${esc(fmt(view.checked))}</span>` : ''}${view.lines.map((line, index) => `<span class="account-detail${index ? '' : ' account-reason'}">${esc(line)}</span>`).join('')}`;
+}
+// Toast text for a check result -> [message, type, persistent]. `saved`: the check that runs when an account is added.
+function accountCheckToast(platform, position, result, saved = false) {
+  const name = platformName(platform), slot = `${poolPosition(position)} account`, lead = saved ? `Signed-in account saved for ${name}. ` : '';
+  const signedIn = result?.account ? ` · signed in as @${result.account}` : '';
+  if (result?.status === 'alive' && result.limited) return [`${lead}${name} restricts the ${slot}: ${result.reason || 'some signed-in requests are refused'}.`.replace(/\.\.$/, '.'), 'warning', false];
+  if (result?.status === 'alive') return [saved ? `${lead}It works${signedIn}.` : `The ${name} ${slot} works${signedIn}.`, 'success', false];
+  if (result?.status === 'rejected') { const until = accountCoolingDown(result.health) ? ` Requests skip it until ${fmt(result.health.retry_at)}.` : ''; const what = rejectedByPlatform(platform, result.reason) ? `${name} rejected the ${slot}: ${clause(result.reason)}` : `the ${name} ${slot} was rejected: ${clause(result.reason) || 'the session is not accepted.'}`; return [`${saved ? 'Saved, but ' : ''}${saved ? what : sentence(what)}${until} Replace it with a fresh cookies.txt export.`, 'warning', true]; }
+  if (result?.supported === false) return [`${lead}SocialScrape cannot check ${name} sessions.`, saved ? 'success' : 'info', false];
+  return [`${lead}The check of the ${name} ${slot} was inconclusive: ${clause(result?.reason) || 'no verdict.'}`, 'warning', false];
 }
 function poolList(platform, kind, items) {
   const noun = kind === 'proxy' ? 'proxy' : 'signed-in account';
-  return items.length ? `<ol class="manager-list">${items.map(item => `<li data-entry="${esc(item.id)}"><div class="manager-position"><strong>${poolPosition(item.position)}</strong><span>Updated ${esc(fmt(item.updated_at))}</span>${kind === 'proxy' ? '<span data-proxy-status role="status"></span>' : `<span class="account-status ${accountTone(item.health)}" data-account-status role="status">${esc(accountStatus(platform, item.health))}</span>`}</div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${kind === 'cookies' && accountChecks.has(platform) ? `<button class="ghost" type="button" data-check-account data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Check ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Check</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} up to ${poolPosition(item.position - 1)}"><span aria-hidden="true">↑</span></button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} down to ${poolPosition(item.position + 1)}"><span aria-hidden="true">↓</span></button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Remove ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No signed-in accounts configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway signed-in account below.');
+  return items.length ? `<ol class="manager-list">${items.map(item => `<li data-entry="${esc(item.id)}"${kind === 'cookies' ? ` class="account-row" data-position="${item.position}" data-updated="${esc(item.updated_at)}"` : ''}><div class="manager-position">${kind === 'proxy' ? `<strong>${poolPosition(item.position)}</strong><span>Updated ${esc(fmt(item.updated_at))}</span><span data-proxy-status role="status"></span>` : accountSummary(platform, item)}</div><div class="manager-actions">${kind === 'proxy' ? `<button class="ghost" type="button" data-test-proxy data-platform="${platform}" data-entry="${esc(item.id)}">Test</button>` : ''}${kind === 'cookies' && accountChecks.has(platform) ? `<button class="ghost" type="button" data-check-account data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Check ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Check</button>` : ''}${item.position > 1 ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="up" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} up to ${poolPosition(item.position - 1)}"><span aria-hidden="true">↑</span></button>` : ''}${item.position < items.length ? `<button class="icon-button" type="button" data-move-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" data-direction="down" aria-label="Move ${platformName(platform)} ${noun} ${poolPosition(item.position)} down to ${poolPosition(item.position + 1)}"><span aria-hidden="true">↓</span></button>` : ''}<button class="danger" type="button" data-remove-setting="${kind}" data-platform="${platform}" data-entry="${esc(item.id)}" aria-label="Remove ${platformName(platform)} ${noun} ${poolPosition(item.position)}">Remove</button></div></li>`).join('')}</ol>` : emptyState(kind === 'proxy' ? 'globe' : 'user-circle', kind === 'proxy' ? 'No proxies configured' : 'No signed-in accounts configured', kind === 'proxy' ? 'Add a primary proxy below.' : 'Add a dedicated throwaway signed-in account below.');
 }
 function managerFocus(entry, action) {
   return () => { const row=$(`#dialog .manager-list li[data-entry="${CSS.escape(String(entry))}"]`); return row?.querySelector(action) || row?.querySelector('[data-move-setting]') || row?.querySelector('[data-remove-setting]') || row?.querySelector('[data-test-proxy], [data-check-account]') || $('#dialog .manager-form input, #dialog [data-dialog-close]'); };
 }
 async function openPlatformManager(platform, kind, trigger = document.activeElement, initialFocus = null) {
   const data = await api('/portal/api/settings/platforms'), items = data[platform][kind];
+  syncProviderSummaries(data);
   dialogTrigger = trigger;
   const name = platformName(platform), isProxy = kind === 'proxy', full = items.length >= 5, noun = isProxy ? 'proxy' : 'signed-in account';
   const input = isProxy ? '<input name="value" type="password" required autocomplete="off" spellcheck="false" placeholder="http://username:password@host:port" aria-describedby="manager-input-help manager-input-error">' : '<input name="file" type="file" required accept=".txt,text/plain" aria-describedby="manager-input-help manager-input-error">';
-  const form = full ? `<div class="inline-note">${icon('check')}<span>Pool full · 5 of 5 configured</span></div>` : `<form class="platform-setting-form manager-form" data-platform="${platform}" data-kind="${kind}"><label class="field">Add ${items.length ? `Backup ${items.length}` : 'primary'} ${noun}${input}<span class="help" id="manager-input-help">${isProxy ? 'Credentials are encrypted and never shown again.' : 'Upload a Netscape cookies.txt file from a dedicated throwaway account, maximum 2 MiB.'}</span></label><div class="field-error" id="manager-input-error" role="alert" hidden></div><button class="primary" type="submit">Add ${noun}</button></form>`;
+  const form = full ? `<div class="inline-note">${icon('check')}<span>Pool full · 5 of 5 configured</span></div>` : `<form class="platform-setting-form manager-form" data-platform="${platform}" data-kind="${kind}"><label class="field">Add ${items.length ? `Backup ${items.length}` : 'primary'} ${noun}${input}<span class="help" id="manager-input-help">${isProxy ? 'Credentials are encrypted and never shown again.' : `Upload a Netscape cookies.txt file from a dedicated throwaway account, maximum 2 MiB.${accountChecks.has(platform) ? ` Adding it asks ${name} whether the session works; the account is kept either way.` : ''}`}</span></label><div class="field-error" id="manager-input-error" role="alert" hidden></div><button class="primary" type="submit">Add ${noun}</button></form>`;
   openDialog({title:`${name} ${isProxy ? 'proxies' : 'signed-in accounts'}`, description:`Ordered ${isProxy ? 'network' : 'signed-in account'} pool · ${items.length} of 5 configured`, body:`<div class="manager-content" data-platform="${platform}" data-kind="${kind}">${poolList(platform,kind,items)}<div class="field-error manager-pool-error" id="manager-pool-error" role="alert" hidden></div><div class="manager-add">${form}</div></div>`, footer:'<button class="ghost" data-dialog-close>Done</button>', initialFocus});
 }
 
@@ -251,10 +282,33 @@ function openCredentialDialog(button) {
   openDialog({title:label, description:'Encrypted platform credential', body:`<form class="credential-form" data-credential-key="${key}"><label class="field">${configured ? 'Replace credential' : 'Credential'}<textarea name="value" class="secret" required autocomplete="off" spellcheck="false" aria-describedby="credential-help credential-error"></textarea><span class="help" id="credential-help">${key.includes('shop') ? 'Paste a JSON object containing app_key, app_secret, access_token and shop_cipher.' : 'Paste the TikTok OAuth access token. It is encrypted and never returned.'}</span></label><div class="field-error" id="credential-error" role="alert" hidden></div></form>`, footer:`${configured ? '<button class="danger" data-remove-credential="'+key+'">Remove</button>' : ''}<button class="ghost" data-dialog-close>Cancel</button><button class="primary" data-save-credential="${key}">Save credential</button>`});
 }
 
+// A platform's summary card: a warning badge while any signed-in account's last verdict is a rejection.
+function providerBadge(item) {
+  const rejected = item.cookies.filter(entry => entry.health?.status === 'rejected').length;
+  if (rejected) return `<span class="badge warn" data-provider-badge>${rejected === 1 ? 'Account rejected' : `${rejected} accounts rejected`}</span>`;
+  const configured = item.proxy.length || item.cookies.length;
+  return `<span class="badge ${configured ? 'good' : ''}" data-provider-badge>${configured ? 'Configured' : 'Not configured'}</span>`;
+}
+function accountsSummary(cookies) {
+  const count = status => cookies.filter(entry => status(entry.health || {})).length;
+  const rejected = count(health => health.status === 'rejected'), restricted = count(health => health.status === 'alive' && health.limited);
+  return `${poolLabel('cookies', cookies.length)}${rejected ? ` · ${rejected} rejected` : ''}${restricted ? ` · ${restricted} restricted` : ''}`;
+}
+// The manager dialog changes pools and health over the settings page: keep its cards current without replacing
+// their buttons (the dialog returns focus to one of them).
+function syncProviderSummaries(data) {
+  for (const platform of platforms) {
+    const card = document.querySelector(`#view [data-provider-summary="${platform}"]`), item = data?.[platform];
+    if (!card || !item) continue;
+    card.querySelector('[data-provider-badge]').outerHTML = providerBadge(item);
+    card.querySelector('[data-pool-summary="proxy"]').textContent = poolLabel('proxy', item.proxy.length);
+    card.querySelector('[data-pool-summary="cookies"]').textContent = accountsSummary(item.cookies);
+  }
+}
 async function settingsPage() {
   if (PORTAL.role !== 'owner') return ownerOnly('Settings');
   const [data, credentials] = await Promise.all([api('/portal/api/settings/platforms'), api('/portal/api/settings/platform-credentials')]);
-  const cards = platforms.map(platform => { const item=data[platform], rejected=item.cookies.filter(entry => entry.health?.status === 'rejected').length; return `<section class="card provider-summary"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2><span class="badge ${rejected ? 'warn' : item.proxy.length || item.cookies.length ? 'good' : ''}">${rejected ? (rejected === 1 ? 'Account rejected' : 'Accounts rejected') : item.proxy.length || item.cookies.length ? 'Configured' : 'Not configured'}</span></div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small>${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Signed-in accounts</strong><small>${poolLabel('cookies',item.cookies.length)}${rejected ? ` · ${rejected} rejected` : ''}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage signed-in accounts</button></div></section>`; }).join('');
+  const cards = platforms.map(platform => { const item=data[platform]; return `<section class="card provider-summary" data-provider-summary="${platform}"><div class="provider-summary-head"><h2>${platformLabel(platform)}</h2>${providerBadge(item)}</div><div class="provider-setting-row"><div>${icon('globe')}<span><strong>Proxy pool</strong><small data-pool-summary="proxy">${poolLabel('proxy',item.proxy.length)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="proxy">Manage proxies</button></div><div class="provider-setting-row"><div>${icon('user-circle')}<span><strong>Signed-in accounts</strong><small data-pool-summary="cookies">${accountsSummary(item.cookies)}</small></span></div><button class="ghost" data-manage-platform="${platform}" data-manage-kind="cookies">Manage signed-in accounts</button></div></section>`; }).join('');
   const research=credentials['tiktok.research_token'], shop=credentials['tiktok.shop_credentials'];
   const credentialRow=(key,label,copy,status) => `<div class="provider-setting-row"><div>${icon('key')}<span><strong>${label}</strong><small>${status.configured ? `Configured · updated ${esc(fmt(status.updated_at))}` : copy}</small></span></div><button class="ghost" data-manage-credential="${key}" data-credential-label="${esc(label)}" data-configured="${status.configured}">${status.configured ? 'Replace' : 'Configure'}</button></div>`;
   const tiktokCredentials=`<section class="card provider-summary credential-summary"><div class="provider-summary-head"><h2>${platformLabel('tiktok')} API credentials</h2><span class="badge ${research.configured || shop.configured ? 'good' : ''}">${research.configured || shop.configured ? 'Partially configured' : 'Not configured'}</span></div>${credentialRow('tiktok-research_token','Research & Ad Library OAuth','Needs research.data.basic / research.adlib.basic',research)}${credentialRow('tiktok-shop_credentials','TikTok Shop app','JSON bundle: app_key, app_secret, access_token, shop_cipher',shop)}</section>`;
@@ -695,22 +749,35 @@ async function testPlatformProxy(button) {
   finally { done(); }
 }
 
+// Check keeps focus on its own button: only the row's health text changes, and the result is also announced in a toast.
 async function checkPlatformAccount(button) {
   const done = pendingButton(button, 'Checking…');
   if (!done) return;
-  const platform = button.dataset.platform, status = button.closest('li').querySelector('[data-account-status]');
+  const {platform, entry} = button.dataset, position = Number(button.closest('li')?.dataset.position) || 1;
+  const row = () => $(`#dialog .manager-content[data-platform="${platform}"][data-kind="cookies"] li[data-entry="${CSS.escape(entry)}"]`);
+  row()?.querySelector('[data-account-check-error]')?.remove();
   try {
-    const result = await api(`/portal/api/settings/platforms/${platform}/cookies/${button.dataset.entry}/check`, {method:'POST', timeout:30000});
-    status.textContent = accountStatus(platform, result.health); status.className = `account-status ${accountTone(result.health)}`;
-    const [message, type, persistent] = accountCheckToast(platform, result); toast(message, {type, persistent});
-  } catch (error) { const message = error.timeout ? 'The account check timed out after 30 seconds. Try again in a minute.' : error.message; status.textContent = message; toast(message, {type:'error', persistent:true}); }
-  finally { done(); }
+    const result = await api(`/portal/api/settings/platforms/${platform}/cookies/${entry}/check`, {method:'POST', timeout:30000});
+    const current = row();
+    if (current) current.querySelector('.manager-position').innerHTML = accountSummary(platform, {position:Number(current.dataset.position), updated_at:Number(current.dataset.updated), health:result.health});
+    const [message, type, persistent] = accountCheckToast(platform, position, result); toast(message, {type, persistent});
+    api('/portal/api/settings/platforms').then(syncProviderSummaries).catch(() => {});
+  } catch (error) {
+    if (error.status === 404) {
+      if (row()) await openPlatformManager(platform, 'cookies', dialogTrigger, () => $('#dialog [data-check-account], #dialog .manager-form input') || $('#dialog .modal-foot [data-dialog-close]'));
+      toast('This signed-in account was already removed. The current list has been refreshed.', {type:'info'});
+      return;
+    }
+    const message = error.timeout ? 'The account check timed out after 30 seconds. Try again in a minute.' : error.message;
+    row()?.querySelector('.manager-position').insertAdjacentHTML('beforeend', `<span class="account-check-error" data-account-check-error>Check failed: ${esc(sentence(message))} The status above is from the last completed check.</span>`);
+    toast(`Could not check the ${platformName(platform)} ${poolPosition(position)} account: ${message}`, {type:'error', persistent:true});
+  } finally { done(); }
 }
 
 async function savePlatformSetting(form) {
   const button = form.querySelector('button[type=submit]'), error = form.querySelector('.field-error'), input = form.querySelector('input');
   const platform = form.dataset.platform, kind = form.dataset.kind;
-  const done = pendingButton(button, kind === 'proxy' ? 'Saving proxy…' : 'Saving signed-in account…');
+  const done = pendingButton(button, kind === 'proxy' ? 'Saving proxy…' : accountChecks.has(platform) ? 'Saving and checking…' : 'Saving signed-in account…');
   if (!done) return;
   error.hidden = true; input.removeAttribute('aria-invalid');
   try {
@@ -724,7 +791,7 @@ async function savePlatformSetting(form) {
     // A new signed-in account is checked by the server before it answers (up to ~25 s); it is kept whatever the check says.
     const data = await api(`/portal/api/settings/platforms/${platform}/${kind}`, {method:'POST', body:{value}, timeout:kind === 'cookies' ? 45000 : null});
     await openPlatformManager(platform, kind, dialogTrigger, managerFocus(data.id, '[data-move-setting], [data-remove-setting], [data-test-proxy], [data-check-account]'));
-    if (kind === 'cookies') { const [message, type, persistent] = accountCheckToast(platform, data.check, true); toast(message, {type, persistent}); }
+    if (kind === 'cookies') { const added = $(`#dialog .manager-list li[data-entry="${CSS.escape(String(data.id))}"]`); const [message, type, persistent] = accountCheckToast(platform, Number(added?.dataset.position) || 1, data.check, true); toast(message, {type, persistent}); }
     else toast(`Proxy saved for ${platformName(platform)}.`);
   } catch (err) { error.textContent = err.message; error.hidden = false; if (err.field || [400,422].includes(err.status)) { input.setAttribute('aria-invalid','true'); input.focus(); } }
   finally { done(); }
