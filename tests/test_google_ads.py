@@ -386,3 +386,13 @@ def test_hydration_refused_midway_is_a_503_not_a_short_page(fake):
     response = client.get("/v1/google/company/ads", params={"domain": "lululemon.com", "get_ad_details": "true"})
     assert response.status_code == 503 and response.headers["Retry-After"] == "60"
     assert sum(method == "LookupService/GetCreativeById" for method, _ in ie.requests) == 2
+
+
+def test_advertiser_id_wins_over_domain(fake):
+    # ScrapeCreators' own example sends both; the advertiser id is the more specific input.
+    client, ie = fake
+    response = client.get("/v1/google/company/ads", params={
+        "domain": "lululemon.com", "advertiser_id": "AR01614014350098432001"})
+    assert response.status_code == 200, response.text
+    payload = ie.requests[-1][1]
+    assert payload["3"]["13"]["1"] == ["AR01614014350098432001"] and "12" not in payload["3"]

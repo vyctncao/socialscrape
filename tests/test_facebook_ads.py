@@ -439,3 +439,33 @@ def test_facebook_get_openapi_documents_enums(client):
     search = {item["name"]: item for item in paths["/v1/facebook/adLibrary/search/ads"]["get"]["parameters"]}
     assert search["search_type"]["schema"]["enum"] == ["keyword_unordered", "keyword_exact_phrase"]
     assert search["ad_type"]["schema"]["enum"] == ["all", "political_and_issue_ads"]
+
+
+def test_both_inputs_of_a_pair_take_the_specific_one(client, monkeypatch):
+    # ScrapeCreators' own examples send pageId with companyName and id with url, so a copied request must work.
+    fixture = json.loads(SEARCH_FIXTURE.read_text())
+    seen = []
+    monkeypatch.setattr(F, "with_ydl", _fake_with_ydl)
+    monkeypatch.setattr(F, "_fetch_search", lambda ydl, params, cursor: (
+        seen.append(params) or ({"page_info": fixture["page_info"]}, [M.decorate_ad(fixture["ads"][0])])))
+
+    async def resolve(name):
+        raise AssertionError("companyName must not be resolved next to a pageId")
+
+    monkeypatch.setattr(F, "_resolve_company", resolve)
+    body = {"pageId": "15087023444", "companyName": "Lululemon"}
+    assert client.get("/v1/facebook/adLibrary/company/ads", params=body).status_code == 200
+    assert client.post("/v1/facebook/adLibrary/company/ads", json=body).status_code == 200
+    assert all("15087023444" in json.dumps(params) for params in seen)
+
+    archive = json.loads(DETAIL_FIXTURE.read_text())["archive"]
+    asked = []
+
+    async def detail(ident, *, details=False):
+        asked.append(ident)
+        return archive, None
+
+    monkeypatch.setattr(F, "_detail_archive", detail)
+    other = "https://www.facebook.com/ads/library/?id=1111111111111111"
+    response = client.get("/v1/facebook/adLibrary/ad", params={"id": archive["ad_archive_id"], "url": other})
+    assert response.status_code == 200 and asked == [archive["ad_archive_id"]]

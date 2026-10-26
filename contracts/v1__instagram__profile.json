@@ -38,7 +38,8 @@
    "string"
   ],
   "data.user.business_address_json": [
-   "object"
+   "object",
+   "string"
   ],
   "data.user.business_address_json.city_id": [
    "integer"

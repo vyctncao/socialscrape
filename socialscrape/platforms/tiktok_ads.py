@@ -59,8 +59,10 @@ def _search_params(query: str | None, advertiser_name: str | None, adv_biz_ids: 
     query = (query or "").strip()
     advertiser_name = (advertiser_name or "").strip()
     adv_biz_ids = (adv_biz_ids or "").strip()
-    if bool(query) == bool(advertiser_name):
-        raise BadRequest("Provide exactly one of: query, advertiser_name")
+    if not query and not advertiser_name:
+        raise BadRequest("Provide one of: query, advertiser_name")
+    if advertiser_name:  # ScrapeCreators' own examples send both: the advertiser search wins
+        query = ""
     if adv_biz_ids and not advertiser_name:
         raise BadRequest("adv_biz_ids requires advertiser_name")
     if adv_biz_ids and not _ID.fullmatch(adv_biz_ids):
@@ -331,9 +333,9 @@ def _ad(ydl: Any, ident: str) -> dict[str, Any]:
                "429) is a 503 upstream_blocked."))
 async def tiktok_ad_library_search(
     query: str | None = Query(None, description=(
-        "General ad search. Provide either query or advertiser_name, not both.")),
+        "General ad search. Provide either query or advertiser_name; with both, advertiser_name wins.")),
     advertiser_name: str | None = Query(None, description=(
-        "Advertiser name resolved through TikTok's typeahead. Provide either advertiser_name or query, not both.")),
+        "Advertiser name resolved through TikTok's typeahead. Wins over query when both are sent.")),
     adv_biz_ids: str | None = Query(None, description=(
         "TikTok advertiser business ID used with advertiser_name to pin the exact advertiser.")),
     cursor: str | None = Query(None, description="Opaque cursor returned from the previous response."),

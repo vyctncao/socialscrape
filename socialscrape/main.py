@@ -36,14 +36,17 @@ from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
                      validation_error_handler)
+from .examples import install_examples
 from .portal import PortalStore, clear_active_portal, install_portal
 from .registry import IMPLEMENTED, add_unsupported_routes, coverage, mark_unsupported
 
 log = logging.getLogger("socialscrape")
 
 # The API reference is public with or without the portal: /openapi.json feeds /redoc and the dashboard's docs page,
-# which signed-out visitors can read too (portal.py). It lists the API endpoints only, never the portal's own.
-PUBLIC_PATHS = {"/health", "/redoc", "/openapi.json", "/meta/coverage", "/favicon.svg", "/favicon.ico"}
+# which signed-out visitors can read too (portal.py), and /meta/examples its request and response examples. It lists
+# the API endpoints only, never the portal's own.
+PUBLIC_PATHS = {"/health", "/redoc", "/openapi.json", "/meta/coverage", "/meta/examples", "/favicon.svg",
+                "/favicon.ico"}
 LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs"}
 PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/assets/", "/app", "/docs")
 OAUTH_PUBLIC_PREFIXES = ("/.well-known/", "/oauth/")
@@ -289,6 +292,7 @@ def create_app() -> FastAPI:
             "endpoints": rows,
         }
 
+    install_examples(app)
     return app
 
 

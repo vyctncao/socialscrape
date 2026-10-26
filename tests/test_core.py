@@ -1860,6 +1860,8 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     assert f'/assets/portal.css?v={script_url[2]}' in dashboard and "__ASSET_VERSION__" not in dashboard
     assert f'<script src="/assets/preview.js?v={script_url[2]}">' in dashboard  # the playground's response preview
     assert "const ResponsePreview" in owner.get(f"/assets/preview.js?v={script_url[2]}").text
+    assert f'<script src="/assets/snippets.js?v={script_url[2]}">' in dashboard  # the docs' and playground's code
+    assert "const Snippets" in owner.get(f"/assets/snippets.js?v={script_url[2]}").text
     # Related views share a title and a tab row: Usage holds history, Settings holds the fallback.
     for route, title in [("", "Overview"), ("playground", "Playground"), ("keys", "API keys"),
                          ("team", "Team"), ("history", "Usage"), ("usage", "Usage"),
@@ -1954,6 +1956,7 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
     anonymous = TestClient(create_app(), base_url="https://testserver", raise_server_exceptions=False)
     assert anonymous.get("/app", follow_redirects=False).headers["location"] == "/login"
     assert anonymous.get("/openapi.json").status_code == 200  # the API reference is public
+    assert anonymous.get("/meta/examples", params={"method": "GET", "path": "/v1/tiktok/profile"}).status_code == 200
     public_docs = anonymous.get("/app/docs")
     assert public_docs.status_code == 200 and '"public": true' in public_docs.text and "owner@example.com" not in public_docs.text
     assert anonymous.get("/docs", follow_redirects=False).headers["location"] == "/app/docs"
@@ -2116,6 +2119,7 @@ def test_documentation_loading_and_interaction_contract():
     static = __import__('pathlib').Path(__file__).parents[1] / 'socialscrape' / 'static'
     html = (static / 'loading.html').read_text()
     script = (static / 'portal.js').read_text()
+    snippets = (static / 'snippets.js').read_text()
     css = (static / 'portal.css').read_text()
     assert '<h1>Documentation</h1>' not in html
     assert 'class="skeleton sk-heading" aria-hidden="true"' in html
@@ -2129,11 +2133,40 @@ def test_documentation_loading_and_interaction_contract():
     assert "live('[data-loading-title]')?.dataset.loadingTitle" in script
     assert "!element.closest('.loading-overlay')" in script  # the fading skeleton never names a loaded page
     assert '.docs-disclosure:not([open])>.docs-nav-content{display:none}' in css
-    assert 'function docRequestUrl(path, parameters)' in script
-    assert "param.in === 'query' && param.required" in script
-    assert 'URLSearchParams()' in script
     assert 'normalizeSchema(param)' in script
-    assert 'Open in playground' in script
+    # The endpoint page follows ScrapeCreators': a method bar with Try it, Headers, fields, then the request card
+    # (six languages, copy, Copy for AI) and the response card (each documented status, copy, expand).
+    assert '<div class="method-bar"><span class="method" data-method="${method}">${method}</span>' in script
+    assert 'href="/app/playground?endpoint=${encodeURIComponent(path)}&method=${method}">Try it' in script
+    assert 'PORTAL.public ? `<a class="primary" href="/login" title="Sign in to try requests">Try it' in script
+    assert "description:'Your Social Scrape API key'" in script and "<h2>Headers</h2>" in script
+    assert "const docStatuses = ['200', '200 (trimmed)', '404', '403', '500']" in script
+    assert "api(`/meta/examples?${new URLSearchParams({method:doc.method, path:doc.path})}`, {responseText:true})" in script
+    assert 'data-doc-copy-ai aria-label="Copy prompt for AI assistant"' in script and 'Snippets.prompt({' in script
+    # Like ScrapeCreators' docs, a GET's request card shows the bare path and a POST's every documented body field.
+    assert "params:doc.method === 'POST' ? docBody(doc) : {}" in script
+    assert "<h1>${esc(`${tag} ${title} API`)}</h1>" in script  # "Facebook Ad Library Company Ads API"
+    assert 'data-doc-expand aria-label="Expand response"' in script and "classList.add('code-dialog')" in script
+    assert 'data-doc-examples-retry' in script and '<span class="sr-only">Loading response examples…</span>' in script
+    assert "$('#loading-status').textContent = 'The response examples could not load. Use Try again to retry.'" in script
+    assert "data-tone=\"${code.startsWith('2') ? 'success' : 'danger'}\"" in script
+    assert "localStorage.setItem('socialscrape-language', language)" in script  # shared with the playground
+    assert "paintSnippet($('#snippet'), Snippets.build(" in script and "languageTabs('tab', 'snippet')" in script
+    assert "[role=tablist]').querySelectorAll('[role=tab]')" in script  # tabs rove within their own list
+    assert '@container doc-content (min-width:780px)' in css
+    assert '.endpoint-examples{position:sticky;top:88px;align-self:start;max-height:calc(100dvh - 112px)' in css
+    assert 'overscroll-behavior:contain' not in css  # a wheel over the sticky column still scrolls the page
+    assert '.modal.code-dialog{' in css  # wider than .modal's 480px
+    # A clipped tab row fades at the edges with tabs beyond them, at every width, and a vertical wheel scrolls it.
+    assert ".code-card-tabs[data-overflow~=end]{mask-image:" in css and "row.addEventListener('wheel', scrollTabRow, {passive:false})" in script
+    assert '.code-card-tabs [role=tab]{position:relative;flex:none;min-width:40px;min-height:44px' in css
+    assert '.code-card-actions .icon-button{width' not in css  # the actions keep the 40px/44px icon buttons
+    assert '@media(forced-colors:active){.code-card-tabs [role=tab][aria-selected=true]{border-bottom:2px solid CanvasText}}' in css
+    assert '.code-card-tabs [data-tone=success]:hover,.code-card-tabs [data-tone=success][aria-selected=true]{color:var(--success)}' in css
+    assert '.code-card-tabs [data-tone=danger]:hover,.code-card-tabs [data-tone=danger][aria-selected=true]{color:var(--danger)}' in css
+    assert '.tok-string{color:var(--success)}' in css and '.code-dialog{' in css
+    icons = (static / 'brand' / 'icons.svg').read_text()
+    assert '<symbol id="sparkle"' in icons and '<symbol id="arrows-out"' in icons
     assert 'role="status" aria-live="polite" aria-atomic="true"' in script
     assert 'Current · outside search' in script
     assert 'Endpoint not found' in script
@@ -2144,8 +2177,8 @@ def test_documentation_loading_and_interaction_contract():
     assert "['get','post']" in script
     assert 'data-doc-method="${endpoint.method}"' in script
     assert 'aria-label="Featured endpoint"' in script
-    assert "method === 'POST' ? 'Request body' : 'Parameters'" in script
-    assert "method: 'POST'" in script and "requests.post(" in script
+    assert "method === 'POST' ? 'Body Parameters' : 'Query Parameters'" in script
+    assert "method: 'POST'" in snippets and "requests.post(" in snippets
     assert '.method[data-method=POST]' in css
     assert (static / 'brand' / 'platforms' / 'facebook.svg').is_file()
     assert (static / 'brand' / 'platforms' / 'google.svg').is_file()

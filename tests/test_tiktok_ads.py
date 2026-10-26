@@ -180,8 +180,7 @@ def test_cursor_is_bound_to_search(client, install):
 
 
 @pytest.mark.parametrize("params,message", [
-    ({}, "Provide exactly one"),
-    ({"query": "x", "advertiser_name": "y"}, "Provide exactly one"),
+    ({}, "Provide one of"),
     ({"query": "x", "adv_biz_ids": "12"}, "requires advertiser_name"),
     ({"advertiser_name": "x", "adv_biz_ids": "abc"}, "must be a numeric"),
     ({"query": "x", "cursor": "bad"}, "Invalid cursor"),
@@ -346,3 +345,13 @@ def test_research_token_routes_through_the_official_api(client, install, monkeyp
     assert body["title"] == "Official" and body["id"] == "1879780091329538"
     assert sent[1][0].endswith("/research/adlib/ad/detail/") and sent[1][1] == {"ad_id": 1879780091329538}
     assert not any("library.tiktok.com" in url for url, _ in ie.calls)
+
+
+def test_advertiser_name_wins_over_query(client, install):
+    # ScrapeCreators' own example sends both; advertiser_name is the more specific search.
+    ie = install({"/location": LOCATION, "support-regions": bootstrap(), "/suggestion": {"code": 0, "data": {
+        "adv_names": [{"name": "GYMSHARK LTD", "ids": "7647240890083328016"}]}}, "/search": search_page()})
+    response = client.get(SEARCH, params={"query": "shoes", "advertiser_name": "Gymshark"})
+    assert response.status_code == 200, response.text
+    searches = [json.loads(kwargs["data"]) for url, kwargs in ie.calls if "/search" in url]
+    assert searches[0]["query_type"] == "2" and searches[0]["query"] == "GYMSHARK LTD"
