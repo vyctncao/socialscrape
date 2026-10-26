@@ -4,7 +4,10 @@ Posts: InstagramIE runs unchanged (session setup, get_ruling check, the logged-o
 `PolarisLoggedOutDesktopWWWPostRootContentQuery` GraphQL call, /p/ page fallback)
 while the raw media it parses is recorded, so fields yt-dlp drops (owner, caption
 ids, tagged users, the first comments) are still available.
-Profiles, tags and highlights: the pages InstagramUserIE (profile page, plus
+With saved account cookies, instagram_authenticated reads the signed-in client's
+profile/feed/search queries and media-info API. Its page is a client shell and
+requires different request tokens and response shapes from the logged-out app.
+Without cookies, profiles, tags and highlights use the pages InstagramUserIE (profile page, plus
 its /reels/ tab), InstagramTagIE (/explore/tags/ -> /popular/) and InstagramStoryIE
 (/stories/highlights/<id>/) download, fetched through those extractor instances and
 read from the Relay data Instagram embeds for logged-out visitors.
@@ -20,6 +23,7 @@ import base64
 import dataclasses
 import json
 import logging
+import math
 import re
 import secrets
 import threading
@@ -375,25 +379,30 @@ async def fetch_post(url: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
     return await with_ydl(PLATFORM, _post_flow(url))
 
 
-def _page_flow(ie_name: str, url: str, item_id: str) -> Callable[[yt_dlp.YoutubeDL], tuple[str, str]]:
+def _page_flow(ie_name: str, url: str, item_id: str, *, allow_home: bool = False
+               ) -> Callable[[yt_dlp.YoutubeDL], tuple[str, str]]:
     def go(ydl: yt_dlp.YoutubeDL) -> tuple[str, str]:
         ie = ydl.get_info_extractor(ie_name)
         logged_in = ie._is_logged_in
         html, urlh = ie._download_webpage_handle(url, item_id, impersonate=ie._can_impersonate)
-        if logged_in and InstagramBaseIE._is_login_redirect(urlh.url):
+        requested_home = (allow_home and urllib.parse.urlsplit(url).path == "/"
+                          and urllib.parse.urlsplit(urlh.url).path == "/"
+                          and urllib.parse.urlsplit(urlh.url).netloc.lower() in _INSTAGRAM_HOSTS)
+        if logged_in and InstagramBaseIE._is_login_redirect(urlh.url) and not requested_home:
             raise SessionRejected()  # not the logged-out rate limit fetch_page reports for this redirect
         return html, urlh.url
 
     return go
 
 
-def _check_page(html: str, final_url: str, what: str) -> list[dict[str, Any]]:
+def _check_page(html: str, final_url: str, what: str, *, allow_home: bool = False) -> list[dict[str, Any]]:
     """The relay results of a logged-out page, unless it isn't one: NotFound for an address that left Instagram or
     its error page, UpstreamBlocked for the login page Instagram sends rate-limited anonymous visitors to."""
     if urllib.parse.urlparse(final_url).netloc.lower() not in _INSTAGRAM_HOSTS:
         # Reserved names such as /developer/ redirect off Instagram (developers.facebook.com).
         raise NotFound(f"{what} not found")
-    if InstagramBaseIE._is_login_redirect(final_url):
+    if (InstagramBaseIE._is_login_redirect(final_url)
+            and not (allow_home and urllib.parse.urlsplit(final_url).path == "/")):
         raise UpstreamBlocked(_LOGIN_WALL)
     if not html.strip():
         raise UpstreamBlocked(_EMPTY_PAGE)
@@ -453,15 +462,21 @@ def _profile_user(html: str, results: list[dict[str, Any]]) -> dict[str, Any]:
     return user
 
 
-async def fetch_profile(handle: str, tab: str = "") -> tuple[dict[str, Any], str]:
-    """Profile page InstagramUserIE downloads (or its /reels/ tab) -> (merged xig_user_by_username, html)."""
+async def fetch_profile(handle: str, tab: str = "", *, highlights: bool = False) -> tuple[dict[str, Any], str]:
+    """The profile's appropriate client: authenticated queries or logged-out Relay data."""
     url = f"{WEB}/{handle}/{tab + '/' if tab else ''}"
 
     def go(ydl: yt_dlp.YoutubeDL) -> tuple[dict[str, Any], str]:
         html, final_url = _page_flow("InstagramUser", url, handle)(ydl)
+        results = _check_page(html, final_url, "Profile")
+        ie = ydl.get_info_extractor("InstagramUser")
+        if ie._is_logged_in:
+            from . import instagram_authenticated
+
+            return instagram_authenticated.profile(ie, html, final_url, handle, tab, highlights=highlights), html
         # Missing Relay data on an app/block page can also be a retryable
         # refusal. Validate the resolved user inside the same profile attempt.
-        return _profile_user(html, _check_page(html, final_url, "Profile")), html
+        return _profile_user(html, results), html
 
     # Instagram can serve its missing-profile page to one connection while
     # another resolves the same public creator. Confirm within the finite pool.
@@ -751,7 +766,12 @@ def _feed_flow(handle: str, tab: str, cursor: str | None) -> Callable[[yt_dlp.Yo
         ie = ydl.get_info_extractor("InstagramUser")
         url = f"{WEB}/{handle}/{tab + '/' if tab else ''}"
         html, final_url = _page_flow("InstagramUser", url, handle)(ydl)
-        user = _profile_user(html, _check_page(html, final_url, "Profile"))
+        results = _check_page(html, final_url, "Profile")
+        if ie._is_logged_in:
+            from . import instagram_authenticated
+
+            return instagram_authenticated.feed(ie, html, final_url, handle, tab, cursor)
+        user = _profile_user(html, results)
         session = WebSession(ie, html, url)
         connection = traverse_obj(user, (_TAB_CONNECTION[tab], {dict})) or {}
         blocked = False
@@ -1085,17 +1105,25 @@ def map_profile(user: dict[str, Any], post_count: tuple[int, bool] | None = None
         "biography": user.get("biography"),
         "bio_links": [compact({k: link.get(k) for k in ("title", "lynx_url", "url", "link_type")})
                       for link in traverse_obj(user, ("bio_links", ..., {dict}))],
-        "fbid": str_or_none(user.get("id")),
+        "fbid": str_or_none(user.get("fbid_v2") or user.get("id")),
         "full_name": user.get("full_name"),
         "id": str_or_none(user.get("pk")),
         "is_private": user.get("is_private"),
         "is_verified": user.get("is_verified"),
         "profile_pic_url": user.get("profile_pic_url"),
+        "profile_pic_url_hd": traverse_obj(user, ("hd_profile_pic_url_info", "url", {str})),
+        "external_url": user.get("external_url"),
+        "external_url_linkshimmed": user.get("external_lynx_url"),
+        "category_name": user.get("category"),
+        "is_business_account": user.get("is_business"),
+        "is_professional_account": user.get("is_professional_account"),
         "username": user.get("username"),
         "edge_followed_by": compact({"count": user.get("follower_count")}),
         "edge_follow": compact({"count": user.get("following_count")}),
         "edge_owner_to_timeline_media": compact({
-            "count": post_count[0] if post_count and not post_count[1] else None,
+            "count": (user["media_count"] if isinstance(user.get("media_count"), int)
+                      and not isinstance(user["media_count"], bool) and user["media_count"] >= 0
+                      else post_count[0] if post_count and not post_count[1] else None),
             "page_info": compact({"has_next_page": page_info.get("has_next_page"),
                                   "end_cursor": page_info.get("end_cursor")}) if page_info else None,
             "edges": [{"node": _timeline_node(n)}
@@ -1116,7 +1144,7 @@ def _user_v2(user: dict[str, Any]) -> dict[str, Any]:
         "is_verified": user.get("is_verified"),
         "is_unpublished": user.get("is_unpublished"),
         "profile_pic_url": user.get("profile_pic_url"),
-        "fbid_v2": str_or_none(user.get("id")),
+        "fbid_v2": str_or_none(user.get("fbid_v2") or user.get("id")),
     })
 
 
@@ -1690,8 +1718,11 @@ async def instagram_transcript(url: str = Query(...), allow_long_transcription: 
     return {"transcripts": transcripts}
 
 
-@sc_get(router, "/v1/instagram/profile", source="yt-dlp InstagramUserIE profile page (logged-out Relay data)",
-        notes="From the logged-out profile page: bio, bio_links, follower/following counts, verified/private, "
+@sc_get(router, "/v1/instagram/profile", source="Instagram signed-in profile/posts GraphQL queries or logged-out Relay page",
+        notes="With saved account cookies, reads the signed-in client's profile and posts queries: exact media "
+              "count, follower/following counts, bio, links, HD avatar and public business fields when exposed. "
+              "The returned profile ID and username must match the requested route. "
+              "Without cookies, from the logged-out profile page: bio, bio_links, follower/following counts, verified/private, "
               "fbid, the first 12 posts (slim nodes: no counts/timestamps/video URLs, has_audio or "
               "comments_disabled) with Instagram's own page_info. edge_owner_to_timeline_media.count comes from "
               "the page's 'N Posts' text and is omitted when Instagram abbreviates it. Not on the page: "
@@ -1716,18 +1747,21 @@ async def instagram_profile_post(request: Request) -> Any:
     return {"success": True, "credits_charged": 0, **await instagram_profile(payload["handle"], payload.get("trim"))}
 
 
-@sc_get(router, "/v1/instagram/profile/post-count", source="yt-dlp InstagramUserIE profile page (og:description)",
+@sc_get(router, "/v1/instagram/profile/post-count", source="Instagram signed-in profile media_count or logged-out page metadata",
         responses={422: {"model": ErrorResponse, "description": "Only an abbreviated post count is shown and "
                          "allow_estimated isn't true (estimate_only, with estimated_media_count)"}},
-        notes="Parses the 'N Posts' figure of the logged-out profile page. Abbreviated values (12K, 1.2M) need "
+        notes="With saved account cookies, uses the exact numeric media_count from the signed-in profile query. "
+              "Without cookies, parses the 'N Posts' figure of the logged-out profile page. Abbreviated values (12K, 1.2M) need "
               "allow_estimated=true, otherwise 422 estimate_only; a page without the figure returns 500. A "
               "restricted (age-gated) profile still shows the figure, so it is counted too (403 "
               "restricted_profile only when its page has none).")
 async def instagram_post_count(handle: str = Query(...), allow_estimated: str | None = None) -> dict[str, Any]:
     handle = clean_handle(handle)
     try:
-        _, html = await fetch_profile(handle)
-        found = post_count_from_meta(html)
+        user, html = await fetch_profile(handle)
+        count = user.get("media_count")
+        found = ((count, False) if isinstance(count, int) and not isinstance(count, bool) and count >= 0
+                 else post_count_from_meta(html))
     except RestrictedProfile as exc:  # no profile data for logged-out visitors, but og:description keeps the count
         found = post_count_from_meta(exc.html)
         if found is None:
@@ -1752,9 +1786,28 @@ _DETAILS_NOTE = ("Each item is completed by the logged-out post query InstagramI
                  "rather than carry guesses.")
 
 
+def _require_play_counts(items: list[dict], *, reels: bool = False) -> None:
+    """The documented opt-in rejects partial video metrics; visible zero is valid."""
+    missing = 0
+    for item in items:
+        media = item.get("media") if isinstance(item.get("media"), dict) else item
+        if not reels and media.get("media_type") != 2 and media.get("is_video") is not True:
+            continue
+        value = media.get("play_count")
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or isinstance(value, float) and not math.isfinite(value) or value < 0):
+            missing += 1
+    if missing:
+        raise UpstreamBlocked("Instagram did not return a numeric nonnegative play_count for every video. "
+                              "No partial success was returned.", code="play_counts_unavailable", missing_count=missing)
+
+
 @sc_get(router, "/v2/instagram/user/posts",
-        source="yt-dlp InstagramUserIE profile page + the logged-out web client's posts-tab and post GraphQL queries",
-        notes="12 posts per page, newest first after any pinned ones, from the logged-out profile's posts tab: id, "
+        source="Instagram signed-in profile/posts GraphQL queries or logged-out profile/tab/post queries",
+        notes="With saved account cookies, reads complete native pages from the signed-in posts query with its "
+              "real cursor, dates, captions and crawler-visible play counts. Every returned item is kept; the "
+              "platform may return fewer than the requested 12. require_play_counts=true rejects a page with "
+              "unknown video play counts. Without cookies, 12 posts per page, newest first after any pinned ones, from the logged-out profile's posts tab: id, "
               "code, media_type, product_type, caption, display_uri, url and each post's own author "
               "(collaborators included); like_count and play_count (= ig_play_count) from the tab's query as "
               "Instagram serves it to crawlers (hidden counts are left out). " + _DETAILS_NOTE + " next_max_id "
@@ -1763,21 +1816,25 @@ _DETAILS_NOTE = ("Each item is completed by the logged-out post query InstagramI
               "returns 400 bad_cursor. A restricted (age-gated) profile returns 403 restricted_profile. trim is "
               "ignored.")
 async def instagram_user_posts(handle: str = Query(...), next_max_id: str | None = None,
-                               trim: str | None = None) -> dict[str, Any]:
-    return map_user_posts(await fetch_feed(clean_handle(handle), "", next_max_id or None))
+                               trim: str | None = None, require_play_counts: str | None = None) -> dict[str, Any]:
+    posts = map_user_posts(await fetch_feed(clean_handle(handle), "", next_max_id or None))
+    if require_play_counts == "true":
+        _require_play_counts(posts["items"])
+    return posts
 
 
 @sc_get(router, "/v1/instagram/user/reels",
-        source="yt-dlp InstagramUserIE profile page (/reels/ tab) + the logged-out web client's reels-tab and post "
-               "GraphQL queries",
-        notes="12 reels per page from the logged-out profile's reels tab: id, code, play_count (= ig_play_count), "
+        source="Instagram signed-in reels GraphQL/media-info queries or logged-out reels-tab/post queries",
+        notes="With saved account cookies, reads the signed-in reels grid with its real cursor, and completes "
+              "dates/captions using authenticated media info. A failed or mismatched detail is an error. "
+              "require_play_counts=true rejects unknown play counts. Without cookies, 12 reels per page from the logged-out profile's reels tab: id, code, play_count (= ig_play_count), "
               "comment_count, like_count, display_uri, url and the author. " + _DETAILS_NOTE + " max_id is "
               "Instagram's cursor for the next page (the tab's query with `after`); a cursor Instagram can't "
               "continue from returns 400 bad_cursor. handle only: user_id alone returns 501. A private account "
               "with nothing visible returns 403, as does a restricted (age-gated) profile (restricted_profile). "
               "trim is ignored.")
 async def instagram_user_reels(user_id: str | None = None, handle: str | None = None, max_id: str | None = None,
-                               trim: str | None = None) -> dict[str, Any]:
+                               trim: str | None = None, require_play_counts: str | None = None) -> dict[str, Any]:
     require_one(user_id=user_id, handle=handle)
     if not handle:
         raise NotSupported("Lookup by user_id is not supported; pass handle")
@@ -1785,11 +1842,14 @@ async def instagram_user_reels(user_id: str | None = None, handle: str | None = 
     reels = map_user_reels(feed)
     if not reels["items"] and feed.user.get("is_private") is True:  # collab media of a private account stays visible
         raise Forbidden("This account is private")
+    if require_play_counts == "true":
+        _require_play_counts(reels["items"], reels=True)
     return reels
 
 
-@sc_get(router, "/v1/instagram/user/highlights", source="yt-dlp InstagramUserIE profile page (highlights Relay data)",
-        notes="handle only: user_id alone returns 501 (no extractor resolves an id to a profile). Returns the "
+@sc_get(router, "/v1/instagram/user/highlights", source="Instagram signed-in highlight-tray query or logged-out Relay profile",
+        notes="With saved account cookies, reads the signed-in highlight tray and cover URLs. "
+              "handle only: user_id alone returns 501 (no extractor resolves an id to a profile). Returns the "
               "highlights the logged-out page embeds (first 10); a private account without any returns 403, as does "
               "a restricted (age-gated) profile (restricted_profile). "
               "cover_media.thumbnail_src is not exposed, only cover_media_cropped_thumbnail.url.")
@@ -1797,7 +1857,7 @@ async def instagram_highlights(user_id: str | None = None, handle: str | None = 
     require_one(user_id=user_id, handle=handle)
     if not handle:
         raise NotSupported("Lookup by user_id is not supported; pass handle")
-    user, _ = await fetch_profile(clean_handle(handle))
+    user, _ = await fetch_profile(clean_handle(handle), highlights=True)
     highlights = map_highlights(user)
     if not highlights and user.get("is_private") is True:
         raise Forbidden("This account is private")
@@ -1935,7 +1995,7 @@ def map_search(query: str, data: dict[str, Any]) -> dict[str, Any]:
             "rank_token": str_or_none(data.get("rank_token")), "users": users}
 
 
-@sc_get(router, "/v1/instagram/search", source="Instagram web top-search API (blended) with saved cookies",
+@sc_get(router, "/v1/instagram/search", source="Instagram signed-in PolarisAPITopsearchQuery (blended)",
         status="needs_setup",
         notes="Instagram's blended top search (users, hashtags, places), which it serves to signed-in sessions only: "
               "the logged-out call answers with a 404 page and the logged-out web has no search box. Without an "

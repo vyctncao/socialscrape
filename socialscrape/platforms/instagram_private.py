@@ -1,6 +1,7 @@
 """Instagram mobile/web API routes that require a saved Instagram cookie account."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import yt_dlp
@@ -8,7 +9,7 @@ from fastapi import APIRouter, Query
 from yt_dlp.extractor.instagram import InstagramIE
 from yt_dlp.utils import traverse_obj
 
-from ..errors import NotFound, NotSupported, require_one
+from ..errors import BadRequest, NotSupported, require_one
 from ..registry import sc_get
 from ..util import compact
 from ..ytdlp import with_ydl
@@ -33,29 +34,41 @@ def _mobile(path: str, item_id: str, query: dict[str, Any] | None = None):
     return go
 
 
-@sc_get(router, "/v1/instagram/basic-profile", source="Instagram mobile users/<id>/info API with saved cookies",
+@sc_get(router, "/v1/instagram/basic-profile", source="Instagram signed-in profile GraphQL query by numeric ID",
         status="needs_setup", notes="Requires a signed-in Instagram cookie account configured in Platform settings.")
 async def basic_profile(userId: str | None = None) -> dict[str, Any]:
     require_one(userId=userId)
-    data = await with_ydl(P, _mobile(f"users/{userId}/info/", userId))
-    user = traverse_obj(data, ("user", {dict}))
-    if not user:
-        raise NotFound("Instagram user not found")
-    return user
+    if not re.fullmatch(r"[0-9]{1,20}", userId):
+        raise BadRequest("userId must be an Instagram numeric user ID")
 
-
-async def topsearch(query: str, context: str) -> Any:
-    """Instagram's web top search (context 'user' or 'blended': users, hashtags and places). Logged-out clients have
-    no search: the call answers them with a 404 page, so it needs a saved cookie account (501 without one)."""
     def go(ydl: yt_dlp.YoutubeDL):
         ie = ydl.get_info_extractor("Instagram")
         _require_login(ie)
-        return _api_json(ydl, ie, f"{WEB}/web/search/topsearch/", query, "Searching Instagram",
-                         query={"context": context, "include_reel": "true", "query": query})
+        from . import instagram_authenticated
+        from .instagram import _check_page, _page_flow
+
+        html, final_url = _page_flow("Instagram", f"{WEB}/", "profile", allow_home=True)(ydl)
+        _check_page(html, final_url, "Profile", allow_home=True)
+        return instagram_authenticated.Session(ie, html, final_url).profile(None, userId)
+
     return await with_ydl(P, go)
 
 
-@sc_get(router, "/v1/instagram/search/profiles", source="Instagram web top-search API with saved cookies",
+async def topsearch(query: str, context: str) -> Any:
+    """Current signed-in GraphQL search (context user or blended); 501 without saved account cookies."""
+    def go(ydl: yt_dlp.YoutubeDL):
+        ie = ydl.get_info_extractor("Instagram")
+        _require_login(ie)
+        from . import instagram_authenticated
+        from .instagram import _check_page, _page_flow
+
+        html, final_url = _page_flow("Instagram", f"{WEB}/", "search", allow_home=True)(ydl)
+        _check_page(html, final_url, "Search", allow_home=True)
+        return instagram_authenticated.search(ie, html, final_url, query, context)
+    return await with_ydl(P, go)
+
+
+@sc_get(router, "/v1/instagram/search/profiles", source="Instagram signed-in PolarisAPITopsearchQuery (users)",
         status="needs_setup", notes="Requires a signed-in Instagram cookie account configured in Platform settings.")
 async def search_profiles(query: str = Query(..., min_length=1)) -> dict[str, Any]:
     data = await topsearch(query, "user")

@@ -1,5 +1,6 @@
 """An HTTP 200 login wall must reach the actual connection-profile retry loop."""
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,6 +11,11 @@ from tests.test_instagram import _sjs
 
 URL = "https://www.instagram.com/sample/"
 GOOD = _sjs({"data": {"xig_user_by_username": {"pk": "123", "username": "sample"}}})
+
+
+class Connection(str):
+    def get_info_extractor(self, name):
+        return SimpleNamespace(_is_logged_in=False)
 
 
 @pytest.mark.parametrize("bad,final", [
@@ -25,7 +31,7 @@ def test_profile_refusal_reaches_the_working_backup(monkeypatch, bad, final):
     def run(platform, fn, opts):
         proxy = opts["_dashboard_proxy"]
         attempts.append(proxy)
-        return fn(proxy)
+        return fn(Connection(proxy))
 
     monkeypatch.setattr(ytdlp, "_run", run)
     monkeypatch.setattr(ig, "_page_flow", lambda *args: lambda proxy: (bad, final)
@@ -41,7 +47,7 @@ def test_checked_page_refusal_reaches_the_working_backup(monkeypatch):
     def run(platform, fn, opts):
         proxy = opts["_dashboard_proxy"]
         attempts.append(proxy)
-        return fn(proxy)
+        return fn(Connection(proxy))
 
     monkeypatch.setattr(ytdlp, "_run", run)
     monkeypatch.setattr(ig, "_page_flow", lambda *args: lambda proxy: ("", URL)
@@ -73,7 +79,7 @@ def test_missing_profile_page_can_reach_a_working_backup(monkeypatch, listing):
     def run(platform, fn, opts):
         proxy = opts["_dashboard_proxy"]
         attempts.append(proxy)
-        return fn(proxy)
+        return fn(Connection(proxy))
 
     monkeypatch.setattr(ytdlp, "_run", run)
     missing = '{"pageID":"httpErrorPage"}'

@@ -553,3 +553,28 @@ def test_search_maps_the_blended_answer(client, monkeypatch):
     assert body["data"]["query"] == "nasa" and body["data"]["rank_token"] == "1792816190738|abc"
     report = check(body, "/v1/instagram/search")
     assert not report.mismatches and not report.extras and report.coverage >= 0.9, report
+
+
+@pytest.mark.parametrize('value', [None, -1, '12', True, float('nan'), float('inf')])
+def test_required_play_counts_reject_incomplete_reel_metrics(value):
+    for item in ({'play_count': value}, {'media': {'play_count': value}}):
+        with pytest.raises(UpstreamBlocked) as exc:
+            ig._require_play_counts([item], reels=True)
+        assert exc.value.status == 503 and exc.value.code == 'play_counts_unavailable'
+
+
+def test_required_play_counts_accept_real_zero_and_exempt_photos():
+    ig._require_play_counts([{'media_type': 1}, {'media_type': 8}, {'media_type': 2, 'play_count': 0}])
+    ig._require_play_counts([{'media': {'play_count': 0}}], reels=True)
+
+
+@pytest.mark.parametrize('path', ['/v2/instagram/user/posts', '/v1/instagram/user/reels'])
+def test_literal_play_count_opt_in_refuses_partial_success(client, monkeypatch, path):
+    async def feed(*args):
+        return ig.Feed({'pk': '1', 'username': 'sample'}, [{'pk': '2', 'code': 'abcdef', 'media_type': 2}], {}, {})
+    monkeypatch.setattr(ig, 'fetch_feed', feed)
+    for value in ('false', 'True', '1'):
+        response = client.get(path, params={'handle': 'sample', 'require_play_counts': value})
+        assert response.status_code == 200
+    response = client.get(path, params={'handle': 'sample', 'require_play_counts': 'true'})
+    assert response.status_code == 503 and response.json()['error'] == 'play_counts_unavailable'
