@@ -13,7 +13,7 @@ from yt_dlp.utils import ExtractorError
 from socialscrape.catalog import CATALOG
 from socialscrape.errors import BadRequest, Forbidden, NotFound, UpstreamBlocked, UpstreamError
 from socialscrape.platforms import _tiktok_map as M
-from socialscrape.platforms import tiktok, tiktok_ads
+from socialscrape.platforms import tiktok, tiktok_ads, tiktok_official, tiktok_shop
 from socialscrape.subtitles import Segment
 from tests.contract import assert_conforms
 from tests.e2e import skip_if_blocked
@@ -64,7 +64,8 @@ def test_every_tiktok_path_is_implemented_or_explained(client):
         assert path in routed, path
         assert row["notes"], path
         if row["status"] == "not_supported":
-            assert path in (tiktok.UNSUPPORTED | tiktok_ads.UNSUPPORTED)
+            assert path in (tiktok.UNSUPPORTED | tiktok_ads.UNSUPPORTED | tiktok_official.UNSUPPORTED
+                            | tiktok_shop.UNSUPPORTED)
             r = client.get(path)
             assert r.status_code == 501 and r.json()["error"] == "not_supported", path
         else:
@@ -2192,12 +2193,12 @@ def test_all_credential_gated_tiktok_routes_are_registered(client):
         "/v1/tiktok/search/suggestions": "platform_auth_required",
         "/v1/tiktok/search/top": "platform_auth_required",
         "/v1/tiktok/get-trending-feed": "platform_auth_required",
-        "/v1/tiktok/user/audience": "platform_oauth_required",
-        "/v1/tiktok/product": "platform_shop_auth_required",
-        "/v1/tiktok/shop/product/reviews": "platform_shop_auth_required",
-        "/v1/tiktok/shop/products": "platform_shop_auth_required",
-        "/v1/tiktok/shop/search": "platform_shop_auth_required",
-        "/v1/tiktok/user/showcase": "platform_shop_auth_required",
+        "/v1/tiktok/user/audience": "not_supported",
+        "/v1/tiktok/product": "not_supported",
+        "/v1/tiktok/shop/product/reviews": "not_supported",
+        "/v1/tiktok/shop/products": "not_supported",
+        "/v1/tiktok/shop/search": "not_supported",
+        "/v1/tiktok/user/showcase": "not_supported",
     }
     params = {
         "url": "https://www.tiktok.com/@x/video/123", "comment_id": "1", "handle": "x", "query": "x",

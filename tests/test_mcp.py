@@ -56,7 +56,9 @@ def test_tools_list_and_sse(monkeypatch):
         assert response.text.startswith("event: message\ndata: ")
         payload = json.loads(response.text.split("data: ", 1)[1])
         tools = payload["result"]["tools"]
-        assert len(tools) == 78
+        from socialscrape.catalog import UPSTREAM_OPERATIONS
+        from socialscrape.mcp import tool_name
+        assert {t["name"] for t in tools} == {tool_name(op["path"]) for op in UPSTREAM_OPERATIONS}
         assert [t["name"] for t in tools] == sorted(t["name"] for t in tools)
         assert {"v1_youtube_channel_videos", "v1_account_credit_balance",
                 "v1_facebook_adLibrary_search_ads", "v1_tiktok_ad_library_ad",
@@ -89,5 +91,20 @@ def test_tools_call_success_error_and_unknown(monkeypatch):
         assert unknown["result"] == {"content": [{"type": "text",
                                                     "text": "MCP error -32602: Tool no_such_tool not found"}],
                                      "isError": True}
+    finally:
+        clear.cache_clear()
+
+
+def test_mcp_boolean_query_uses_the_documented_literal_true(monkeypatch):
+    from socialscrape.platforms import instagram as ig
+    async def feed(*args):
+        return ig.Feed({'pk': '1', 'username': 'sample'}, [{'pk': '2', 'code': 'abcdef', 'media_type': 2}], {}, {})
+    monkeypatch.setattr(ig, 'fetch_feed', feed)
+    client, clear = auth_client(monkeypatch)
+    try:
+        result = client.post('/mcp', headers={'x-api-key': 'test-key', 'x-socialscrape-fallback': 'off'},
+            json=rpc('tools/call', params={'name': 'v1_instagram_user_reels',
+                                         'arguments': {'handle': 'sample', 'require_play_counts': True}})).json()['result']
+        assert result['isError'] and json.loads(result['content'][0]['text'])['error'] == 'play_counts_unavailable'
     finally:
         clear.cache_clear()

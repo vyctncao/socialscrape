@@ -16,7 +16,7 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-from .catalog import CATALOG
+from .catalog import CATALOG, UPSTREAM_OPERATIONS
 
 SUPPORTED_VERSIONS = ("2025-06-18", "2025-03-26")
 ACCOUNT_PATHS = {
@@ -32,7 +32,27 @@ def tool_name(path: str) -> str:
 
 
 def _catalog() -> list[dict[str, Any]]:
-    return json.loads(files("socialscrape.data").joinpath("mcp_tools.json").read_text())
+    tools = json.loads(files("socialscrape.data").joinpath("mcp_tools.json").read_text())
+    by_name = {tool["name"]: tool for tool in tools}
+    documented = {(op["method"], op["path"]): op for op in UPSTREAM_OPERATIONS}
+    for entry in CATALOG:
+        name = tool_name(entry["path"])
+        operation = documented.get(("GET", entry["path"]), {})
+        parameters = {p["name"]: p for p in operation.get("parameters", [])}
+        tool = by_name.setdefault(name, {
+            "name": name, "title": "SocialScrape - " + entry["summary"],
+            "description": (entry["summary"] + ". Check /meta/coverage for native availability; "
+                            "a documented operation is not proof of an implemented extractor."),
+            "inputSchema": {"type": "object", "properties": {}},
+            "annotations": {"readOnlyHint": True, "openWorldHint": True, "destructiveHint": False},
+            "execution": {"taskSupport": "forbidden"},
+        })
+        props = tool["inputSchema"].setdefault("properties", {})
+        for param in entry["params"]:
+            props.setdefault(param, parameters.get(param, {}).get("schema", {"type": "string"}))
+        if entry["required"]:
+            tool["inputSchema"]["required"] = entry["required"]
+    return sorted(by_name.values(), key=lambda tool: tool["name"])
 
 
 def _paths() -> dict[str, str]:
@@ -72,9 +92,10 @@ def _validate(schema: dict[str, Any], arguments: Any) -> str | None:
 
 
 async def _asgi_get(app: FastAPI, outer: Request, path: str, arguments: dict[str, Any]) -> tuple[int, Any]:
-    query = urlencode([(key, value) for key, value in arguments.items() if value is not None], doseq=True).encode()
+    query = urlencode([(key, str(value).lower() if isinstance(value, bool) else value)
+                       for key, value in arguments.items() if value is not None], doseq=True).encode()
     forwarded = []
-    for header in ("x-api-key", "authorization"):
+    for header in ("x-api-key", "authorization", "x-socialscrape-fallback"):
         if value := outer.headers.get(header):
             forwarded.append((header.encode(), value.encode("latin-1")))
     forwarded.append((b"accept", b"application/json"))

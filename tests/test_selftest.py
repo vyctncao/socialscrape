@@ -114,7 +114,7 @@ def test_the_page_learns_what_falls_back(signed_in):
     c = signed_in(SOCIALSCRAPE_SCRAPECREATORS_API_KEY="sc-key", SOCIALSCRAPE_SCRAPECREATORS_URL="http://127.0.0.1:9")
     falls_back = c.get("/portal/api/endpoint-tests").json()["fallback"]
     assert falls_back["provider"] == "scrapecreators" and falls_back["triggers"] == list(fallback.DEFAULT_TRIGGERS)
-    assert sorted(falls_back["platforms"]) == ["facebook", "google", "instagram", "tiktok", "youtube"]
+    assert sorted(falls_back["platforms"]) == sorted(fallback.PLATFORMS)
     # The page's requests skip it unless the member allows it.
     r = c.get("/v1/tiktok/video/comments", params={"url": "x"}, headers={fallback.HEADER: "OFF"})
     assert r.status_code == 501 and r.json()["error"] == "platform_auth_required"

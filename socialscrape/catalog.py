@@ -1,11 +1,14 @@
-"""Every ScrapeCreators endpoint in scope (YouTube, TikTok, Instagram, and ad libraries).
+"""The full documented ScrapeCreators endpoint inventory.
 
-Generated from https://docs.scrapecreators.com/openapi.json. Routes not
+Snapshot refreshed by scripts/refresh_upstream_contract.py. Routes not
 implemented by a platform module are served as 501 from this list.
 /v1/youtube/search also lists is_paid_promotions, which ScrapeCreators documents
 in that endpoint's description but leaves out of its parameter list."""
 
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 CATALOG: list[dict] = [
     {'path': '/v1/instagram/audio/reels', 'summary': 'Get Reels By Audio Id', 'params': ['audio_id', 'cursor'], 'required': ['audio_id'], 'tag': 'Instagram'},
@@ -83,3 +86,37 @@ CATALOG: list[dict] = [
     {'path': '/v1/google/ad', 'summary': 'Ad Details', 'params': ['url', 'cache_max_age'], 'required': ['url'], 'tag': 'Google Ad Library'},
     {'path': '/v1/google/adLibrary/advertisers/search', 'summary': 'Advertiser Search', 'params': ['query', 'region'], 'required': ['query'], 'tag': 'Google Ad Library'},
 ]
+
+# Keep the complete documented surface visible, including routes that have no
+# native implementation yet. Account operations remain in account.py: they are
+# local member usage and must never fall through to an upstream owner's account.
+UPSTREAM_CONTRACT = json.loads(Path(__file__).with_name("upstream_contract.json").read_text())
+UPSTREAM_OPERATIONS = UPSTREAM_CONTRACT["operations"]
+_legacy = {entry["path"]: entry for entry in CATALOG}
+_entries: dict[str, dict] = {}
+for _operation in UPSTREAM_OPERATIONS:
+    _path = _operation["path"]
+    if _path.startswith("/v1/account/"):
+        continue
+    _entry = _entries.setdefault(_path, {
+        "path": _path, "summary": _operation["summary"], "tag": _operation["tag"],
+        "params": [], "required": [], "methods": [], "examples": _operation["examples"],
+        "preset_expect": _operation["preset_expect"],
+        "response_kind": _operation["response_kind"],
+    })
+    _entry["methods"].append(_operation["method"])
+    for _parameter in _operation["parameters"]:
+        _name = _parameter["name"]
+        if _name not in _entry["params"]:
+            _entry["params"].append(_name)
+        if _parameter.get("required") and _name not in _entry["required"]:
+            _entry["required"].append(_name)
+    if _path in _legacy:
+        for _name in _legacy[_path]["params"]:
+            if _name not in _entry["params"]:
+                _entry["params"].append(_name)
+        if _legacy[_path].get("featured"):
+            _entry["featured"] = True
+CATALOG = list(_entries.values())
+# Described by the upstream endpoint but omitted from its parameter array.
+next(entry for entry in CATALOG if entry["path"] == "/v1/bluesky/user/posts")["params"].append("cursor")

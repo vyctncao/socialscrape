@@ -173,7 +173,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Social Scrape",
         version="0.1.0",
-        description="Private, self-hosted social data API for YouTube, TikTok, Instagram, and the Facebook, TikTok, and Google ad libraries.",
+        description="Private, self-hosted social data API. The full ScrapeCreators inventory is listed; /meta/coverage distinguishes native implementations, setup requirements and unsupported operations.",
         docs_url=None,
         redoc_url=None,
     )

@@ -2127,3 +2127,42 @@ def test_trending_shorts_composes_current_short_search(client, monkeypatch):
         return {"shorts": [{"id": "abc", "title": "Short"}], "continuationToken": "next"}
     monkeypatch.setattr(youtube_listings, "youtube_search", search)
     assert client.get("/v1/youtube/shorts/trending").json()["shorts"] == [{"id": "abc", "title": "Short"}]
+
+
+def channel_search_page(items):
+    return {"metadata": {"channelMetadataRenderer": {"externalId": NASA, "title": "NASA", "vanityChannelUrl": "https://www.youtube.com/@NASA"}},
+            "contents": {"twoColumnBrowseResultsRenderer": {"tabs": [{"expandableTabRenderer": {
+                "selected": True, "title": "Search", "endpoint": {"commandMetadata": {"webCommandMetadata": {"url": "/@NASA/search"}}},
+                "content": {"sectionListRenderer": {"contents": [{"itemSectionRenderer": {"contents": items}}]}}}}]}}}
+
+
+def test_channel_search_retains_pages_and_binds_its_cursor(client, upstream):
+    videos = []
+    for i in range(60):
+        video = copy.deepcopy(VIDEO_RENDERER)
+        video["videoId"] = f"video{i:06d}"
+        videos.append({"videoRenderer": video})
+    upstream.answers = [(channel_search_page(videos[:30] + [cont("CHANNEL-NEXT")]), {}),
+                        appended(videos[29:])]
+    first = client.get("/v1/youtube/channel/search", params={"handle": "NASA", "query": "moon & landing"}).json()
+    second = client.get("/v1/youtube/channel/search", params={"handle": "NASA", "query": "moon & landing",
+                                                            "continuationToken": first["continuationToken"]}).json()
+    items = first["shorts"] + second["shorts"]
+    assert len(first["shorts"]) == 30 and len(second["shorts"]) == 30 and len({v["id"] for v in items}) == 60
+    assert second["continuationToken"] is None
+    assert upstream.calls[0][1]["url"] == "https://www.youtube.com/@NASA/search?query=moon+%26+landing"
+    assert upstream.calls[1] == ("browse", {"query": {"continuation": "CHANNEL-NEXT"}, "client": "web", "cursor": True})
+    before = len(upstream.calls)
+    for params in ({"handle": "MrBeast", "query": "moon & landing"}, {"handle": "NASA", "query": "Mars"}):
+        r = client.get("/v1/youtube/channel/search", params={**params, "continuationToken": first["continuationToken"]})
+        assert r.status_code == 400 and r.json()["error"] == "bad_cursor"
+    assert len(upstream.calls) == before
+
+
+def test_channel_search_requires_real_channel_tab_and_nonempty_query(client, upstream):
+    assert client.get("/v1/youtube/channel/search", params={"handle": "NASA", "query": "  "}).status_code == 400
+    assert not upstream.calls
+    data = channel_search_page([])
+    data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"][0]["expandableTabRenderer"]["endpoint"]["commandMetadata"]["webCommandMetadata"]["url"] = "/@NASA/videos"
+    upstream.answers = [(data, {})]
+    assert client.get("/v1/youtube/channel/search", params={"handle": "NASA", "query": "moon"}).status_code == 500

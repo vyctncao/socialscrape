@@ -213,7 +213,7 @@ def _region(value: str | None) -> str | None:
 
 # --- cursors -----------------------------------------------------------------
 
-_FIELDS = {"t": str, "c": list, "g": str, "y": str, "v": str, "s": str, "p": str, "m": dict, "n": int, "x": str}
+_FIELDS = {"t": str, "c": list, "g": str, "y": str, "v": str, "s": str, "p": str, "m": dict, "n": int, "x": str, "q": str}
 # A visitor ('v') yt-dlp can send back: it goes in the X-Goog-Visitor-Id header, which a line break or a character
 # past latin-1 fails before any request. YouTube's visitorData (base64url, its '=' as %3D) is visible ASCII.
 _VISITOR = re.compile(r"[!-~]*")
@@ -869,6 +869,44 @@ def _search_payload(items: list[tuple[str, dict]], kind: str | None, seen: _Seen
 
 def _no_region(region: str) -> BadRequest:
     return BadRequest(f"YouTube does not serve search results for region {region}", code="unsupported_region")
+
+
+@sc_get(router, "/v1/youtube/channel/search", source=f"{_SRC} (channel search tab + browse continuations)",
+        notes="Searches inside the requested channel. Cursors retain channel, query and served identities; "
+              "using one with another channel or query returns 400. " + _APPROX)
+async def youtube_channel_search(handle: str = Query(...), query: str = Query(...),
+                                 continuationToken: str | None = None):
+    base, query = channel_base(None, handle), query.strip()
+    if not query:
+        raise BadRequest("query must not be empty")
+    state = _state(continuationToken, "channel-search")
+    seen = _Seen(state)
+    if state:
+        if state.get("p") != base or state.get("q") != query:
+            raise _bad_cursor("continuationToken belongs to a different channel or search query")
+        ctx = state.get("c") or [None] * 3
+
+        def next_page(ie):
+            data = _tab_continuation(ie, state["t"], "web", ctx[0])
+            return _read_on(ie, data, p.continuation_items(data), seen,
+                            lambda items: _search_payload(items, None, seen), "browse")
+
+        out, items, tokens, _ = await _run(next_page)
+    else:
+        def first(ie):
+            data, _ = _page(ie, f"{YT}/{base}/search?" + urllib.parse.urlencode({"query": query}), base)
+            ctx = p.channel_ref(data)
+            if not ctx[0]:
+                raise UpstreamError("YouTube channel search returned no channel identity")
+            payload = p.tab_content(data, "search")
+            if payload is None or p.error_page(payload):
+                raise UpstreamError("YouTube did not return the requested channel search tab")
+            items, tokens = p.walk(payload)
+            return _search_payload(items, None, seen), items, tokens, ctx
+
+        out, items, tokens, ctx = await _run(first)
+    more = tokens[0] if items and tokens else None
+    return {**out, "continuationToken": _cursor("channel-search", more, c=ctx, p=base, q=query, s=seen.dump())}
 
 
 def _first_search(ie: Any, query: dict[str, Any], client: str, region: str | None) -> dict[str, Any]:

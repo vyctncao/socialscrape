@@ -24,7 +24,10 @@ from yt_dlp.utils import DownloadError, ExtractorError, clean_html, unescapeHTML
 
 def test_every_catalog_path_is_routed(client):
     cov = client.get("/meta/coverage").json()
-    assert cov["total"] == len(CATALOG) == 74
+    from socialscrape.catalog import UPSTREAM_OPERATIONS
+    assert cov["total"] == len(CATALOG)
+    assert {row["path"] for row in cov["endpoints"]} == {op["path"] for op in UPSTREAM_OPERATIONS
+                                                       if not op["path"].startswith("/v1/account/")}
     # FastAPI >= 0.143 nests included routers (no flat `.path`), so read the schema instead.
     routed = set(client.app.openapi()["paths"])
     for row in cov["endpoints"]:
