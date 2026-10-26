@@ -461,9 +461,8 @@ async def _detail_archive(ident: str, *, details: bool = False) -> tuple[dict[st
 
 def _input_id(id: str | None, url: str | None) -> str:
     require_one(id=id, url=url)
-    if id and url:
-        raise BadRequest("Provide only one of: id, url")
-    ident = M.ad_id(id, url)
+    # ScrapeCreators' own examples send both: the id wins, as the more specific input.
+    ident = M.ad_id(id, None if id else url)
     if not ident:
         raise BadRequest("id must be numeric, or url must be a Facebook Ad Library URL containing a numeric id")
     return ident
@@ -480,7 +479,8 @@ _LONG = "true transcribes videos longer than 120 seconds too; without it they an
               "answers with its Ad Library landing page (its answer for an unknown id); a page without the Ad "
               "Library app (empty, or a block page) is a 503 upstream_blocked.")
 async def facebook_ad(
-    id: str | None = Query(None, description="Ad Library ad id (ad_archive_id); use this or url."),
+    id: str | None = Query(None, description=(
+        "Ad Library ad id (ad_archive_id); use this or url (the id wins when both are sent).")),
     url: str | None = Query(None, description="Ad Library URL such as https://www.facebook.com/ads/library/?id=123."),
     allow_long_transcription: str | None = Query(None, description=_LONG),
     get_transcript: str | None = Query(None, description="true adds the ad video's transcript (local Whisper).",
@@ -506,7 +506,8 @@ async def facebook_ad(
         source="Meta Ad Library SSR media via yt-dlp FacebookAdsIE + local Whisper",
         notes="Uses the first playable ad video; image-only ads return transcript_available=false.")
 async def facebook_ad_transcript(
-    id: str | None = Query(None, description="Ad Library ad id (ad_archive_id); use this or url."),
+    id: str | None = Query(None, description=(
+        "Ad Library ad id (ad_archive_id); use this or url (the id wins when both are sent).")),
     url: str | None = Query(None, description="Ad Library URL such as https://www.facebook.com/ads/library/?id=123."),
     allow_long_transcription: str | None = Query(None, description=_LONG),
 ) -> dict[str, Any]:
@@ -572,8 +573,10 @@ async def _resolve_company(name: str) -> str:
         source="Meta Ad Library page search + AdLibrarySearchPaginationQuery via yt-dlp networking",
         notes="companyName resolves through Meta typeahead before page search; trim is an approximate projection.")
 async def facebook_company_ads(
-    pageId: str | None = Query(None, description="Ad Library page ID; use this or companyName."),
-    companyName: str | None = Query(None, description="Company name; use this or pageId."),
+    pageId: str | None = Query(None, description=(
+        "Ad Library page ID; use this or companyName (pageId wins when both are sent).")),
+    companyName: str | None = Query(None, description=(
+        "Company name; use this or pageId (pageId wins when both are sent).")),
     country: str | None = Query(None, description="Two-letter country code, or ALL."),
     status: str | None = Query(None, description="Ad status; defaults to ACTIVE.",
                                json_schema_extra={"enum": ["ALL", "ACTIVE", "INACTIVE"]}),
@@ -589,8 +592,7 @@ async def facebook_company_ads(
     cursor: str | None = Query(None, description="Cursor to paginate through results."),
 ) -> dict[str, Any]:
     require_one(pageId=pageId, companyName=companyName)
-    if pageId and companyName:
-        raise BadRequest("Provide only one of: pageId, companyName")
+    # ScrapeCreators' own examples send both: pageId wins, and companyName isn't resolved.
     if pageId and (not pageId.isascii() or not pageId.isdigit()):
         raise BadRequest("pageId must be a numeric Facebook page id")
     page_id = pageId or await _resolve_company(companyName or "")

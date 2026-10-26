@@ -179,7 +179,8 @@
       "integer"
     ],
     "interactive_time_analysis.remain.analysis[].value": [
-      "integer"
+      "integer",
+      "number"
     ],
     "interactive_time_analysis.remain.duration": [
       "integer"

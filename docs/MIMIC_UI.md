@@ -37,7 +37,8 @@ standalone Swagger and ReDoc pages use it too.
 
 The shell and all page renderers remain in `portal.html`, `portal.css`, and
 `portal.js`, except the playground's response preview, which lives in
-`preview.js`; authentication and invitation markup remains in `portal.py`. The
+`preview.js`, and the code cards' snippets and highlighter, in `snippets.js`;
+authentication and invitation markup remains in `portal.py`. The
 FastAPI static mount and Python wheel include the entire asset directory, so the
 Docker deployment requires no Node build step. `appearance.js` initializes the
 saved theme before rendering and is shared with authentication screens.
@@ -64,6 +65,24 @@ rounded counts read "Approximate", so the preview never invents a number. The Ra
 JSON tab re-indents the response text without parsing numbers, so IDs beyond 2^53
 keep every digit, and the copy button always copies it.
 Proxy settings retain owner permissions and the server’s encrypted storage contract.
+
+A docs endpoint page follows ScrapeCreators' layout. The left column holds the tag, the title ("Facebook Ad
+Library Company Ads API"), a method bar with Try it (the playground when signed in, `/login` on the public
+docs), Headers, the query or body parameters with their examples, and the documented responses. A request card
+and a response card sit in a sticky right column once the docs column is at least 780px wide (a container
+query), and below the method bar otherwise. Both cards are one DOM copy placed by grid areas. The request card's
+tabs are ScrapeCreators' six languages (cURL, Node.js, Python, PHP, Go, Java) in their generators' layouts,
+with `<api_token>` for the key: a GET shows its bare path and a POST every documented body field, as on
+ScrapeCreators' pages. The playground's snippet card uses the same generator with its live values, its fields
+show the documented examples as placeholders, and both cards share one remembered language. "Copy for AI"
+copies ScrapeCreators' prompt: the call, the key header, each field with its choices, and the whole 200
+example. The response card's tabs are 200, 200 (trimmed) when documented, 404, 403 and 500. The 200s use the
+success role and the errors the danger role. `GET /meta/examples` supplies them once per operation per
+session; it is read as text and highlighted without parsing, so IDs beyond 2^53 keep every digit. The
+response card shows a skeleton while loading and an inline retry on failure, announced through the page's
+live region, and expands into the shared dialog. A tab row too narrow for its tabs fades at the clipped edge
+and scrolls with a vertical wheel. Syntax colours use only roles: strings in success, numbers and literals in
+warning, keys and keywords in the primary text, punctuation in the tertiary text.
 
 The sidebar is one flat list: Overview, Playground, API keys, Usage, Documentation and
 Team, with Settings pinned above the account trigger. Team and Settings are owner-only

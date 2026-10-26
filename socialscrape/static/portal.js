@@ -15,7 +15,8 @@ const fmt = (time, empty = 'Unavailable') => time ? dateFormatter.format(new Dat
 const number = value => Number(value).toLocaleString();
 const plural = (count, word, many = `${word}s`) => `${number(count)} ${count === 1 ? word : many}`;
 const mask = key => key ? `${key.prefix}••••••••••••` : 'No API key yet';
-const state = {keys:[], spec:null, language:'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0, renderedPage:null, overviewParts:{}};
+const savedLanguage = (() => { try { return localStorage.getItem('socialscrape-language'); } catch { return null; } })();
+const state = {keys:[], spec:null, language:Snippets.languages.some(([language]) => language === savedLanguage) ? savedLanguage : 'curl', drafts:{}, platform:null, endpoint:null, selectedKey:'', docSearch:'', renderId:0, renderedPage:null, overviewParts:{}};
 const {pendingButton, reveal, cancelReveals} = window.PortalLoading;
 const reads = {};
 const leaveGuards = new Set();
@@ -35,7 +36,7 @@ function normalizeSchema(param) {
 window.normalizeSchema = normalizeSchema;
 
 async function api(url, options = {}) {
-  const {timeout: explicitTimeout, signal: callerSignal, _csrfRetried, ...fetchOptions} = options;
+  const {timeout: explicitTimeout, signal: callerSignal, _csrfRetried, responseText = false, ...fetchOptions} = options;
   const headers = {...fetchOptions.headers, 'x-csrf-token':PORTAL.csrf};
   if (fetchOptions.body && typeof fetchOptions.body !== 'string') { headers['content-type'] = 'application/json'; fetchOptions.body = JSON.stringify(fetchOptions.body); }
   const read = !fetchOptions.method || fetchOptions.method === 'GET', duration = explicitTimeout ?? (read ? 30000 : null);
@@ -64,7 +65,7 @@ async function api(url, options = {}) {
     const error = Error(typeof data.detail === 'string' ? data.detail : data.message || `Request failed (${response.status}). Try again.`);
     error.status = response.status; error.data = data; throw error;
   }
-  return response.json();
+  return responseText ? response.text() : response.json();
 }
 
 const toastQueue = [], visibleToasts = new Set(), toastRegion = $('#toasts');
@@ -392,7 +393,7 @@ async function playground() {
   const selected = groups.includes(state.platform) ? state.platform : groups[0];
   return layout('Playground', playgroundLede, `${pageTabs('playground')}
     <div class="playground"><section class="card playground-config"><h2 class="section-label">Configure request</h2><form class="form-stack" id="request-form" novalidate><div class="field"><span id="platform-label">Platform</span><input type="hidden" id="pg-platform" value="${selected}"><button type="button" class="platform-trigger" id="platform-trigger" popovertarget="platform-menu" aria-haspopup="listbox" aria-expanded="false" aria-controls="platform-menu" aria-labelledby="platform-label platform-selected"><span id="platform-selected">${platformLabel(selected)}</span>${icon('caret-down')}</button><div id="platform-menu" class="platform-menu" popover="auto" role="listbox" aria-labelledby="platform-label">${groups.map(group => `<button type="button" class="platform-option" role="option" data-platform-choice="${group}" aria-selected="${selected === group}" tabindex="-1">${platformLabel(group)}${icon('check')}</button>`).join('')}</div></div><label class="field">Endpoint<select id="pg-endpoint"></select></label><label class="field">Authentication<select id="pg-key"><option value="">Signed-in dashboard session</option>${state.keys.filter(key => !key.revoked_at).map(key => `<option value="${key.id}" ${String(key.id) === state.selectedKey ? 'selected' : ''}>${esc(key.name)} · ${esc(key.prefix)}</option>`).join('')}</select><span class="help">This selection affects only the in-dashboard run. Copied snippets require an API key.</span></label><div id="pg-params"></div><div class="inline-note" id="endpoint-note" hidden></div><div class="field-error" id="request-error" role="alert" hidden></div><div class="request-wait" id="request-wait" role="status" hidden></div><button class="primary" type="submit" id="run-request">${icon('play')}Run request</button></form></section>
-    <div class="request-workbench"><section class="card"><div class="card-head"><div class="request-info"><span id="request-platform" aria-hidden="true"></span><span class="method">GET</span><code id="request-path"></code></div><button class="icon-button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button></div><div class="code-tabs" role="tablist" aria-label="Code language">${[['curl','cURL'],['node','Node.js'],['python','Python']].map(([lang, label]) => `<button id="tab-${lang}" role="tab" aria-controls="snippet" aria-selected="${state.language === lang}" tabindex="${state.language === lang ? 0 : -1}" data-language="${lang}">${label}</button>`).join('')}</div><pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}" style="margin-top:16px"></pre></section>
+    <div class="request-workbench"><section class="card code-card snippet-card" aria-label="Code snippet"><div class="card-head"><div class="request-info"><span id="request-platform" aria-hidden="true"></span><span class="method">GET</span><code id="request-path"></code></div></div>${codeCardHead(languageTabs('tab', 'snippet'), `<button class="icon-button" type="button" data-copy="snippet" aria-label="Copy code snippet" title="Copy snippet">${icon('copy')}</button>`)}<pre class="code" id="snippet" role="tabpanel" tabindex="0" aria-labelledby="tab-${state.language}"></pre></section>
     <section class="card response"><div class="card-head"><h2>Response</h2><div class="row"><span class="badge" id="response-status" role="status">Ready</span><button class="icon-button" data-copy="response-raw" aria-label="Copy raw JSON response" title="Copy raw JSON" hidden>${icon('copy')}</button></div></div><div id="response"><div class="response-placeholder"><div>${icon('compass')}<strong>Your response starts here</strong><p>Choose an endpoint and run a request to see the result.</p></div></div></div></section></div></div>`);
 }
 function saveDraft() {
@@ -425,13 +426,13 @@ function fillParams() {
   const bodyRequired = new Set(bodySchema.required || []);
   const parameters = method === 'POST' ? Object.entries(bodySchema.properties || {}).map(([name,schema]) => ({name, required:bodyRequired.has(name), description:schema.description, schema})) : (operation.parameters || []).filter(param => param.in !== 'header');
   const renderParam = (param, index) => {
-    const schema = normalizeSchema(param), type = schema.type;
+    const schema = normalizeSchema(param), type = schema.type, example = param.example ?? schema.example;
     const label = `<span class="field-label"><code>${esc(param.name)}</code>${param.required ? '<span class="badge required">Required</span>' : '<span class="help">Optional</span>'}</span>`;
     const value = state.drafts[state.endpoint]?.[param.name] || '';
     const options = schema.enum || (type === 'boolean' ? ['true', 'false'] : null);
     const hint = param.name === 'url' ? 'Enter the full post, video, channel, or profile link, starting with https://.' : param.description || (type === 'integer' ? 'Enter a whole number.' : '');
     const constraints = `${schema.minimum !== undefined ? ` min="${esc(schema.minimum)}"` : ''}${schema.maximum !== undefined ? ` max="${esc(schema.maximum)}"` : ''}${schema.minLength !== undefined ? ` minlength="${esc(schema.minLength)}"` : ''}${schema.maxLength !== undefined ? ` maxlength="${esc(schema.maxLength)}"` : ''}${schema.pattern ? ` pattern="${esc(schema.pattern)}"` : ''}`;
-    const control = options ? `<select id="param-${index}" data-param="${esc(param.name)}" ${param.required ? 'required' : ''} aria-describedby="param-hint-${index}"><option value="">${param.required ? 'Choose a value' : 'Default'}</option>${options.map(option => `<option value="${esc(option)}" ${String(option) === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>` : `<input id="param-${index}" data-param="${esc(param.name)}" type="${param.name === 'url' ? 'url' : type === 'integer' || type === 'number' ? 'number' : 'text'}" ${type === 'integer' ? 'step="1"' : ''}${constraints} ${param.required ? 'required' : ''} value="${esc(value)}" placeholder="${esc(schema.default ?? (param.name === 'url' ? 'https://…' : ''))}" aria-describedby="param-hint-${index}">`;
+    const control = options ? `<select id="param-${index}" data-param="${esc(param.name)}" ${param.required ? 'required' : ''} aria-describedby="param-hint-${index}"><option value="">${param.required ? 'Choose a value' : 'Default'}</option>${options.map(option => `<option value="${esc(option)}" ${String(option) === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>` : `<input id="param-${index}" data-param="${esc(param.name)}" type="${param.name === 'url' ? 'url' : type === 'integer' || type === 'number' ? 'number' : 'text'}" ${type === 'integer' ? 'step="1"' : ''}${constraints} ${param.required ? 'required' : ''} value="${esc(value)}" placeholder="${esc(schema.default ?? example ?? (param.name === 'url' ? 'https://…' : ''))}" aria-describedby="param-hint-${index}">`;
     return `<label class="field" for="param-${index}">${label}${control}<span class="help" id="param-hint-${index}">${esc(hint)}</span></label>`;
   };
   const required = parameters.filter(param => param.required);
@@ -505,26 +506,52 @@ function postPayload(selected) {
     return [input.dataset.param, value];
   }));
 }
+// The playground and the docs share these code cards: ScrapeCreators' six languages (snippets.js), then the card's
+// actions. The language is one choice for both, kept across visits.
+function codeCardHead(tabs, actions) {
+  return `<div class="code-card-head">${tabs}<div class="code-card-actions">${actions}</div></div>`;
+}
+function languageTabs(prefix, panel) {
+  return `<div class="code-card-tabs" role="tablist" aria-label="Code language">${Snippets.languages.map(([language, label]) => `<button type="button" id="${prefix}-${language}" role="tab" aria-controls="${panel}" aria-selected="${state.language === language}" tabindex="${state.language === language ? 0 : -1}" data-language="${language}">${label}</button>`).join('')}</div>`;
+}
+// A tab row too narrow for its tabs scrolls sideways: it fades at each edge with tabs beyond it, and a vertical wheel
+// over it scrolls it until it reaches that end, then the page scrolls as usual.
+const tabRows = new ResizeObserver(entries => entries.forEach(entry => markTabOverflow(entry.target))), wiredTabRows = new WeakSet();
+function markTabOverflow(row) {
+  const after = row.scrollWidth - row.clientWidth - row.scrollLeft;
+  row.dataset.overflow = `${row.scrollLeft > 1 ? 'start' : ''} ${after > 1 ? 'end' : ''}`.trim();
+}
+function scrollTabRow(event) {
+  const row = event.currentTarget, delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? row.clientWidth : 1);
+  if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+  if (delta > 0 ? row.scrollWidth - row.clientWidth - row.scrollLeft < 1 : row.scrollLeft < 1) return;
+  event.preventDefault(); row.scrollLeft += delta;
+}
+function watchTabRows() {
+  tabRows.disconnect();
+  document.querySelectorAll('.code-card-tabs').forEach(row => {
+    tabRows.observe(row);
+    if (wiredTabRows.has(row)) return;
+    wiredTabRows.add(row); row.addEventListener('wheel', scrollTabRow, {passive:false}); row.addEventListener('scroll', () => markTabOverflow(row), {passive:true});
+  });
+}
+function paintSnippet(panel, snippets) {
+  panel.innerHTML = Snippets.highlight(snippets[state.language], state.language);
+  document.querySelectorAll(`[data-language][aria-controls="${panel.id}"]`).forEach(tab => {
+    const selected = tab.dataset.language === state.language;
+    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+    if (selected) panel.setAttribute('aria-labelledby', tab.id);
+  });
+}
+function setLanguage(language) {
+  state.language = language;
+  try { localStorage.setItem('socialscrape-language', language); } catch {}
+  updateSnippet(); paintDocRequest();
+}
 function updateSnippet() {
   if (!$('#pg-endpoint')) return;
   const selected = endpoints(state.spec).find(endpoint => endpointId(endpoint) === $('#pg-endpoint').value), post = selected.method === 'POST';
-  const query = post ? null : params(), payload = post ? postPayload(selected) : {}, url = location.origin + selected.path + (!post && query.size ? '?' + query : '');
-  const json = JSON.stringify(payload, null, 2), compact = JSON.stringify(payload);
-  const snippets = post ? {
-    curl:`curl -X POST '${url}' \\\n  -H 'x-api-key: YOUR_API_KEY' \\\n  -H 'content-type: application/json' \\\n  -d ${shellQuote(compact)}`,
-    node:`const response = await fetch(${JSON.stringify(url)}, {\n  method: 'POST',\n  headers: {\n    'x-api-key': process.env.SOCIALSCRAPE_API_KEY,\n    'content-type': 'application/json'\n  },\n  body: JSON.stringify(${json})\n});\n\nconst data = await response.json();\nconsole.log(data);`,
-    python:`import os\nimport requests\n\nresponse = requests.post(\n    ${JSON.stringify(url)},\n    headers={"x-api-key": os.environ["SOCIALSCRAPE_API_KEY"]},\n    json=${json},\n)\nprint(response.json())`
-  } : {
-    curl:`curl '${url}' \\\n  -H 'x-api-key: YOUR_API_KEY'`,
-    node:`const response = await fetch(${JSON.stringify(url)}, {\n  headers: { 'x-api-key': process.env.SOCIALSCRAPE_API_KEY }\n});\n\nconst data = await response.json();\nconsole.log(data);`,
-    python:`import os\nimport requests\n\nresponse = requests.get(\n    ${JSON.stringify(url)},\n    headers={"x-api-key": os.environ["SOCIALSCRAPE_API_KEY"]},\n)\nprint(response.json())`
-  };
-  $('#snippet').textContent = snippets[state.language];
-  $('#snippet').setAttribute('aria-labelledby', `tab-${state.language}`);
-  document.querySelectorAll('[data-language]').forEach(tab => {
-    const selected = tab.dataset.language === state.language;
-    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
-  });
+  paintSnippet($('#snippet'), Snippets.build({method:selected.method, url:location.origin + selected.path, params:post ? postPayload(selected) : Object.fromEntries(params())}));
   saveDraft();
 }
 function paintRequest() {
@@ -642,14 +669,9 @@ function selectDoc({focus = false} = {}) {
   }
 }
 function showIntro() {
-  $('#doc-main').innerHTML = `<div class="eyebrow">Developer reference</div><h1>Social Scrape API</h1><p class="lede">Public social data through one private API.</p><div class="platforms doc-platforms">${platformList([...new Set(endpoints(state.spec).map(endpoint => endpoint.platform))])}</div><section class="card"><h2>Start with a request</h2><p class="help">Send a member API key in the <code>x-api-key</code> header. Create and revoke credentials from API keys.</p><pre class="code" tabindex="0">curl '${esc(location.origin)}/v1/tiktok/profile?handle=tiktok' \\
-  -H 'x-api-key: YOUR_API_KEY'</pre>${PORTAL.public ? `<a class="ghost" style="margin-top:20px" href="/login">Sign in to try requests ${icon('arrow-right')}</a>` : `<a class="ghost" style="margin-top:20px" href="/app/playground">Open playground ${icon('arrow-right')}</a>`}</section><h2>Authentication</h2><p class="muted">Use a separate key for each person or integration. Secrets are shown once when created, and can be revoked independently.</p><h2>Response format</h2><p class="muted">Successful calls include <code>success: true</code> and <code>credits_charged: 0</code>. Errors include an error code and a message explaining what happened.</p><h2>Caching</h2><p class="muted">Set <code>cache_max_age</code> to <code>12h</code>, <code>1d</code>, or <code>7d</code> to accept a cached response. Leave it out to fetch fresh data.</p><h2>Endpoint availability</h2><p class="muted">The reference includes the full compatibility API. Routes outside the supported extraction boundary return <code>501</code> with a reason. Platform restrictions may require cookies or a proxy.</p>`;
-}
-function shellQuote(value) { return `'${String(value).replace(/'/g, `'\\''`)}'`; }
-function docRequestUrl(path, parameters) {
-  const url=new URL(path,location.origin), query=new URLSearchParams();
-  for (const param of parameters.filter(param => param.in === 'query' && param.required)) { const schema=normalizeSchema(param), value=param.example ?? schema.example ?? schema.default ?? `YOUR_${String(param.name || schema.type || 'VALUE').toUpperCase().replace(/\W+/g,'_')}`; query.append(param.name,value); }
-  url.search=query.toString(); return url.href;
+  state.doc = null;
+  const example = Snippets.build({method:'GET', url:`${location.origin}/v1/tiktok/profile`, params:{handle:'tiktok'}}).curl;
+  $('#doc-main').innerHTML = `<div class="eyebrow">Developer reference</div><h1>Social Scrape API</h1><p class="lede">Public social data through one private API.</p><div class="platforms doc-platforms">${platformList([...new Set(endpoints(state.spec).map(endpoint => endpoint.platform))])}</div><section class="card"><h2>Start with a request</h2><p class="help">Send a member API key in the <code>x-api-key</code> header. Create and revoke credentials from API keys.</p><pre class="code" tabindex="0">${Snippets.highlight(example, 'curl')}</pre>${PORTAL.public ? `<a class="ghost" style="margin-top:20px" href="/login">Sign in to try requests ${icon('arrow-right')}</a>` : `<a class="ghost" style="margin-top:20px" href="/app/playground">Open playground ${icon('arrow-right')}</a>`}</section><h2>Authentication</h2><p class="muted">Use a separate key for each person or integration. Secrets are shown once when created, and can be revoked independently.</p><h2>Response format</h2><p class="muted">Successful calls include <code>success: true</code> and <code>credits_charged: 0</code>. Errors include an error code and a message explaining what happened.</p><h2>Caching</h2><p class="muted">Set <code>cache_max_age</code> to <code>12h</code>, <code>1d</code>, or <code>7d</code> to accept a cached response. Leave it out to fetch fresh data.</p><h2>Endpoint availability</h2><p class="muted">The reference includes the full compatibility API. Routes outside the supported extraction boundary return <code>501</code> with a reason. Platform restrictions may require cookies or a proxy.</p>`;
 }
 function parameterType(schema) { return schema.type === 'array' ? `array of ${schema.items?.type || 'values'}` : schema.type || 'value'; }
 function parameterMetadata(param) {
@@ -663,15 +685,134 @@ function parameterMetadata(param) {
   if (schema.items?.enum?.length) items.push(`<span><b>Item choices:</b> ${schema.items.enum.map(value => `<code>${esc(value)}</code>`).join(', ')}</span>`);
   return items.length ? `<span class="param-meta">${items.join('')}</span>` : '';
 }
+function docParam(param) {
+  return `<div class="param"><strong><code>${esc(param.name)}</code><span class="param-type" data-param-type="${esc(param.name)}">${esc(parameterType(normalizeSchema(param)))}</span>${param.required ? '<span class="badge required">Required</span>' : ''}</strong>${param.description ? `<small>${esc(param.description)}</small>` : ''}${parameterMetadata(param)}</div>`;
+}
+// A GET documents its query params, a POST its body fields.
+function docParameters(operation, method) {
+  const body = resolveSchema(operation.requestBody?.content?.['application/json']?.schema), required = new Set(body.required || []);
+  return method === 'POST' ? Object.entries(body.properties || {}).map(([name,schema]) => ({name, required:required.has(name), description:schema.description, schema})) : (operation.parameters || []).filter(param => param.in === 'query');
+}
+
+// GET /meta/examples: ScrapeCreators' documented params and responses for one operation, read as text so IDs beyond
+// 2^53 keep every digit, and kept for the session. A failed read is forgotten, so Try again fetches it anew.
+const docStatuses = ['200', '200 (trimmed)', '404', '403', '500'], docExamples = new Map();
+const docKey = doc => `${doc.method} ${doc.path}`;
+function loadDocExamples(doc) {
+  const key = docKey(doc);
+  if (!docExamples.has(key)) {
+    const entry = {};
+    entry.promise = api(`/meta/examples?${new URLSearchParams({method:doc.method, path:doc.path})}`, {responseText:true}).then(text => {
+      const parts = Object.fromEntries(Snippets.members(text)), responses = Object.fromEntries(Snippets.members(parts.responses || '{}'));
+      return (entry.value = {params:JSON.parse(parts.params || '{}'), responses:docStatuses.filter(code => responses[code]).map(code => ({code, raw:responses[code]}))});
+    }).catch(error => { docExamples.delete(key); throw error; });
+    docExamples.set(key, entry);
+  }
+  return docExamples.get(key);
+}
+// ScrapeCreators' docs show a GET as its bare path, its fields and their examples being listed beside it, and a
+// POST with every documented body field: its typed examples once they load, the OpenAPI's until then. The
+// playground fills both from its live values.
+function docBody(doc) {
+  return docExamples.get(docKey(doc))?.value?.params ?? doc.operation.requestBody?.content?.['application/json']?.example ?? {};
+}
+function paintDocRequest() {
+  const panel = $('#doc-snippet'), doc = state.doc;
+  if (panel && doc) paintSnippet(panel, Snippets.build({method:doc.method, url:location.origin + doc.path, params:doc.method === 'POST' ? docBody(doc) : {}}));
+}
+// This server reads every query param as text, so a GET's schema says string where ScrapeCreators types the param
+// (trim: boolean, cursor: number). A documented example of another type names it instead.
+function paintDocTypes(doc) {
+  const params = docExamples.get(docKey(doc))?.value?.params || {};
+  if (doc.method === 'GET') document.querySelectorAll('#doc-main [data-param-type]').forEach(label => {
+    const example = params[label.dataset.paramType];
+    if (label.textContent === 'string' && (typeof example === 'boolean' || typeof example === 'number')) label.textContent = typeof example;
+  });
+}
+function statusTabs(prefix, responses) {
+  return `<div class="code-card-tabs" role="tablist" aria-label="Response status">${responses.map(({code}, index) => `<button type="button" id="${prefix}-${index}" role="tab" aria-controls="${prefix}-response" aria-selected="${code === state.doc.status}" tabindex="${code === state.doc.status ? 0 : -1}" data-doc-status="${esc(code)}" data-tone="${code.startsWith('2') ? 'success' : 'danger'}">${esc(code)}</button>`).join('')}</div>`;
+}
+const docResponse = () => { const responses = docExamples.get(docKey(state.doc))?.value?.responses || []; return responses.find(response => response.code === state.doc.status) || responses[0]; };
+// The selected status, in the card and in the expanded dialog when it is open. Its markup is highlighted once.
+function selectDocStatus(code) {
+  state.doc.status = code;
+  const response = docResponse(); if (!response) return;
+  state.doc.status = response.code; response.html ??= Snippets.formatJson(response.raw, {html:true});
+  document.querySelectorAll('[data-doc-response]').forEach(scope => {
+    const panel = scope.querySelector('pre');
+    scope.querySelectorAll('[data-doc-status]').forEach(tab => {
+      const selected = tab.dataset.docStatus === response.code;
+      tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+      if (selected) panel.setAttribute('aria-labelledby', tab.id);
+    });
+    if (panel.dataset.status !== response.code) { panel.innerHTML = response.html; panel.dataset.status = response.code; panel.scrollTop = 0; }
+  });
+}
+// The skeleton names itself to screen readers; a failure is announced through the page's live region, as the
+// stored-response dialog's is, since a live region inserted with its message is often not read.
+function paintDocResponse(error = null) {
+  const scope = $('#doc-main [data-doc-response]'), doc = state.doc; if (!scope || !doc) return;
+  const examples = docExamples.get(docKey(doc))?.value, body = scope.querySelector('.code-card-body');
+  scope.querySelector('.code-card-tabs').outerHTML = examples ? statusTabs('doc-status', examples.responses) : `<div class="code-card-tabs" aria-hidden="true">${error ? '' : '<i class="skeleton sk-tab"></i>'.repeat(4)}</div>`;
+  scope.querySelectorAll('[data-doc-copy-response], [data-doc-expand]').forEach(button => { button.disabled = !examples; });
+  body.setAttribute('aria-busy', String(!examples && !error));
+  body.innerHTML = examples ? '<pre class="code" id="doc-status-response" role="tabpanel" tabindex="0"></pre>' : error ? `<div class="code-card-state"><p class="help">The response examples could not load. ${esc(error.message)}</p><button class="ghost" type="button" data-doc-examples-retry>${icon('arrows-clockwise')}Try again</button></div>` : `<div class="code-skeleton"><span class="sr-only">Loading response examples…</span>${'<i class="skeleton sk-line" aria-hidden="true"></i>'.repeat(9)}</div>`;
+  if (error) $('#loading-status').textContent = 'The response examples could not load. Use Try again to retry.';
+  if (examples) selectDocStatus(doc.status);
+  watchTabRows();
+}
+// Loads the examples once per operation. A retry keeps its pending button until the read settles, then moves focus
+// to the first status tab, or back to the new Try again button.
+function watchDocExamples(doc, retry = null) {
+  const entry = loadDocExamples(doc), done = retry && pendingButton(retry, 'Trying again…');
+  if (entry.value) { paintDocResponse(); paintDocTypes(doc); return; }
+  if (!retry) paintDocResponse();
+  entry.promise.then(() => {
+    if (state.doc !== doc) return;
+    paintDocRequest(); paintDocResponse(); paintDocTypes(doc);
+    if (retry) { $('#loading-status').textContent = 'Response examples loaded.'; $('#doc-main [data-doc-status][aria-selected=true]')?.focus(); }
+  }, error => {
+    if (state.doc !== doc) return;
+    paintDocResponse(error);
+    if (retry) $('#doc-main [data-doc-examples-retry]')?.focus();
+  }).finally(() => done?.());
+}
+async function copyDocPrompt() {
+  const doc = state.doc, url = location.origin + doc.path;
+  await docExamples.get(docKey(doc))?.promise.catch(() => null);  // usually loaded; a failed read leaves out the response
+  if (state.doc !== doc) return;
+  const examples = docExamples.get(docKey(doc))?.value;
+  const text = Snippets.prompt({method:doc.method, url, description:doc.operation.description, example:examples?.responses.find(response => response.code === '200')?.raw,
+    params:doc.parameters.map(param => ({name:param.name, required:param.required, description:param.description, options:normalizeSchema(param).enum}))});
+  try { await navigator.clipboard.writeText(text); toast('Copied a prompt for your AI assistant.'); }
+  catch { openDialog({title:'Copy for AI', description:'Copying is unavailable here. Select the prompt below and copy it.', body:`<textarea class="secret doc-prompt" id="doc-prompt" readonly spellcheck="false" aria-label="Prompt for your AI assistant">${esc(text)}</textarea>`, footer:'<button class="ghost" data-dialog-close>Done</button>', initialFocus:'#doc-prompt'}); $('#doc-prompt').select(); }
+}
+async function copyDocResponse(trigger) {
+  const response = docResponse(), panel = trigger.closest('#dialog') ? $('#doc-dialog-response') : $('#doc-status-response');
+  if (!response) return;
+  try { await navigator.clipboard.writeText(response.text ??= Snippets.formatJson(response.raw)); toast('Copied to clipboard.'); }
+  catch { const range=document.createRange(); range.selectNodeContents(panel); window.getSelection().removeAllRanges(); window.getSelection().addRange(range); toast('Select and copy the highlighted text manually.', {type:'info'}); }
+}
+function expandDocResponse() {
+  const doc = state.doc, examples = docExamples.get(docKey(doc))?.value; if (!examples) return;
+  openDialog({title:'Response examples', description:`${doc.method} ${doc.path}`, body:`<div class="card code-card" data-doc-response>${codeCardHead(statusTabs('doc-dialog', examples.responses), '')}<pre class="code" id="doc-dialog-response" role="tabpanel" tabindex="0"></pre></div>`, footer:`<button class="ghost" data-dialog-close>Close</button><button class="primary" data-doc-copy-response>${icon('copy')}Copy response</button>`, initialFocus:'[data-doc-status][aria-selected=true]'});
+  $('#dialog').classList.add('code-dialog');
+  selectDocStatus(doc.status); watchTabRows();
+}
+// ScrapeCreators' endpoint page: the call and its fields on the left, and on wide screens the request and response
+// cards in a sticky column on the right (one copy in the DOM: below the breakpoint they follow the method bar).
 function showEndpoint(path, method = 'GET') {
-  const operation = state.spec.paths[path][method.toLowerCase()], bodySchema = resolveSchema(operation.requestBody?.content?.['application/json']?.schema), bodyRequired = new Set(bodySchema.required || []);
-  const parameters = method === 'POST' ? Object.entries(bodySchema.properties || {}).map(([name,schema]) => ({name, required:bodyRequired.has(name), description:schema.description, schema})) : operation.parameters || [];
-  const payload = Object.fromEntries(parameters.filter(param => param.required).map(param => { const schema=normalizeSchema(param); return [param.name,param.example ?? schema.example ?? schema.default ?? `YOUR_${param.name.toUpperCase()}`]; }));
-  const command = method === 'POST' ? `curl -X POST ${shellQuote(new URL(path,location.origin).href)} \\\n  -H 'x-api-key: YOUR_API_KEY' \\\n  -H 'content-type: application/json' \\\n  -d ${shellQuote(JSON.stringify(payload))}` : `curl ${shellQuote(docRequestUrl(path,parameters))} \\\n  -H 'x-api-key: YOUR_API_KEY'`;
-  const unsupported = operation['x-socialscrape-status'] === 'not_supported', tag = operation.tags?.[0] || platformName(platformFromPath(path));
-  $('#doc-main').innerHTML = `<div class="eyebrow platform-heading">${tagLabel(tag)}</div><div class="endpoint-title"><span class="method" data-method="${method}">${method}</span><h1>${esc((operation.summary || path).replace(/ \(not supported\)$/i, ''))}</h1></div><p class="lede"><code>${esc(path)}</code></p>${unsupported ? '<div class="inline-note"><span class="badge warn">Not supported</span><span>This compatibility route is not implemented through yt-dlp. Requests return 501.</span></div>' : ''}${unsupported ? '<p class="help">You can still send a compatibility test request from the playground.</p>' : ''}${PORTAL.public ? `<a class="ghost docs-playground-link" href="/login">Sign in to try it ${icon('arrow-right')}</a>` : `<a class="ghost docs-playground-link" href="/app/playground?endpoint=${encodeURIComponent(path)}&method=${method}">Open in playground ${icon('arrow-right')}</a>`}<section class="card"><div class="card-head"><h2>Request</h2><button class="icon-button" data-copy="doc-snippet" aria-label="Copy request snippet">${icon('copy')}</button></div><pre class="code" id="doc-snippet" tabindex="0">${esc(command)}</pre></section><h2>${method === 'POST' ? 'Request body' : 'Parameters'}</h2>${parameters.map(param => { const schema=normalizeSchema(param); return `<div class="param"><strong><code>${esc(param.name)}</code>${param.required ? '<span class="badge required">Required</span>' : '<span class="help">Optional</span>'}<span class="help">${esc(parameterType(schema))}</span></strong>${param.description ? `<small>${esc(param.description)}</small>` : ''}${parameterMetadata(param)}</div>`; }).join('') || `<p class="muted">No ${method === 'POST' ? 'request body fields' : 'parameters'}.</p>`}<h2>Responses</h2>${Object.entries(operation.responses || {}).map(([code, response]) => `<div class="param"><strong><span class="badge ${Number(code) < 400 ? 'good' : ''}">${esc(code)}</span>${esc(response.description)}</strong></div>`).join('')}`;
+  const operation = state.spec.paths[path][method.toLowerCase()], parameters = docParameters(operation, method);
+  const unsupported = operation['x-socialscrape-status'] === 'not_supported', tag = operation.tags?.[0] || platformName(platformFromPath(path)), title = (operation.summary || path).replace(/ \(not supported\)$/i, '');
+  const doc = state.doc = {method, path, operation, parameters, tag, title, status:'200'};
+  const tryIt = PORTAL.public ? `<a class="primary" href="/login" title="Sign in to try requests">Try it<span class="sr-only"> after signing in</span>${icon('play')}</a>` : `<a class="primary" href="/app/playground?endpoint=${encodeURIComponent(path)}&method=${method}">Try it${icon('play')}</a>`;
+  const requestCard = `<section class="card code-card doc-request" aria-label="Request example">${codeCardHead(languageTabs('doc-tab', 'doc-snippet'), `<button class="icon-button" type="button" data-copy="doc-snippet" aria-label="Copy request" title="Copy">${icon('copy')}</button><button class="icon-button" type="button" data-doc-copy-ai aria-label="Copy prompt for AI assistant" title="Copy for AI Assistant">${icon('sparkle')}</button>`)}<pre class="code" id="doc-snippet" role="tabpanel" tabindex="0" aria-labelledby="doc-tab-${state.language}"></pre></section>`;
+  const responseCard = `<section class="card code-card doc-response" aria-label="Response examples" data-doc-response>${codeCardHead('<div class="code-card-tabs"></div>', `<button class="icon-button" type="button" data-doc-copy-response aria-label="Copy response" title="Copy" disabled>${icon('copy')}</button><button class="icon-button" type="button" data-doc-expand aria-label="Expand response" title="Expand" disabled>${icon('arrows-out')}</button>`)}<div class="code-card-body"></div></section>`;
+  $('#doc-main').innerHTML = `<div class="endpoint-doc"><header class="endpoint-head"><div class="eyebrow platform-heading">${tagLabel(tag)}</div><h1>${esc(`${tag} ${title} API`)}</h1>${operation.description ? `<p class="lede">${esc(operation.description)}</p>` : ''}<p class="doc-cost"><span class="badge">Free</span>No credits charged per request</p><div class="method-bar"><span class="method" data-method="${method}">${method}</span><code>${esc(path).replaceAll('/', '/<wbr>')}</code>${tryIt}</div>${unsupported ? '<div class="inline-note"><span class="badge warn">Not supported</span><span>This compatibility route is not implemented through yt-dlp. Requests return 501. You can still send a compatibility test request from the playground.</span></div>' : ''}</header><div class="endpoint-examples">${requestCard}${responseCard}</div><div class="endpoint-body"><h2>Headers</h2>${docParam({name:'x-api-key', required:true, description:'Your Social Scrape API key', schema:{type:'string'}})}<h2>${method === 'POST' ? 'Body Parameters' : 'Query Parameters'}</h2>${parameters.map(docParam).join('') || `<p class="muted">No ${method === 'POST' ? 'body parameters' : 'query parameters'}.</p>`}<h2>Responses</h2>${Object.entries(operation.responses || {}).map(([code, response]) => `<div class="param"><strong><span class="badge ${Number(code) < 400 ? 'good' : ''}">${esc(code)}</span>${esc(response.description)}</strong></div>`).join('')}</div></div>`;
+  paintDocRequest(); watchTabRows(); watchDocExamples(doc);
 }
 function showDocNotFound(path) {
+  state.doc = null;
   $('#doc-main').innerHTML=`<div class="eyebrow">Developer reference</div><h1>Endpoint not found</h1><p class="lede">No documented endpoint matches <code>${esc(path || location.hash.slice(1))}</code>.</p><section class="card"><h2>Find an endpoint</h2><p class="help">Search the endpoint list or return to the API introduction.</p><div class="row"><button class="ghost" data-focus-doc-search>Search endpoints</button><a class="text-link" href="/app/docs">Back to introduction</a></div></section>`;
 }
 
@@ -1004,7 +1145,7 @@ async function render({retryFailedOnly = false} = {}) {
     const html = await views[current]({retryFailedOnly});
     if (renderId !== state.renderId) return;
     commitView(html, current, refresh);
-    if (current === 'playground') { fillEndpoints(); initPlatformPicker(); paintRequest(); }
+    if (current === 'playground') { fillEndpoints(); initPlatformPicker(); paintRequest(); watchTabRows(); }
     if (current === 'docs') { $('#doc-search').value = state.docSearch; filterDocs(state.docSearch); selectDoc(); }
     if (current === 'fallback') FallbackPage.mount?.();
     const title = viewTitle(view) || 'Social Scrape';
@@ -1063,7 +1204,7 @@ mobileMenu.addEventListener('click', () => { navDialog.showModal(); hostToasts(n
 navDialog.addEventListener('close', () => { hostToasts($('#dialog').open ? $('#dialog') : document.body); mobileMenu.setAttribute('aria-expanded','false'); if (innerWidth <= 760) mobileMenu.focus({preventScroll:true}); });
 $('#dialog').addEventListener('close', () => {
   state.historyRequest = null;
-  delete $('#dialog').dataset.oneTimeSecret; $('#dialog').classList.remove('history-dialog');
+  delete $('#dialog').dataset.oneTimeSecret; $('#dialog').classList.remove('history-dialog', 'code-dialog');
   cancelReveals();
   hostToasts();
   $('#dialog').replaceChildren();
@@ -1082,7 +1223,15 @@ document.addEventListener('click', event => {
   const link = event.target.closest(PORTAL.public ? 'a[href^="/app/docs"]' : 'a[href^="/app"]');
   if (link && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); go(link.getAttribute('href')); return; }
   const language = event.target.closest('[data-language]');
-  if (language) { state.language = language.dataset.language; updateSnippet(); }
+  if (language) { setLanguage(language.dataset.language); language.scrollIntoView({block:'nearest', inline:'nearest'}); }
+  const status = event.target.closest('[data-doc-status]');
+  if (status) { selectDocStatus(status.dataset.docStatus); status.scrollIntoView({block:'nearest', inline:'nearest'}); }
+  if (event.target.closest('[data-doc-copy-ai]')) copyDocPrompt();
+  const copyResponse = event.target.closest('[data-doc-copy-response]');
+  if (copyResponse) copyDocResponse(copyResponse);
+  if (event.target.closest('[data-doc-expand]')) expandDocResponse();
+  const examplesRetry = event.target.closest('[data-doc-examples-retry]');
+  if (examplesRetry && state.doc) watchDocExamples(state.doc, examplesRetry);
   const copy = event.target.closest('[data-copy]'); if (copy) copyElement(copy.dataset.copy);
   const claudeSetup = event.target.closest('[data-claude-setup]'); if (claudeSetup) { showClaudeSetup(claudeSetup); return; }
   if (event.target.closest('[data-dialog-close]')) closeDialog();
@@ -1137,13 +1286,14 @@ document.addEventListener('change', event => {
   if (event.target.id === 'pg-key') state.selectedKey = event.target.value;
   if (event.target.matches('[data-param]')) { clearParamErrors(event.target); updateSnippet(); }
 });
+// Code card tabs (languages, response statuses) rove within their own tablist and select as focus moves.
 document.addEventListener('keydown', event => {
-  if (!event.target.matches('[data-language]') || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+  if (!event.target.matches('[data-language], [data-doc-status]') || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
   event.preventDefault();
-  const tabs = [...document.querySelectorAll('[data-language]')];
+  const tabs = [...event.target.closest('[role=tablist]').querySelectorAll('[role=tab]')];
   let index = tabs.indexOf(event.target);
   index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-  state.language = tabs[index].dataset.language; updateSnippet(); tabs[index].focus();
+  tabs[index].click(); tabs[index].focus();
 });
 window.addEventListener('scroll', () => { clearTimeout(scrollTimer); scrollTimer=setTimeout(saveScroll,150); }, {passive:true});
 window.addEventListener('pagehide', saveScroll);

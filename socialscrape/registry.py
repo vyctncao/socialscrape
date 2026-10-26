@@ -67,8 +67,8 @@ _POST_SCHEMAS = {
         "cursor": ("string", "Cursor to paginate through results.", None),
     },
     "/v1/facebook/adLibrary/company/ads": {
-        "pageId": ("string", "Ad Library page id; use this or companyName.", None),
-        "companyName": ("string", "Company name; use this or pageId.", None),
+        "pageId": ("string", "Ad Library page id; use this or companyName (pageId wins when both are sent).", None),
+        "companyName": ("string", "Company name; use this or pageId (pageId wins when both are sent).", None),
         "country": ("string", "Two-letter country code, or ALL.", None),
         "status": ("string", "Ad status.", ["ALL", "ACTIVE", "INACTIVE"]),
         "media_type": ("string", "Ad media type.", ["ALL", "IMAGE", "VIDEO", "MEME", "IMAGE_AND_MEME", "NONE"]),

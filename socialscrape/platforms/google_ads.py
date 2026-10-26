@@ -280,8 +280,10 @@ def _detail_with_ydl(ydl: Any, advertiser_id: str, creative_id: str, region: str
 @sc_get(router, "/v1/google/company/ads", source="Google Ads Transparency Center SearchCreatives RPC",
         notes="Returns Google's mapped list rows by default; detail hydration makes one sequential lookup per ad.")
 async def company_ads(
-    domain: str | None = Query(None, description="Company domain; use this or advertiser_id."),
-    advertiser_id: str | None = Query(None, description="Google advertiser id; use this or domain."),
+    domain: str | None = Query(None, description=(
+        "Company domain; use this or advertiser_id (advertiser_id wins when both are sent).")),
+    advertiser_id: str | None = Query(None, description=(
+        "Google advertiser id; use this or domain (it wins when both are sent).")),
     topic: str | None = Query(None, description=(
         "Topic to search. Political searches also require region."),
         json_schema_extra={"enum": ["all", "political"]}),
@@ -299,8 +301,8 @@ async def company_ads(
     cursor: str | None = Query(None, description="Cursor from the previous page."),
 ) -> dict[str, Any]:
     require_one(domain=domain, advertiser_id=advertiser_id)
-    if domain and advertiser_id:
-        raise BadRequest("Provide domain or advertiser_id, not both")
+    if domain and advertiser_id:  # ScrapeCreators' own examples send both: the advertiser id wins
+        domain = None
     if domain and not _DOMAIN.fullmatch(domain):
         raise BadRequest("domain must be a valid domain name")
     if advertiser_id and not _ADVERTISER.fullmatch(advertiser_id):
