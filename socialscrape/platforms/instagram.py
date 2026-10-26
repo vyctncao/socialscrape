@@ -43,6 +43,7 @@ from yt_dlp.utils import ExtractorError, parse_duration, str_or_none, traverse_o
 
 from .. import transcribe
 from ..config import get_settings
+from ..cursor import decode_cursor, encode_cursor
 from ..errors import (
     ApiError,
     BadRequest,
@@ -250,6 +251,7 @@ class _Recorder:
     def __init__(self, ydl: yt_dlp.YoutubeDL, ie: Any) -> None:
         self.bodies: list[tuple[str, str]] = []
         self.http_errors: dict[str, int] = {}
+        self.error_responses: dict[str, Any] = {}
         download, urlopen = ie._download_webpage_handle, ydl.urlopen
 
         def recording_download(*args: Any, **kwargs: Any) -> Any:
@@ -262,7 +264,9 @@ class _Recorder:
             try:
                 return urlopen(req)
             except HTTPError as exc:
-                self.http_errors[urllib.parse.urlparse(getattr(req, "url", str(req))).path] = exc.status
+                path = urllib.parse.urlparse(getattr(req, "url", str(req))).path
+                self.http_errors[path] = exc.status
+                self.error_responses[path] = exc.response
                 raise
 
         ie._download_webpage_handle = recording_download
@@ -294,6 +298,10 @@ class SessionRejected(Misconfigured):
         super().__init__(f"Instagram rejected the server's session cookies ({source}): it sent the logged-in "
                          "request to its login page, so the session has expired or was logged out. Replace them "
                          "with a fresh session's cookies")
+
+
+class MediaUnavailable(NotFound):
+    """The authenticated media API's unavailable answer; public lookup confirms it."""
 
 
 def _check_session(logged_in: bool, rec: _Recorder) -> None:
@@ -357,6 +365,15 @@ def _post_flow(url: str) -> Callable[[yt_dlp.YoutubeDL], tuple[dict[str, Any], d
         try:
             ie.extract(target)
         except ExtractorError:
+            path = f"/api/v1/media/{_id_to_pk(post_url(target)[0])}/info/"
+            if logged_in and rec.http_errors.get(path) == 400:
+                try:
+                    data = json.loads(rec.error_responses[path].read(65537))
+                except (ValueError, KeyError, OSError):
+                    data = None
+                if (isinstance(data, dict) and data.get("status") == "fail"
+                        and data.get("message") == "Media not found or unavailable"):
+                    raise MediaUnavailable("Post not found or unavailable to the saved account") from None
             # yt-dlp reports deleted/nonexistent posts as an "empty media response";
             # the accessibility check it ran first answered 404 "Media cannot be found".
             if rec.http_errors.get(RULING_PATH) == 404:
@@ -376,7 +393,12 @@ def _post_flow(url: str) -> Callable[[yt_dlp.YoutubeDL], tuple[dict[str, Any], d
 
 async def fetch_post(url: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """(media item yt-dlp extracted, logged-out xig_polaris_media wrapper or None when logged in)."""
-    return await with_ydl(PLATFORM, _post_flow(url))
+    try:
+        return await with_ydl(PLATFORM, _post_flow(url))
+    except MediaUnavailable:
+        # A saved account must not turn a public post into a false 404. The
+        # public client's own ruling confirms removal or returns public media.
+        return await with_ydl(PLATFORM, _post_flow(url), use_cookies=False, confirm_not_found=True)
 
 
 def _page_flow(ie_name: str, url: str, item_id: str, *, allow_home: bool = False
@@ -412,7 +434,8 @@ def _check_page(html: str, final_url: str, what: str, *, allow_home: bool = Fals
     return page_relay(html)
 
 
-async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[str, list[dict[str, Any]]]:
+async def fetch_page(ie_name: str, url: str, item_id: str, what: str, *, use_cookies: bool = True
+                     ) -> tuple[str, list[dict[str, Any]]]:
     """Download a logged-out page the way `ie_name` does -> (html, relay results)."""
     def go(ydl: yt_dlp.YoutubeDL) -> tuple[str, list[dict[str, Any]]]:
         html, final_url = _page_flow(ie_name, url, item_id)(ydl)
@@ -420,7 +443,7 @@ async def fetch_page(ie_name: str, url: str, item_id: str, what: str) -> tuple[s
         # so a refused primary can advance to the configured backup profiles.
         return html, _check_page(html, final_url, what)
 
-    return await with_ydl(PLATFORM, go)
+    return await with_ydl(PLATFORM, go, use_cookies=use_cookies)
 
 
 def profile_restriction(html: str) -> str | None:
@@ -462,7 +485,8 @@ def _profile_user(html: str, results: list[dict[str, Any]]) -> dict[str, Any]:
     return user
 
 
-async def fetch_profile(handle: str, tab: str = "", *, highlights: bool = False) -> tuple[dict[str, Any], str]:
+async def fetch_profile(handle: str, tab: str = "", *, highlights: bool = False, use_cookies: bool = True
+                        ) -> tuple[dict[str, Any], str]:
     """The profile's appropriate client: authenticated queries or logged-out Relay data."""
     url = f"{WEB}/{handle}/{tab + '/' if tab else ''}"
 
@@ -480,7 +504,7 @@ async def fetch_profile(handle: str, tab: str = "", *, highlights: bool = False)
 
     # Instagram can serve its missing-profile page to one connection while
     # another resolves the same public creator. Confirm within the finite pool.
-    return await with_ydl(PLATFORM, go, confirm_not_found=True)
+    return await with_ydl(PLATFORM, go, confirm_not_found=True, use_cookies=use_cookies)
 
 
 async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
@@ -491,9 +515,10 @@ async def fetch_topic(query: str) -> tuple[dict[str, Any], str]:
     answers with a real 404 page. (With a rejected session the /popular/ page redirects too.)"""
     quoted = urllib.parse.quote(query)
     try:
-        html, results = await fetch_page("InstagramTag", f"{WEB}/explore/tags/{quoted}/", query, "Topic")
+        html, results = await fetch_page("InstagramTag", f"{WEB}/explore/tags/{quoted}/", query, "Topic",
+                                         use_cookies=False)
     except (UpstreamBlocked, SessionRejected):
-        html, results = await fetch_page("InstagramTag", f"{WEB}/popular/{quoted}/", query, "Topic")
+        html, results = await fetch_page("InstagramTag", f"{WEB}/popular/{quoted}/", query, "Topic", use_cookies=False)
     data = next((r["data"] for r in results
                  if isinstance(r.get("data"), dict) and any(k in r["data"] for k in _TOPIC_KEYS)), None)
     if data is None:
@@ -827,7 +852,40 @@ def _with_kept_caption(node: dict[str, Any]) -> dict[str, Any]:
 async def fetch_feed(handle: str, tab: str = "", cursor: str | None = None) -> Feed:
     """A page of the profile's posts tab (tab '') or reels tab: the first one is the page's own, later ones the
     tab's query after `cursor`; with each item's post-query details."""
-    return await with_ydl(PLATFORM, _feed_flow(handle, tab, cursor), confirm_not_found=True)
+    from .instagram_authenticated import PublicListingRequired
+
+    public_id = None
+    if cursor and cursor.startswith("ss1."):
+        if len(cursor) > 16384:
+            raise BadRequest("Invalid Instagram cursor", code="bad_cursor")
+        state = decode_cursor(cursor)
+        if (state.get("k") != "instagram_public_feed" or state.get("h") != handle.lower()
+                or state.get("tab") != tab or not isinstance(state.get("t"), str) or not state["t"]
+                or not re.fullmatch(r"[0-9]{1,20}", str(state.get("uid", "")))):
+            raise BadRequest("This cursor does not belong to this Instagram listing", code="bad_cursor")
+        public_id, cursor = state["uid"], state["t"]
+    if public_id is None:
+        try:
+            return await with_ydl(PLATFORM, _feed_flow(handle, tab, cursor), confirm_not_found=True)
+        except PublicListingRequired as exc:
+            public_id = exc.user_id
+    # Some signed-in views hide public reels that the logged-out client lists.
+    # Verify the same immutable profile ID; never replace them with an empty
+    # success, and bind any public continuation to its source/profile/tab.
+    try:
+        feed = await with_ydl(PLATFORM, _feed_flow(handle, tab, cursor),
+                              confirm_not_found=True, use_cookies=False)
+    except NotFound as exc:
+        raise UpstreamBlocked("Instagram's public listing could not confirm the signed-in profile") from exc
+    if (str(feed.user.get("pk")) != str(public_id)
+            or str(feed.user.get("username", "")).lower() != handle.lower()):
+        raise UpstreamError("Instagram's public and signed-in listing identities disagree")
+    if _cursor(feed.page_info):
+        feed.page_info = {**feed.page_info, "end_cursor": encode_cursor({
+            "k": "instagram_public_feed", "h": handle.lower(), "tab": tab,
+            "uid": str(public_id), "t": feed.page_info["end_cursor"],
+        })}
+    return feed
 
 
 def _highlight_flow(highlight_id: str) -> Callable[[yt_dlp.YoutubeDL], dict[str, Any] | None]:
@@ -1536,14 +1594,14 @@ async def _read_tab(tab: ReelsTab, first: int) -> None:
         try:
             try:
                 connection = await with_ydl(PLATFORM, _tab_query_flow(
-                    tab.handle, REELS_TAB_DOC, f"{REELS_TAB_QUERY}_connection", variables, "node"))
+                    tab.handle, REELS_TAB_DOC, f"{REELS_TAB_QUERY}_connection", variables, "node"), use_cookies=False)
             except UpstreamError:  # a 5xx: very large tabs fail deep pages of 200+ reels; ask once for fewer
                 if first <= _TAB_SMALL:
                     raise
                 await asyncio.sleep(_TAB_PAUSE)
                 connection = await with_ydl(PLATFORM, _tab_query_flow(
                     tab.handle, REELS_TAB_DOC, f"{REELS_TAB_QUERY}_connection", {**variables, "first": _TAB_SMALL},
-                    "node"))
+                    "node"), use_cookies=False)
         except _TabQueryGone as exc:
             _retired_docs.add(REELS_TAB_DOC)
             log.warning("instagram: Reels tab pagination doc_id %s is retired (%s); paging 12 reels a request with "
@@ -1554,7 +1612,7 @@ async def _read_tab(tab: ReelsTab, first: int) -> None:
             tab.add(connection)
             return
     if tab.root_doc is None:
-        user, html = await fetch_profile(tab.handle, "reels")
+        user, html = await fetch_profile(tab.handle, "reels", use_cookies=False)
         tab.user_id = tab.user_id or str_or_none(user.get("id"))
         if not (m := _TAB_QUERY_ID.search(html)):
             raise UpstreamError("The Reels tab page names no query to page the tab with", code="reels_tab_unavailable")
@@ -1564,7 +1622,7 @@ async def _read_tab(tab: ReelsTab, first: int) -> None:
             return
     connection = await with_ydl(PLATFORM, _tab_query_flow(
         tab.handle, tab.root_doc, REELS_TAB_QUERY,
-        {"after": tab.cursor, "first": _TAB_ROOT_FIRST, "username": tab.handle}, "xig_user_by_username"))
+        {"after": tab.cursor, "first": _TAB_ROOT_FIRST, "username": tab.handle}, "xig_user_by_username"), use_cookies=False)
     if connection is None:
         raise NotFound("Profile not found")
     tab.add(connection)

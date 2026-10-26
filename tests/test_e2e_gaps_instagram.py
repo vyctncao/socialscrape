@@ -307,6 +307,11 @@ def test_unusable_cookie_file_is_cookies_error(tmp_path, content, problem):
         h = c.get("/health").json()
         assert h["cookie_errors"] == {"instagram": problem} and h["cookies"] == []
         for p, params in NOT_TRANSCRIPT:
+            if p in {"/v1/instagram/search/popular", "/v1/instagram/search/hashtag",
+                     "/v2/instagram/reels/search", "/v1/instagram/reels/trending"}:
+                # Public SEO pages deliberately ignore account cookies. Their
+                # guest-client selection is tested without live network calls.
+                continue
             r = c.get(p, params=params)
             body = r.json()
             assert r.status_code == 500 and body["error"] == "cookies_error", (p, body)

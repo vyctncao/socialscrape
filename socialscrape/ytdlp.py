@@ -508,6 +508,7 @@ def _cookie_sendable(cookie: Cookie) -> bool:
 
 
 async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confirm_not_found: bool = False,
+                   use_cookies: bool = True,
                    **ydl_opts: Any) -> T:
     """Run `fn(ydl)` in the worker pool, retrying configured connection profiles.
 
@@ -518,6 +519,8 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
     from .portal import active_platform_pool
 
     proxies, cookies = active_platform_pool(platform)
+    if not use_cookies:
+        cookies = []
     attempts = max(len(proxies), len(cookies), 1)
     loop = asyncio.get_running_loop()
     for index in range(attempts):
@@ -526,6 +529,10 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
             options["_dashboard_proxy"] = proxies[min(index, len(proxies) - 1)]
         if cookies:
             options["_dashboard_cookies"] = cookies[min(index, len(cookies) - 1)]
+        elif not use_cookies:
+            # Empty is an explicit anonymous jar: _run also skips environment
+            # files/browser imports, while keeping the configured proxy pool.
+            options.update(_dashboard_cookies="", cookiefile=None, cookiesfrombrowser=None)
         try:
             return await asyncio.wait_for(
                 loop.run_in_executor(_pool(), _run, platform, fn, options),

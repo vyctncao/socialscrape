@@ -1428,7 +1428,7 @@ def reels_tab(monkeypatch):
         state.queries.append((doc, variables))
         return ig.tab_connection(*answer(doc, variables), owner)
 
-    async def fetch_profile(handle, tab=""):
+    async def fetch_profile(handle, tab="", **opts):
         state.pages.append(f"{handle}/{tab}")
         user = {"pk": TAB["pk"], "id": TAB["user_id"], "username": "jane",
                 "polaris_clips_connection": connection(None, 12)}

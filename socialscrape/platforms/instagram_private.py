@@ -13,7 +13,7 @@ from ..errors import BadRequest, NotSupported, require_one
 from ..registry import sc_get
 from ..util import compact
 from ..ytdlp import with_ydl
-from .instagram import WEB, _api_json, map_comment, map_hashtag_post
+from .instagram import WEB, _api_json, map_comment
 
 router = APIRouter()
 P = "instagram"
@@ -101,21 +101,39 @@ async def comment_replies(url: str = Query(...), comment_id: str = Query(...), c
 
 
 @sc_get(router, "/v1/instagram/user/tagged-posts",
-        source="Instagram mobile feed/usertags/<id> API with saved cookies",
+        source="Instagram signed-in tagged-post GraphQL query with native cursors",
         status="needs_setup", notes="Requires a signed-in Instagram cookie account configured in Platform settings.")
 async def tagged_posts(user_id: str = Query(...), cursor: str | None = None):
-    data = await with_ydl(P, _mobile(f"feed/usertags/{user_id}/", user_id,
-                                     {"max_id": cursor} if cursor else None))
-    return {"posts": [map_hashtag_post(item) for item in traverse_obj(data, ("items", ..., {dict}))],
-            "cursor": data.get("next_max_id")}
+    if not re.fullmatch(r"[0-9]{1,20}", user_id):
+        raise BadRequest("user_id must be an Instagram numeric user ID")
+
+    def go(ydl: yt_dlp.YoutubeDL):
+        ie = ydl.get_info_extractor("Instagram")
+        _require_login(ie)
+        from . import instagram_authenticated
+        from .instagram import _check_page, _page_flow
+
+        html, final_url = _page_flow("Instagram", f"{WEB}/", "tagged", allow_home=True)(ydl)
+        _check_page(html, final_url, "Profile", allow_home=True)
+        return instagram_authenticated.Session(ie, html, final_url).tagged(user_id, cursor)
+
+    return await with_ydl(P, go)
 
 
-@sc_get(router, "/v1/instagram/audio/reels", source="Instagram mobile clips/music API with saved cookies",
+@sc_get(router, "/v1/instagram/audio/reels", source="Instagram signed-in audio-page POST with native media and cursors",
         status="needs_setup", notes="Requires a signed-in Instagram cookie account configured in Platform settings.")
 async def audio_reels(audio_id: str = Query(...), cursor: str | None = None):
-    query = {"audio_cluster_id": audio_id, "original_sound_audio_asset_id": audio_id}
-    if cursor:
-        query["max_id"] = cursor
-    data = await with_ydl(P, _mobile("clips/music/", audio_id, query))
-    return {"reels": [map_hashtag_post(item) for item in traverse_obj(data, ("items", ..., {dict}))],
-            "cursor": data.get("next_max_id")}
+    if not re.fullmatch(r"[0-9]{1,20}", audio_id):
+        raise BadRequest("audio_id must be an Instagram numeric audio ID")
+
+    def go(ydl: yt_dlp.YoutubeDL):
+        ie = ydl.get_info_extractor("Instagram")
+        _require_login(ie)
+        from . import instagram_authenticated
+        from .instagram import _check_page, _page_flow
+
+        html, final_url = _page_flow("Instagram", f"{WEB}/reels/audio/{audio_id}/", audio_id)(ydl)
+        _check_page(html, final_url, "Audio")
+        return instagram_authenticated.Session(ie, html, final_url).audio(audio_id, cursor)
+
+    return await with_ydl(P, go)
