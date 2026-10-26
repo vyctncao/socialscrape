@@ -175,9 +175,11 @@ When YouTube rate-limits the server's IP, it answers a video's watch page and pl
 
 The other 14 return 501: comments and replies, followers and following, audience, top search and suggestions, trending, popular creators, Shop, and showcase. Popular creators ranks the creators in TikTok's regional recommended feed, which TikTok serves only to a signed-in account (Creative Center's creator chart now needs a TikTok One login), so it works with TikTok account cookies in Platform settings and is otherwise `501 platform_auth_required`. The TikTok Ad Library search and detail operations (counted here) use TikTok's public Commercial Content Library and Creative Center surfaces.
 
-### Instagram: 14 / 20
+### Instagram: 14 public routes and 6 account routes
 
 With account cookies configured in Platform settings, profiles, post counts, posts, reels, highlights, basic profile lookup and search use Instagram's signed-in web client. Its page supplies the requested profile's ID and request tokens; the response must identify that same profile. Profile counts are exact when exposed, every native feed item and continuation cursor is kept, and reels receive dates/captions from authenticated media info. `require_play_counts=true` on posts/reels rejects incomplete play counts. Missing counts remain unknown. Search uses the current GraphQL query; the retired top-search URL is no longer used. Account cookies do not establish that every gated route is working: the live endpoint tests and coverage notes remain the readiness check.
+
+Public topic, hashtag and trending pages deliberately run without account cookies, including when an account is configured: Instagram serves those pages only to public visitors. Tagged posts use the current GraphQL connection and retain their real cursor; audio uses the web client's read-only POST and preserves its native media objects and separate Instagram/Facebook counters. When a signed-in feed omits public media, the public reader must identify the same profile before its items can be returned. Any continuation from that reader uses a scoped `ss1.` token so later pages keep the same client. An authenticated media-unavailable response is confirmed with the public client before returning 404.
 
 Anonymous Instagram is heavily restricted. Most endpoints return **only the first page** of what Instagram's logged-out pages show, and passing a pagination token returns 501; `user/posts` and `user/reels` page through the profile's tabs the way the logged-out web client scrolls them.
 

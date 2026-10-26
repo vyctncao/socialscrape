@@ -25,6 +25,7 @@ POSTS = ("PolarisProfilePostsQuery", "29156678094015645")
 REELS = ("PolarisProfileReelsTabContentQuery", "28829344613371148")
 HIGHLIGHTS = ("PolarisProfileStoryHighlightsTrayContentQuery", "26970053832668570")
 SEARCH = ("PolarisAPITopsearchQuery", "40560838120170065")
+TAGGED = ("PolarisProfileTaggedTabContentQuery", "39800699849576270")
 _PROVIDER = "__relay_internal__pv__"
 _PROFILE_FLAGS = (
     "PolarisCannesGuardianExperienceEnabledrelayprovider",
@@ -42,6 +43,18 @@ _POST_FLAGS = (
     "PolarisThreadsStyleCommentsEnabledrelayprovider",
     "PolarisReelsRecoDebugOverlayEnabledrelayprovider",
 )
+
+
+class PublicListingRequired(UpstreamBlocked):
+    """A signed-in empty listing needs a separately verified public view."""
+
+    code = "signed_in_listing_unavailable"
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__(
+            "Instagram returned no signed-in listing items for a profile with existing media"
+        )
+        self.user_id = user_id
 
 
 def _objects(value: Any, depth: int = 0):
@@ -254,9 +267,7 @@ class Session(ig.WebSession):
             and isinstance(known_count, int)
             and known_count > 0
         ):
-            raise UpstreamBlocked(
-                "Instagram returned no listing items for a profile with existing media"
-            )
+            raise PublicListingRequired(str(user["pk"]))
         return nodes, page
 
     def details(self, nodes: list[dict]) -> dict[str, dict]:
@@ -314,6 +325,163 @@ class Session(ig.WebSession):
                 }
             )
         return nodes
+
+    def tagged(self, user_id: str, cursor: str | None) -> dict:
+        user = self.profile(None, user_id)
+        variables = {
+            "user_id": user_id,
+            "count": 12,
+            "first": 12,
+            _PROVIDER + "PolarisShortDramaEnabledrelayprovider": False,
+            _PROVIDER + "PolarisSEOIsCrawlerrelayprovider": True,
+            **({"after": cursor} if cursor else {}),
+        }
+        data = self.query(*TAGGED, variables)
+        connection = traverse_obj(
+            data, ("data", "xdt_api__v1__usertags__user_id__feed_connection", {dict})
+        )
+        if connection is None:
+            raise ig._graphql_failure(data, "tagged posts")
+        edges, page = connection.get("edges"), connection.get("page_info")
+        if (
+            not isinstance(edges, list)
+            or not isinstance(page, dict)
+            or not isinstance(page.get("has_next_page"), bool)
+        ):
+            raise UpstreamError("Instagram returned an incomplete tagged-post listing")
+        more, next_cursor = page["has_next_page"], page.get("end_cursor")
+        if more and (
+            not isinstance(next_cursor, str) or not next_cursor or next_cursor == cursor
+        ):
+            raise UpstreamError("Instagram returned a non-advancing tagged-post cursor")
+        posts = []
+        for edge in edges:
+            media = edge.get("node") if isinstance(edge, dict) else None
+            if (
+                not isinstance(media, dict)
+                or not media.get("pk")
+                or not media.get("code")
+            ):
+                raise UpstreamError(
+                    "Instagram returned a tagged post without its identity"
+                )
+            posts.append(
+                {
+                    "pk": media["pk"],
+                    "code": media["code"],
+                    "media_type": media.get("media_type"),
+                    "caption": traverse_obj(media, ("caption", "text", {str})),
+                    "comment_count": ig._count("comment_count", media),
+                    "like_count": ig._count("like_count", media),
+                    "view_count": ig._count("view_count", media),
+                    "user": media.get("user"),
+                    "url": f"{ig.WEB}/p/{media['code']}/",
+                }
+            )
+        if len({str(post["pk"]) for post in posts}) != len(posts):
+            raise UpstreamError("Instagram returned duplicate tagged posts in one page")
+        if not posts and user.get("is_private") is True:
+            raise Forbidden("This account is private")
+        return {
+            "posts": posts,
+            "cursor": next_cursor if more else None,
+            "has_more": more,
+        }
+
+    def audio(self, audio_id: str, cursor: str | None) -> dict:
+        """The web app's read-only POST, including its guarded XController envelope."""
+        cookies = self.ie._get_cookies(ig.WEB)
+        csrf, viewer = cookies.get("csrftoken"), cookies.get("ds_user_id")
+        form = {
+            "audio_cluster_id": audio_id,
+            "original_sound_audio_asset_id": audio_id,
+            **({"max_id": cursor} if cursor else {}),
+            "fb_dtsg": self._dtsg,
+            "lsd": self.lsd,
+            "jazoest": "2" + str(sum(map(ord, self._dtsg))),
+            "__a": "1",
+            "__d": "www",
+            "__user": "0",
+            **({"av": viewer.value} if viewer else {}),
+        }
+        body, response = self.ie._download_webpage_handle(
+            f"{ig.WEB}/api/v1/clips/music/",
+            audio_id,
+            data=urlencode_postdata(form),
+            headers={
+                **self.ie._api_headers,
+                "X-Requested-With": "XMLHttpRequest",
+                "X-FB-LSD": self.lsd,
+                "Referer": self.referer,
+                "Content-Type": "application/x-www-form-urlencoded",
+                **({"X-CSRFToken": csrf.value} if csrf else {}),
+            },
+            impersonate=self.ie._can_impersonate,
+            expected_status=lambda _: True,
+        )
+        outer = ig.api_answer(
+            response.status,
+            body.removeprefix("for (;;);"),
+            response.url,
+            logged_in=True,
+        )
+        if outer.get("error"):
+            raise UpstreamError("Instagram rejected the audio-page query")
+        payload = outer.get("payload")
+        if outer.get("__ar") != 1 or not isinstance(payload, dict):
+            raise UpstreamError("Instagram returned no audio-page payload")
+        if payload.get("is_music_page_restricted") is True:
+            raise Forbidden("This Instagram audio page is restricted")
+        metadata = payload.get("metadata")
+        ids = (
+            traverse_obj(
+                metadata,
+                (
+                    "music_info",
+                    "music_asset_info",
+                    ("audio_cluster_id", "audio_asset_id"),
+                ),
+            )
+            or []
+        )
+        original = traverse_obj(metadata, ("original_sound_info", "audio_asset_id"))
+        if audio_id not in {
+            str(value) for value in [*ids, original] if isinstance(value, (str, int))
+        }:
+            raise UpstreamError("Instagram returned a different audio-page identity")
+        items, paging = payload.get("items"), payload.get("paging_info")
+        if (
+            not isinstance(items, list)
+            or not isinstance(paging, dict)
+            or not isinstance(paging.get("more_available"), bool)
+        ):
+            raise UpstreamError("Instagram returned an incomplete audio listing")
+        reels = []
+        for item in items:
+            media = item.get("media") if isinstance(item, dict) else None
+            if (
+                not isinstance(media, dict)
+                or not media.get("pk")
+                or not media.get("code")
+            ):
+                raise UpstreamError(
+                    "Instagram returned audio media without its identity"
+                )
+            # ScrapeCreators exposes these native media objects, including the
+            # separate play_count, fb_play_count and ig_play_count semantics.
+            reels.append(media)
+        if len({str(media["pk"]) for media in reels}) != len(reels):
+            raise UpstreamError("Instagram returned duplicate audio media in one page")
+        more, next_cursor = paging["more_available"], paging.get("max_id")
+        if more and (
+            not isinstance(next_cursor, str) or not next_cursor or next_cursor == cursor
+        ):
+            raise UpstreamError("Instagram returned a non-advancing audio cursor")
+        return {
+            "reels": reels,
+            "cursor": next_cursor if more else None,
+            "has_more": more,
+        }
 
 
 def profile(
