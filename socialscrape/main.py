@@ -74,6 +74,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             origin = settings.public_url or str(request.base_url).rstrip("/")
             if principal := portal.authenticate_bearer(bearer_token, origin + "/mcp"):
                 request.state.principal = principal
+                request.state.auth_kind = "bearer"
                 return await call_next(request)
             if path == "/mcp":
                 return JSONResponse(
@@ -86,6 +87,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         if path != "/mcp" and portal and (
                 principal := portal.principal_for_session(request.cookies.get("socialscrape_session"))):
             request.state.principal = principal
+            request.state.auth_kind = "session"
             selected = request.headers.get("x-portal-key-id", "")
             if selected.isascii() and selected.isdigit() and portal.key_available_to(principal, int(selected)):
                 request.state.api_key_id = int(selected)
@@ -96,6 +98,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
         given = given_text.encode("latin-1")
         if portal and given_text and (identity := portal.authenticate_key(given_text)):
             request.state.principal, request.state.api_key_id = identity
+            request.state.auth_kind = "api_key"
             return await call_next(request)
         if settings.api_keys and any(hmac.compare_digest(given, k.encode()) for k in settings.api_keys):
             return await call_next(request)
@@ -117,6 +120,9 @@ class UsageMiddleware(BaseHTTPMiddleware):
     """Record API calls made through a member key for dashboard history and usage."""
 
     async def dispatch(self, request: Request, call_next):
+        if request.url.path.startswith("/v1/admin"):
+            # Proxy URLs and cookies travel in these bodies: never copy them into request history.
+            return await call_next(request)
         started = perf_counter()
         query = request.url.query
         if (request.method == "POST" and request.url.path.startswith("/v")

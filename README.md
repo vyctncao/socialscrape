@@ -318,7 +318,22 @@ SocialScrape exposes one MCP tool per documented path, including the four local 
 }
 ```
 
-Every tool is read-only. Tool calls run through the application in-process, so REST authentication, request history, caching, and configured fallback behavior also apply to MCP. Set `SOCIALSCRAPE_PUBLIC_URL` in production so authentication challenges point at the canonical public origin.
+Every data tool is read-only. Tool calls run through the application in-process, so REST authentication, request history, caching, and configured fallback behavior also apply to MCP. Set `SOCIALSCRAPE_PUBLIC_URL` in production so authentication challenges point at the canonical public origin.
+
+### Managing proxies and accounts
+
+A workspace owner's API key can also manage the per-platform proxy and signed-in account pools. The REST routes are
+`GET /v1/admin/platforms`, `POST /v1/admin/platforms/{platform}/proxies` (`{"proxy": "...", "test": true}`),
+`POST /v1/admin/platforms/{platform}/accounts` (`{"cookies": "..."}`), `POST .../proxies/{id}/test`,
+`POST .../accounts/{id}/check`, `POST .../{proxies|accounts}/{id}/move` (`{"direction": "up|down"}`), and
+`DELETE .../{proxies|accounts}/{id}`. Accounts accept a Netscape `cookies.txt`, a browser JSON cookie export, that export
+base64-encoded, or a Cookie header. Values travel only in JSON bodies, are encrypted like dashboard entries, are never
+returned, and are excluded from request history.
+
+The same owner key unlocks seven MCP tools: `admin_list_platform_settings`, `admin_add_proxy`, `admin_test_proxy`,
+`admin_add_account`, `admin_check_account`, `admin_move_platform_setting`, and `admin_remove_platform_setting` (marked
+destructive). Member keys, legacy `SOCIALSCRAPE_API_KEYS`, dashboard sessions, and MCP OAuth grants cannot use them; the
+OAuth consent only covers data tools. The CLI equivalents are `socialscrape proxies ...` and `socialscrape accounts ...`.
 
 MCP clients can alternatively discover OAuth 2.1 from the protected-resource metadata advertised by `/mcp`. SocialScrape supports public-client dynamic registration, authorization code grants with PKCE S256, member consent, one-hour bearer tokens, and rotating refresh tokens. The portal must be enabled because approval and token attribution use portal members. Cursor, Claude, Claude Code, and VS Code can therefore use a URL-only configuration:
 

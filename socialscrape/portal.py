@@ -344,6 +344,7 @@ class PortalStore:
             if not value:
                 raise ValueError("Enter a proxy URL")
         else:
+            value = _normalize_cookies(platform, value)
             _validate_cookies(platform, value)
         entry_id = secrets.token_urlsafe(9)
         pool.append({"id": entry_id, "value": value, "updated_at": time.time()})
@@ -888,6 +889,80 @@ def _check_platform_setting(platform: str, kind: str) -> None:
         raise HTTPException(404, "Unknown platform setting")
 
 
+_COOKIE_DOMAINS = {"instagram": ".instagram.com", "tiktok": ".tiktok.com", "youtube": ".youtube.com",
+                   "facebook": ".facebook.com", "google": ".google.com"}
+
+
+def _normalize_cookies(platform: str, value: str) -> str:
+    """Netscape cookies.txt for an owner's account input.
+
+    Accepts the file itself, a browser extension's JSON export (a list of cookie objects, as from Cookie-Editor or
+    EditThisCookie), that JSON base64-encoded (how account sellers often ship it), or a copied Cookie request header.
+    Errors never quote the input: it is a signed-in session.
+    """
+    import base64
+    import binascii
+
+    text = value.strip()
+    if not text:
+        raise ValueError("Paste a cookies.txt file, a browser cookie export or a Cookie header")
+    if len(text.encode()) > 2 * 1024 * 1024:
+        raise ValueError("The cookie input must be no larger than 2 MiB")
+    if "\t" in text or text.startswith(("# Netscape", "# HTTP Cookie File")):
+        return text + "\n"
+    parsed: Any = None
+    candidates = [text]
+    compact = re.sub(r"\s+", "", text)
+    if re.fullmatch(r"[A-Za-z0-9+/_-]+={0,2}", compact):
+        try:
+            candidates.append(base64.b64decode(compact + "=" * (-len(compact) % 4), altchars=b"-_", validate=False)
+                              .decode())
+        except (binascii.Error, UnicodeDecodeError):
+            pass
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            break
+        except (TypeError, ValueError):
+            continue
+    if isinstance(parsed, dict) and isinstance(parsed.get("cookies"), list):
+        parsed = parsed["cookies"]
+    if isinstance(parsed, list):
+        rows = ["# Netscape HTTP Cookie File"]
+        for cookie in parsed:
+            if not isinstance(cookie, dict) or not isinstance(cookie.get("name"), str) or \
+                    not isinstance(cookie.get("value"), str) or not cookie["name"]:
+                raise ValueError("Each exported cookie needs a name and a value")
+            domain = str(cookie.get("domain") or _COOKIE_DOMAINS[platform])
+            host_only = bool(cookie.get("hostOnly", not domain.startswith(".")))
+            if not host_only and not domain.startswith("."):
+                domain = "." + domain
+            expires = cookie.get("expirationDate", cookie.get("expires", cookie.get("expiry", 0)))
+            try:
+                expires = max(0, int(float(expires or 0)))
+            except (TypeError, ValueError):
+                expires = 0
+            fields = [domain, "FALSE" if host_only else "TRUE", str(cookie.get("path") or "/"),
+                      "TRUE" if cookie.get("secure") else "FALSE", str(expires), cookie["name"], cookie["value"]]
+            if any("\t" in field or "\n" in field or "\r" in field for field in fields):
+                raise ValueError("An exported cookie contains a tab or a line break")
+            rows.append("\t".join(fields))
+        return "\n".join(rows) + "\n"
+    header = re.sub(r"^cookie:\s*", "", text, flags=re.I)
+    pairs: dict[str, str] = {}
+    if "\n" not in header and "=" in header:
+        for part in header.split(";"):
+            name, sep, cookie_value = part.strip().partition("=")
+            if sep and name and not any(c.isspace() for c in name):
+                pairs[name] = cookie_value  # a repeated name keeps its last value, as a cookie jar would
+    if not pairs:
+        raise ValueError("Use a Netscape cookies.txt file, a browser cookie export (JSON), or a Cookie header")
+    rows = ["# Netscape HTTP Cookie File"]
+    rows += ["\t".join([_COOKIE_DOMAINS[platform], "TRUE", "/", "TRUE", "0", name, cookie_value])
+             for name, cookie_value in pairs.items()]
+    return "\n".join(rows) + "\n"
+
+
 def _validate_cookies(platform: str, value: str) -> None:
     import io
 
@@ -1310,5 +1385,135 @@ autocomplete="new-password" aria-describedby="password-hint" required></label>
     @router.get("/portal/api/usage")
     async def usage(request: Request):
         return store.usage(_require(request))
+
+    app.include_router(router)
+    install_admin_api(app, store, _check_account)
+
+
+ADMIN_KINDS = {"proxies": "proxy", "accounts": "cookies"}
+_ADMIN_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def install_admin_api(app, store: PortalStore, check_account) -> None:
+    """Owner proxy and account management for the CLI and MCP.
+
+    These routes accept only a workspace owner's API key: not a dashboard session, which would need CSRF protection,
+    and not an MCP OAuth token, whose grant only covered the data tools. Responses never contain proxy URLs or cookies.
+    """
+    router = APIRouter(prefix="/v1/admin", include_in_schema=False)
+
+    def error(status: int, code: str, message: str) -> JSONResponse:
+        return JSONResponse({"success": False, "error": code, "message": message}, status_code=status)
+
+    def owner(request: Request) -> Principal | JSONResponse:
+        principal = getattr(request.state, "principal", None)
+        if principal is None or principal.role != "owner" or getattr(request.state, "auth_kind", None) != "api_key":
+            return error(403, "owner_api_key_required",
+                         "Managing proxies and accounts needs a workspace owner's API key in the x-api-key header.")
+        return principal
+
+    def target(platform: str, kind: str, entry_id: str | None = None) -> tuple[str, str] | JSONResponse:
+        if platform not in PLATFORMS:
+            return error(404, "not_found", f"Unknown platform. Use one of: {', '.join(PLATFORMS)}")
+        if kind not in ADMIN_KINDS:
+            return error(404, "not_found", "Use proxies or accounts")
+        if entry_id is not None and not _ADMIN_ID.fullmatch(entry_id):
+            return error(404, "not_found", "Platform setting not found")
+        return platform, ADMIN_KINDS[kind]
+
+    async def body(request: Request) -> dict[str, Any] | JSONResponse:
+        try:
+            data = await request.json()
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return error(400, "invalid_parameter", "Send a JSON object")
+        return data if isinstance(data, dict) else error(400, "invalid_parameter", "Send a JSON object")
+
+    def position(platform: str, kind: str, entry_id: str) -> int | None:
+        return next((i + 1 for i, item in enumerate(store._pool(platform, kind)) if item["id"] == entry_id), None)
+
+    @router.get("/platforms")
+    async def platforms(request: Request):
+        if isinstance(p := owner(request), JSONResponse):
+            return p
+        status = store.platform_status(p)
+        return {"success": True, "max_entries": 5, "platforms": {
+            platform: {"proxies": pools["proxy"], "accounts": pools["cookies"]} for platform, pools in status.items()}}
+
+    @router.post("/platforms/{platform}/{kind}", status_code=201)
+    async def add(request: Request, platform: str, kind: str):
+        if isinstance(p := owner(request), JSONResponse):
+            return p
+        if isinstance(where := target(platform, kind), JSONResponse):
+            return where
+        if isinstance(data := await body(request), JSONResponse):
+            return data
+        _, store_kind = where
+        field = "proxy" if store_kind == "proxy" else "cookies"
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return error(400, "invalid_parameter", f"Send {field} as a non-empty string")
+        if store_kind == "proxy" and len(value) > 2048:
+            return error(400, "invalid_parameter", "The proxy URL must be no longer than 2048 characters")
+        test = data.get("test", True)
+        if store_kind == "proxy" and not isinstance(test, bool):
+            return error(400, "invalid_parameter", "test must be true or false")
+        try:
+            entry_id = store.add_platform_setting(p, platform, store_kind, value)
+        except (ConfigError, ValueError) as exc:
+            return error(400, "invalid_parameter", str(exc))
+        result: dict[str, Any] = {"success": True, "id": entry_id, "position": position(platform, store_kind, entry_id)}
+        if store_kind == "proxy":
+            result["test"] = await asyncio.to_thread(_test_proxy, platform, value) if test else None
+        else:
+            result["check"] = await check_account(p, platform, entry_id)
+        return JSONResponse(result, status_code=201)
+
+    @router.post("/platforms/{platform}/proxies/{entry_id}/test")
+    async def test_proxy(request: Request, platform: str, entry_id: str):
+        if isinstance(p := owner(request), JSONResponse):
+            return p
+        if isinstance(where := target(platform, "proxies", entry_id), JSONResponse):
+            return where
+        try:
+            proxy = store.platform_setting_value(p, platform, "proxy", entry_id)
+        except ValueError:
+            return error(404, "not_found", "Platform setting not found")
+        return {"success": True, **await asyncio.to_thread(_test_proxy, platform, proxy)}
+
+    @router.post("/platforms/{platform}/accounts/{entry_id}/check")
+    async def check(request: Request, platform: str, entry_id: str):
+        if isinstance(p := owner(request), JSONResponse):
+            return p
+        if isinstance(where := target(platform, "accounts", entry_id), JSONResponse):
+            return where
+        if position(platform, "cookies", entry_id) is None:
+            return error(404, "not_found", "Platform setting not found")
+        return {"success": True, **await check_account(p, platform, entry_id)}
+
+    @router.post("/platforms/{platform}/{kind}/{entry_id}/move")
+    async def move(request: Request, platform: str, kind: str, entry_id: str):
+        if isinstance(p := owner(request), JSONResponse):
+            return p
+        if isinstance(where := target(platform, kind, entry_id), JSONResponse):
+            return where
+        if isinstance(data := await body(request), JSONResponse):
+            return data
+        try:
+            moved = store.move_platform_setting(p, platform, where[1], entry_id, str(data.get("direction", "")))
+        except ValueError as exc:
+            return error(400, "invalid_parameter", str(exc))
+        if not moved:
+            return error(404, "not_found", "This platform setting could not move in that direction")
+        return {"success": True, "moved": True}
+
+    @router.delete("/platforms/{platform}/{kind}/{entry_id}")
+    async def remove(request: Request, platform: str, kind: str, entry_id: str):
+        if isinstance(p := owner(request), JSONResponse):
+            return p
+        if isinstance(where := target(platform, kind, entry_id), JSONResponse):
+            return where
+        if not store.remove_platform_setting(p, platform, where[1], entry_id):
+            return error(404, "not_found", "Platform setting not found")
+        return {"success": True, "removed": True}
 
     app.include_router(router)
