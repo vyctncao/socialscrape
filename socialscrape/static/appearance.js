@@ -61,6 +61,11 @@
       const tooltip = document.getElementById(button.getAttribute('aria-describedby')); if (tooltip) tooltip.textContent = button.getAttribute('aria-label');
     });
   }
+  // Browser chrome follows the page surface in both themes; the static meta only covers the first paint.
+  function updateThemeColor() {
+    const meta = document.querySelector('meta[name="theme-color"]'), color = document.body && getComputedStyle(document.body).backgroundColor;
+    if (meta && color && color !== 'rgba(0, 0, 0, 0)') meta.setAttribute('content', color);
+  }
   function updateButtons() {
     const light = document.documentElement.dataset.theme === 'light';
     const version = encodeURIComponent(document.documentElement.dataset.assetVersion || '');
@@ -70,7 +75,7 @@
       button.innerHTML = `<svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg?v=${version}#${light ? 'moon' : 'sun'}"></use></svg>`;
     });
   }
-  document.addEventListener('DOMContentLoaded', () => { updateButtons(); updateSidebar(); });
+  document.addEventListener('DOMContentLoaded', () => { updateButtons(); updateSidebar(); updateThemeColor(); });
   document.addEventListener('click', event => {
     if (event.target.closest('[data-sidebar-toggle]')) {
       const next = document.documentElement.dataset.sidebar === 'collapsed' ? 'expanded' : 'collapsed';
@@ -84,14 +89,16 @@
     const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('socialscrape-theme', next); } catch {}
-    updateButtons();
+    updateButtons(); updateThemeColor();
   });
   document.addEventListener('submit', event => {
     const auth = document.body.classList.contains('auth-page');
     if (!auth && event.target.getAttribute('action') !== '/logout') return;
-    if (event.submitter?.hasAttribute('data-pending')) { event.preventDefault(); return; }
-    const action = event.target.getAttribute('action');
-    pendingButton(event.submitter, action === '/login' ? 'Signing in…' : action === '/setup' ? 'Creating account…' : action === '/logout' ? 'Signing out…' : 'Joining workspace…');
+    // One submission per form: the consent page's Deny must not race an Approve that is already on its way.
+    if (event.submitter?.hasAttribute('data-pending') || event.target.getAttribute('aria-busy') === 'true') { event.preventDefault(); return; }
+    const action = event.target.getAttribute('action'), deny = event.submitter?.value === 'deny';
+    pendingButton(event.submitter, action === '/login' ? 'Signing in…' : action === '/setup' ? 'Creating account…' : action === '/logout' ? 'Signing out…'
+      : action === '/oauth/authorize' ? (deny ? 'Denying…' : 'Approving…') : 'Joining workspace…');
   });
   window.addEventListener('pageshow', event => {
     if (event.persisted) for (const restore of pendingButtons.values()) restore();

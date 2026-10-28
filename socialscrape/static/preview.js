@@ -144,7 +144,7 @@ const ResponsePreview = (() => {
     if (!audio || !(text(audio.title) || text(audio.artist))) return '';
     const parts = [text(audio.artist) ? esc(audio.artist) : '', audio.duration ? esc(audio.duration) : ''].filter(Boolean).join(' · ');
     const badge = audio.original === true ? '<span class="badge">Original audio</span>' : '';
-    const id = present(audio.id) ? `<span>ID <code>${esc(audio.id)}</code></span>` : '';
+    const id = present(audio.id) ? `<span>ID <code translate="no">${esc(audio.id)}</code></span>` : '';
     return `<div class="audio-row"><span class="audio-glyph">${icon('waveform')}</span><div><span class="audio-label">Audio</span><strong>${external(audio.url, esc(text(audio.title) || 'Untitled audio'))}</strong>${parts ? `<span class="byline-meta">${parts}</span>` : ''}</div>${badge || id ? `<div class="audio-tags">${badge}${id}</div>` : ''}</div>`;
   }
   // [{label, value}] with value as plain text, or {label, html} for markup that is already escaped.
@@ -226,7 +226,7 @@ const ResponsePreview = (() => {
     const firstLine = text(item.caption).split('\n')[0];
     const title = text(item.title) || firstLine || [item.type || 'Item', item.code].filter(Boolean).join(' ');
     const rest = text(item.title) ? text(item.caption) : text(item.caption).slice(firstLine.length).trim();
-    const details = (item.facts || []).filter(row => row && present(row.value)).map(row => `${esc(row.label)} <code>${esc(row.value)}</code>`).join(' · ');
+    const details = (item.facts || []).filter(row => row && present(row.value)).map(row => `${esc(row.label)} <code translate="no">${esc(row.value)}</code>`).join(' · ');
     const url = linkUrl(item.url);
     return `<li class="item-row">${item.round ? avatar(item.thumb, title) : thumb(item, 'small')}<div class="item-body">${url ? `<a class="item-title" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(title)}</a>` : `<span class="item-title">${esc(title)}</span>`}${meta ? `<span class="byline-meta">${meta}</span>` : ''}${caption(rest, 'item-caption', captionFor('caption', title))}${item.audio && text(item.audio.title) ? `<span class="byline-meta">${icon('waveform')}${esc(item.audio.title)}${text(item.audio.artist) ? ` · ${esc(item.audio.artist)}` : ''}</span>` : ''}${inlineStats(item.stats || [])}${details ? `<span class="byline-meta">${details}</span>` : ''}</div></li>`;
   }
@@ -246,7 +246,7 @@ const ResponsePreview = (() => {
   function nextPage(param, value, more = true) {
     const token = text(value);
     if (!token || !more || more === '0') return '';
-    return `<div class="inline-note">${icon('arrow-right')}<span>More results are available. Pass <code>${esc(param)}</code> from the raw response to get the next page${token.length <= 40 ? `: <code class="cursor-value">${esc(token)}</code>` : ''}.</span></div>`;
+    return `<div class="inline-note">${icon('arrow-right')}<span>More results are available. Pass <code translate="no">${esc(param)}</code> from the raw response to get the next page${token.length <= 40 ? `: <code translate="no" class="cursor-value">${esc(token)}</code>` : ''}.</span></div>`;
   }
   function transcriptView(segments, {language, plain, missing}) {
     const badge = language ? `<span class="badge">${esc(language)}</span>` : '';
@@ -727,7 +727,7 @@ const ResponsePreview = (() => {
     },
     '/v1/youtube/video/comments': body => {
       const threads = list(body.comments).filter(comment => text(comment.repliesContinuationToken)).length;
-      const replies = threads ? `<div class="inline-note">${icon('chat-circle')}<span>${plural(threads, 'comment has', 'comments have')} replies. Pass a comment’s <code>repliesContinuationToken</code> as <code>continuationToken</code> to <code>/v1/youtube/video/comment/replies</code> to load them.</span></div>` : '';
+      const replies = threads ? `<div class="inline-note">${icon('chat-circle')}<span>${plural(threads, 'comment has', 'comments have')} replies. Pass a comment’s <code translate="no">repliesContinuationToken</code> as <code translate="no">continuationToken</code> to <code translate="no">/v1/youtube/video/comment/replies</code> to load them.</span></div>` : '';
       return itemList(list(body.comments).map(ytComment), {noun:'comment', render:commentRow, more:!!body.continuationToken}) + replies + nextPage('continuationToken', body.continuationToken);
     },
     '/v1/youtube/video/comment/replies': body => itemList(list(body.comments).map(ytComment), {noun:'reply', nouns:'replies', render:commentRow, more:!!body.continuationToken}) + nextPage('continuationToken', body.continuationToken),
@@ -807,11 +807,11 @@ const ResponsePreview = (() => {
     const html = body === undefined ? null : build(path, status, body, {lazy:true});
     const pretty = body === undefined ? raw : indent(raw.trim());
     if (html === null) {
-      root.innerHTML = '<pre class="code" id="response-raw" tabindex="0" aria-label="API response"></pre>';
+      root.innerHTML = '<pre translate="no" class="code" id="response-raw" tabindex="0" aria-label="API response"></pre>';
       root.firstChild.textContent = pretty;
       return;
     }
-    root.innerHTML = `<div class="code-tabs response-tabs" role="tablist" aria-label="Response format"><button type="button" role="tab" id="response-tab-preview" aria-controls="response-preview" data-response-view="preview">Preview</button><button type="button" role="tab" id="response-tab-raw" aria-controls="response-raw" data-response-view="raw">Raw JSON</button></div><div class="response-preview" id="response-preview" role="tabpanel" tabindex="0" aria-labelledby="response-tab-preview">${html}</div><pre class="code" id="response-raw" role="tabpanel" tabindex="0" aria-labelledby="response-tab-raw"></pre>`;
+    root.innerHTML = `<div class="code-tabs response-tabs" role="tablist" aria-label="Response format"><button type="button" role="tab" id="response-tab-preview" aria-controls="response-preview" data-response-view="preview">Preview</button><button type="button" role="tab" id="response-tab-raw" aria-controls="response-raw" data-response-view="raw">Raw JSON</button></div><div class="response-preview" id="response-preview" role="tabpanel" tabindex="0" aria-labelledby="response-tab-preview">${html}</div><pre translate="no" class="code" id="response-raw" role="tabpanel" tabindex="0" aria-labelledby="response-tab-raw"></pre>`;
     root.querySelector('#response-raw').textContent = pretty;
     root.querySelector('[data-all-fields]')?.addEventListener('toggle', event => {
       const details = event.target;

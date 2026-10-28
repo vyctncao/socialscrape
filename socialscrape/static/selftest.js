@@ -201,7 +201,7 @@ window.EndpointTests = (() => {
   }
   function statusPanel() {
     const tests = scope(), counts = tally(tests), run = model.run;
-    if (run) return `<h2>Running endpoint tests</h2><p class="help">${number(run.done)} of ${number(run.total)} finished${run.canceled.size ? `; ${plural(run.canceled.size, 'test')} canceled before starting` : ''}. Stopping cancels the tests that haven’t started; requests already sent may still finish on the server.</p>${laneStatus(run) ? `<ul class="test-stages">${laneStatus(run)}</ul>` : ''}<progress class="test-progress" max="${run.total}" value="${run.done}" aria-label="Tests finished">${number(run.done)} of ${number(run.total)}</progress>`;
+    if (run) return `<h2>Running endpoint tests</h2><p class="help">${number(run.done)} of ${number(run.total)} finished${run.canceled.size ? `; ${plural(run.canceled.size, 'test')} canceled before starting` : ''}. Stopping cancels the tests that haven’t started; requests already sent may still finish on the server.</p>${laneStatus(run) ? `<ul class="test-stages">${laneStatus(run)}</ul>` : ''}<div class="test-progress" role="progressbar" aria-label="Tests finished" aria-valuemin="0" aria-valuemax="${run.total}" aria-valuenow="${run.done}" aria-valuetext="${number(run.done)} of ${number(run.total)}"><span class="test-progress-fill" style="transform:translateX(${run.total ? Math.round((run.done / run.total - 1) * 1e5) / 1e3 : -100}%)"></span></div>`;
     const lastPaths = new Set([...(model.lastRun?.started || []), ...(model.lastRun?.canceled || [])]);
     const included = tests.filter(test => lastPaths.has(test.path));
     if (!model.lastRun && !tests.some(test => resultFor(test.path).outcome !== 'idle')) return `<h2>No tests run yet</h2><p class="help">Run ${tests.length === model.tests.length ? 'all' : 'these'} ${number(tests.length)} to check each endpoint with its preset parameters.</p>`;
@@ -239,7 +239,14 @@ window.EndpointTests = (() => {
   function refresh() {
     const panel = document.getElementById('test-status');
     if (!panel) return;
+    const previous = panel.querySelector('.test-progress-fill')?.style.transform;
     panel.innerHTML = statusPanel();
+    // Every result re-renders the panel: carry the bar on from where it was rather than letting it jump.
+    const fill = panel.querySelector('.test-progress-fill');
+    if (fill?.animate && previous && previous !== fill.style.transform && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const style = getComputedStyle(document.documentElement);
+      fill.animate([{transform:previous}, {transform:fill.style.transform}], {duration:parseFloat(style.getPropertyValue('--dur')) || 180, easing:style.getPropertyValue('--ease').trim() || 'ease-out'});
+    }
     document.getElementById('test-run-all').innerHTML = runLabel();
     const retryButton = document.getElementById('test-retry'), retry = retryLabel();
     retryButton.hidden = retry.hidden; retryButton.textContent = retry.text;
@@ -255,8 +262,8 @@ window.EndpointTests = (() => {
     return `${plural(tests.length, 'endpoint')}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
   }
   function paramsCell(test) {
-    const items = Object.entries(test.params).map(([name, value]) => `<code>${esc(name)}=${esc(value)}</code>`)
-      .concat(test.derive.map(({param, source}) => `<span><code>${esc(param)}</code> <span class="help">from ${esc(testFor(source)?.summary || source)}</span></span>`));
+    const items = Object.entries(test.params).map(([name, value]) => `<code translate="no">${esc(name)}=${esc(value)}</code>`)
+      .concat(test.derive.map(({param, source}) => `<span><code translate="no">${esc(param)}</code> <span class="help">from ${esc(testFor(source)?.summary || source)}</span></span>`));
     return `<div class="test-params">${items.join('') || '<span class="help">No parameters</span>'}${test.note ? `<small>${esc(test.note)}</small>` : ''}</div>`;
   }
   function resultCell(test) {
@@ -264,12 +271,12 @@ window.EndpointTests = (() => {
     const spinner = result.outcome === 'running' ? icon('circle-notch') : '';
     const status = result.status && !['passed', 'unsupported'].includes(result.outcome) ? ` · ${result.status}` : '';
     const message = result.message || (result.outcome === 'unsupported' ? 'No Social Scrape handler is available.' : '');
-    const time = result.ms === undefined || ['queued', 'running'].includes(result.outcome) ? '' : `<span class="test-time">${number(result.ms)} ms</span>`;
-    return `<div class="test-result"><span class="badge ${tone}">${spinner}${name}${status}</span>${time}${result.via ? '<span class="badge">via ScrapeCreators</span>' : ''}${result.code ? `<code>${esc(result.code)}</code>` : ''}${message ? `<small>${esc(message)}</small>` : ''}</div>`;
+    const time = result.ms === undefined || ['queued', 'running'].includes(result.outcome) ? '' : `<span class="test-time">${number(result.ms)}\u00a0ms</span>`;
+    return `<div class="test-result"><span class="badge ${tone}">${spinner}${name}${status}</span>${time}${result.via ? '<span class="badge">via ScrapeCreators</span>' : ''}${result.code ? `<code translate="no">${esc(result.code)}</code>` : ''}${message ? `<small>${esc(message)}</small>` : ''}</div>`;
   }
   function row(test) {
     const path = esc(test.path), name = esc(label(test));
-    return `<tr data-test-row="${path}"><td data-label="Endpoint"><div class="test-endpoint"><strong>${esc(test.summary)}</strong><code>${path.replaceAll('/', '/<wbr>')}</code></div></td><td data-label="Preset parameters">${paramsCell(test)}</td><td data-cell="result" data-label="Result">${resultCell(test)}</td><td data-label="Actions"><div class="table-actions"><button class="ghost" type="button" data-test-run="${path}" aria-label="Run the ${name} test" aria-disabled="${pending(test.path)}">${icon('play')}Run</button><button class="icon-button" type="button" data-test-response="${path}" aria-label="View the ${name} response" title="View response" ${model.bodies.has(test.path) ? '' : 'hidden'}>${icon('file-text')}</button><a class="icon-button" href="/app/playground" data-test-playground="${path}" aria-label="Open ${name} in the playground" title="Open in playground">${icon('arrow-square-out')}</a></div></td></tr>`;
+    return `<tr data-test-row="${path}"><td data-label="Endpoint"><div class="test-endpoint"><strong>${esc(test.summary)}</strong><code translate="no">${path.replaceAll('/', '/<wbr>')}</code></div></td><td data-label="Preset parameters">${paramsCell(test)}</td><td data-cell="result" data-label="Result">${resultCell(test)}</td><td data-label="Actions"><div class="table-actions"><button class="ghost" type="button" data-test-run="${path}" aria-label="Run the ${name} test" aria-disabled="${pending(test.path)}">${icon('play')}Run</button><button class="icon-button" type="button" data-test-response="${path}" aria-label="View the ${name} response" title="View response" ${model.bodies.has(test.path) ? '' : 'hidden'}>${icon('file-text')}</button><a class="icon-button" href="/app/playground" data-test-playground="${path}" aria-label="Open ${name} in the playground" title="Open in playground">${icon('arrow-square-out')}</a></div></td></tr>`;
   }
   function updateRow(path) {
     const element = document.querySelector(`[data-test-row="${CSS.escape(path)}"]`), test = testFor(path);
@@ -305,7 +312,7 @@ window.EndpointTests = (() => {
     if (!test || !body) return;
     let formatted = body.text;
     try { formatted = JSON.stringify(JSON.parse(body.text), null, 2); } catch {}
-    openDialog({title:label(test), description:`${(OUTCOMES[result.outcome] || OUTCOMES.idle)[0]} · ${body.status} · ${number(body.ms)} ms${result.via ? ' · ScrapeCreators fallback' : ''}`, body:`<dl class="history-facts"><div><dt>Request</dt><dd><code>${esc(body.url)}</code></dd></div><div><dt>Must include</dt><dd>${test.expect.map(path => `<code>${esc(path)}</code>`).join(' ') || 'success: true'}</dd></div><div><dt>Checked</dt><dd>${esc(new Date(result.at).toLocaleString())}</dd></div></dl>${result.message ? `<div class="inline-note test-response-note">${esc(result.message)}</div>` : ''}<pre class="code history-response" id="test-response" tabindex="0"></pre>`, footer:`<button class="ghost" data-dialog-close>Close</button><button class="primary" data-copy="test-response">${icon('copy')}Copy response</button>`});
+    openDialog({title:label(test), description:`${(OUTCOMES[result.outcome] || OUTCOMES.idle)[0]} · ${body.status} · ${number(body.ms)}\u00a0ms${result.via ? ' · ScrapeCreators fallback' : ''}`, body:`<dl class="history-facts"><div><dt>Request</dt><dd><code translate="no">${esc(body.url)}</code></dd></div><div><dt>Must include</dt><dd>${test.expect.map(path => `<code translate="no">${esc(path)}</code>`).join(' ') || 'success: true'}</dd></div><div><dt>Checked</dt><dd>${esc(new Date(result.at).toLocaleString())}</dd></div></dl>${result.message ? `<div class="inline-note test-response-note">${esc(result.message)}</div>` : ''}<pre translate="no" class="code history-response" id="test-response" tabindex="0"></pre>`, footer:`<button class="ghost" data-dialog-close>Close</button><button class="primary" data-copy="test-response">${icon('copy')}Copy response</button>`});
     document.getElementById('test-response').textContent = formatted || 'The response was empty.';
   }
   function prefill(test) {

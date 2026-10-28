@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -850,7 +850,7 @@ def _loading_templates() -> tuple[str, dict[str, str]]:
 
 
 def _brand(href: str) -> str:
-    return (f'<a class="brand" href="{href}" '
+    return (f'<a class="brand" href="{href}" translate="no" '
             'aria-label="Social Scrape by Mimic" title="Social Scrape">'
             '<img class="brand-mark brand-mark-dark" src="/assets/brand/logomark-chalk.svg" '
             'width="36" height="36" alt="">'
@@ -863,7 +863,7 @@ def _brand(href: str) -> str:
 def _page(title: str, body: str, *, bare: bool = False) -> HTMLResponse:
     shell = body if bare else f'<main class="auth-card">{body}</main>'
     return HTMLResponse(_versioned_page(f'''<!doctype html><html lang="en" data-asset-version="__ASSET_VERSION__"><head><meta charset="utf-8"><meta name="viewport"
-content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</title>
+content="width=device-width,initial-scale=1"><meta name="theme-color" content="#212121"><title>{title} · Social Scrape</title>
 <link rel="icon" href="/assets/brand/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
 <link rel="icon" href="/assets/brand/favicon.svg" sizes="any" type="image/svg+xml">
 <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
@@ -872,12 +872,36 @@ content="width=device-width,initial-scale=1"><title>{title} · Social Scrape</ti
 <div class="auth-shell"><div class="auth-main"><header class="auth-header">
 {_brand("/")}
 <button class="icon-button" data-theme-toggle aria-label="Switch theme"></button></header>{shell}
-<footer class="auth-footer"><span>Social Scrape</span><span>Private · Invite-only</span></footer>
+<footer class="auth-footer"><span translate="no">Social Scrape</span><span>Private · Invite-only</span></footer>
 </div><aside class="auth-art" aria-label="Social Scrape artwork">
 <img class="art-dark" src="/assets/brand/courtyard-dark.png" alt="" decoding="async">
 <img class="art-light" src="/assets/brand/courtyard-light.png" alt="" decoding="async" loading="lazy">
 </aside></div><div class="sr-only" id="loading-status" role="status" aria-live="polite" aria-atomic="true"></div></body></html>'''),
                         headers={"Content-Security-Policy": "frame-ancestors 'none'", "X-Frame-Options": "DENY"})
+
+
+# Codes, not sentences, travel in /login?error=, so nobody can put their own words on the sign-in page.
+_LOGIN_ERRORS = {
+    "credentials": ("", "Email or password is incorrect. Check both and try again."),
+    "setup_code": ("setup_token", "This setup code is not valid. Check it with your operator and try again."),
+    "email": ("email", "Enter a valid email address, like you@example.com."),
+    "password": ("password", "Use at least 12 characters for the password."),
+    "setup_failed": ("", "The owner account could not be created. Check the email and password, then try again."),
+}
+_ACCOUNT_ERRORS = {"Enter a valid email address": "email", "Use at least 12 characters for the password": "password"}
+
+
+def _auth_field(label: str, name: str, attrs: str, *, error: tuple[str, str] = ("", ""), hint: str = "") -> str:
+    """A labelled auth input. Its error sits right under it and takes focus, so a failed submit lands on the fix."""
+    failed = error[0] == name
+    described = [f"{name}-error"] * failed + [f"{name}-hint"] * bool(hint)
+    extra = ' aria-invalid="true" autofocus' if failed else ""
+    if described:
+        extra += f' aria-describedby="{" ".join(described)}"'
+    notes = f'<p class="field-error" id="{name}-error">{html.escape(error[1])}</p>' if failed else ""
+    if hint:
+        notes += f'<p class="help" id="{name}-hint">{hint}</p>'
+    return f'<div class="auth-field"><label>{label}<input name="{name}" {attrs}{extra}></label>{notes}</div>'
 
 
 def _status(row: tuple[bytes, float] | None) -> dict[str, Any]:
@@ -907,7 +931,7 @@ def _normalize_cookies(platform: str, value: str) -> str:
     if not text:
         raise ValueError("Paste a cookies.txt file, a browser cookie export or a Cookie header")
     if len(text.encode()) > 2 * 1024 * 1024:
-        raise ValueError("The cookie input must be no larger than 2 MiB")
+        raise ValueError("The cookie input must be no larger than 2\u00a0MiB")
     if "\t" in text or text.startswith(("# Netscape", "# HTTP Cookie File")):
         return text + "\n"
     parsed: Any = None
@@ -969,7 +993,7 @@ def _validate_cookies(platform: str, value: str) -> None:
     from yt_dlp.cookies import YoutubeDLCookieJar
 
     if not value.strip() or len(value.encode()) > 2 * 1024 * 1024:
-        raise ValueError("Upload a Netscape cookies.txt file no larger than 2 MiB")
+        raise ValueError("Upload a Netscape cookies.txt file no larger than 2\u00a0MiB")
     jar = YoutubeDLCookieJar()
     try:
         jar._really_load(io.StringIO(value), "dashboard cookies.txt", True, True)
@@ -1109,15 +1133,23 @@ def install_portal(app, store: PortalStore) -> None:
                 else "Owner setup is disabled until SOCIALSCRAPE_SETUP_TOKEN is configured." if setup
                 else "Sign in to your private Social Scrape workspace.")
         action = "/setup" if setup else "/login"
-        setup_field = ('''<label>Setup code<input name="setup_token" type="password" autocomplete="off" required>
-</label>''' if setup_enabled and setup else "")
+        fields = {"email", "password"} | ({"setup_token"} if setup_enabled and setup else set())
+        problem = _LOGIN_ERRORS.get(error, ("", ""))
+        inline = problem[0] in fields
+        banner = f'<div class="form-error" role="alert">{html.escape(problem[1])}</div>' if problem[1] and not inline else ""
+        problem = problem if inline else ("", "")
+        setup_field = (_auth_field("Setup code", "setup_token", 'type="password" autocomplete="off" required',
+                                   error=problem) if "setup_token" in fields else "")
+        email = _auth_field("Email", "email", 'type="email" autocomplete="email" spellcheck="false" required',
+                            error=problem)
+        password = _auth_field(
+            "Password", "password",
+            f'type="password" autocomplete="{"new-password" if setup else "current-password"}" required'
+            + (' minlength="12"' if setup else ""), error=problem, hint="Use at least 12 characters." if setup else "")
         return _page(heading if setup else "Sign in", f'''<div class="eyebrow">Your workspace awaits</div>
-<h1>{heading}</h1><p>{copy}</p>{f'<div class="form-error" role="alert">{html.escape(error)}</div>' if error else ''}
+<h1>{heading}</h1><p>{copy}</p>{banner}
 <form method="post" action="{action}"><input type="hidden" name="next" value="{html.escape(target)}">{setup_field}
-<label>Email<input name="email" type="email" autocomplete="email" required></label>
-<label>Password<input name="password" type="password"
-autocomplete="{'new-password' if setup else 'current-password'}" required
-{'minlength="12" aria-describedby="password-hint"' if setup else ''}></label>{'<p class="help" id="password-hint">Use at least 12 characters.</p>' if setup else ''}
+{email}{password}
 <button class="primary" type="submit" {'disabled' if setup and not setup_enabled else ''}>
 {'Create owner account' if setup else 'Sign in'}</button></form>
 <div class="auth-hint">Access is by invitation. Contact your workspace owner to join.</div>''')
@@ -1127,18 +1159,18 @@ autocomplete="{'new-password' if setup else 'current-password'}" required
                     setup_token: str = Form("")):
         expected = os.environ.get("SOCIALSCRAPE_SETUP_TOKEN", "")
         if store.has_members() or not expected or not hmac.compare_digest(setup_token, expected):
-            return RedirectResponse("/login?error=Setup+code+is+invalid", 303)
+            return RedirectResponse("/login?error=setup_code", 303)
         try:
             store.create_member(email, password, "owner")
         except (ValueError, sqlite3.IntegrityError) as exc:
-            return RedirectResponse(f"/login?error={str(exc)}", 303)
+            return RedirectResponse("/login?" + urlencode({"error": _ACCOUNT_ERRORS.get(str(exc), "setup_failed")}), 303)
         return await _login_response(email, password, request.url.scheme == "https")
 
     async def _login_response(email: str, password: str, secure: bool = False, next: str = ""):
         from .oauth import safe_next
         result = store.login(email, password)
         if not result:
-            query = urlencode({"error": "Email or password is incorrect", "next": safe_next(next)})
+            query = urlencode({"error": "credentials", "next": safe_next(next)})
             return RedirectResponse("/login?" + query, 303)
         token, _ = result
         response = RedirectResponse(safe_next(next), 303)
@@ -1157,28 +1189,47 @@ autocomplete="{'new-password' if setup else 'current-password'}" required
         response.delete_cookie(SESSION_COOKIE, path="/")
         return response
 
+    def invite_unavailable() -> HTMLResponse:
+        return _page("Invitation", '<div class="eyebrow">Workspace invitation</div><h1>Invitation unavailable</h1>'
+                     '<p>This link is invalid or expired. Ask your workspace owner for a new invitation.</p>'
+                     '<a class="ghost" href="/login">Back to sign in</a>')
+
+    def invite_form(email: str, problem: tuple[str, str] = ("", "")) -> HTMLResponse:
+        password = _auth_field("Create password", "password",
+                               'type="password" minlength="12" autocomplete="new-password" required',
+                               error=problem, hint="Use at least 12 characters.")
+        return _page("Join", f'''<div class="eyebrow">You’re invited</div>
+<h1>Join <span translate="no">Social Scrape</span></h1><p>Your invitation is for <strong>{html.escape(email)}</strong>.</p>
+<form method="post">{password}
+<button class="primary" type="submit">Accept invitation</button></form>''')
+
     @router.get("/invite/{token}")
     async def invite_page(token: str):
         email = store.invite_email(token)
-        if not email:
-            return _page("Invitation", '<div class="eyebrow">Workspace invitation</div><h1>Invitation unavailable</h1>'
-                         '<p>This link is invalid or expired. Ask your workspace owner for a new invitation.</p>'
-                         '<a class="ghost" href="/login">Back to sign in</a>')
-        return _page("Join", f'''<div class="eyebrow">You’re invited</div>
-<h1>Join Social Scrape</h1><p>Your invitation is for <strong>{html.escape(email)}</strong>.</p>
-<form method="post"><label>Create password<input name="password" type="password" minlength="12"
-autocomplete="new-password" aria-describedby="password-hint" required></label>
-<p class="help" id="password-hint">Use at least 12 characters.</p>
-<button class="primary" type="submit">Accept invitation</button></form>''')
+        return invite_form(email) if email else invite_unavailable()
 
     @router.post("/invite/{token}")
     async def accept_invite(request: Request, token: str, password: str = Form(...)):
         email = store.invite_email(token)
+        if not email:
+            return invite_unavailable()
         try:
             store.accept_invite(token, password)
-        except (ValueError, sqlite3.IntegrityError) as exc:
-            return _page("Join", f"<h1>Could not join</h1><p>{exc}</p>")
-        return await _login_response(email or "", password, request.url.scheme == "https")
+        except sqlite3.IntegrityError:
+            return _page("Invitation", '<div class="eyebrow">Workspace invitation</div><h1>Could not join</h1>'
+                         '<p>An account with this email already exists. Sign in with it instead.</p>'
+                         '<a class="primary" href="/login">Go to sign in</a>')
+        except ValueError as exc:
+            # The only field on this form is the password: anything else gets its own explanation and a way back.
+            code = _ACCOUNT_ERRORS.get(str(exc))
+            if code == "password":
+                response = invite_form(email, ("password", _LOGIN_ERRORS["password"][1]))
+                response.status_code = 400
+                return response
+            return _page("Invitation", '<div class="eyebrow">Workspace invitation</div><h1>Could not join</h1>'
+                         f'<p>{html.escape(str(exc))}. Try again, or ask your workspace owner for a new invitation.</p>'
+                         f'<a class="primary" href="/invite/{quote(token, safe="")}">Try again</a>')
+        return await _login_response(email, password, request.url.scheme == "https")
 
     @router.get("/docs")
     async def docs(request: Request):

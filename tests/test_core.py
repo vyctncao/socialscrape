@@ -1713,7 +1713,7 @@ def test_empty_portal_cannot_be_claimed_without_the_private_setup_code(env, tmp_
     assert "Owner setup is disabled" in page and "setup_token" not in page
     response = c.post("/setup", data={"email": "attacker@example.com", "password": "long enough password"},
                       follow_redirects=False)
-    assert response.status_code == 303 and "Setup+code+is+invalid" in response.headers["location"]
+    assert response.status_code == 303 and response.headers["location"] == "/login?error=setup_code"
     assert "Create the owner account" in c.get("/login").text
 
 
@@ -2248,7 +2248,7 @@ console.log(JSON.stringify(context.agentInstallUrls('http://127.0.0.1:8784')));'
     assert '<strong>Settings</strong>' in script and '<strong>Connectors</strong>' in script
     assert '<strong>Add custom connector</strong>' in script and '<strong>URL</strong>' in script
     assert 'claude mcp add --transport http socialscrape ${mcpUrl}`' in script
-    assert 'Run <code>/mcp</code> in Claude Code.' in script
+    assert 'Run <code translate="no">/mcp</code> in Claude Code.' in script
     assert 'Select <strong>Authenticate</strong>.' in script
     assert 'API keys are shown only once when created.' in script
     assert 'href="/app/keys">create an API key' in script

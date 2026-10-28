@@ -24,7 +24,7 @@ window.FallbackPage = (() => {
     const [label, badgeClass] = status(data);
     const keyAction = data.api_key.configured ? 'Replace key' : 'Save key';
     const keyNote = data.api_key.source === 'environment'
-      ? `The server’s <code>SOCIALSCRAPE_SCRAPECREATORS_API_KEY</code> is in use. A key saved here takes its place.`
+      ? `The server’s <code translate="no">SOCIALSCRAPE_SCRAPECREATORS_API_KEY</code> is in use. A key saved here takes its place.`
       : data.api_key.updated_at ? `Saved ${esc(fmt(data.api_key.updated_at))}. Encrypted and never shown again.` : 'Encrypted and never shown again after you save it.';
     const optionsNote = data.options_source === 'dashboard' && data.options_updated_at ? `Saved ${esc(fmt(data.options_updated_at))}.` : 'Using the server’s environment defaults until you save changes here.';
     return layout('Settings', settingsLede, `${pageTabs('fallback')}
@@ -42,7 +42,7 @@ window.FallbackPage = (() => {
             <p class="help">Fallback starts only when an API key, condition, and platform are configured. ${optionsNote}</p><div class="field-error" id="fallback-options-error" role="alert" hidden></div><div class="fallback-save-row"><button class="primary fallback-save" type="submit">Save options</button><span class="fallback-dirty" role="status" hidden>Unsaved changes</span></div>
           </form>
         </section>
-        <div class="inline-note fallback-note">${icon('arrows-clockwise')}<span>Fallback requests spend ScrapeCreators credits; provider-reported errors cost none, while timeout and network outcomes may still have been charged. Successful answers are cached like any other response, so <code>cache_max_age</code> avoids paying twice. Responses served by ScrapeCreators carry <code>x-socialscrape-fallback: scrapecreators</code> and are marked in Request history.</span></div>
+        <div class="inline-note fallback-note">${icon('arrows-clockwise')}<span>Fallback requests spend ScrapeCreators credits; provider-reported errors cost none, while timeout and network outcomes may still have been charged. Successful answers are cached like any other response, so <code translate="no">cache_max_age</code> avoids paying twice. Responses served by ScrapeCreators carry <code translate="no">x-socialscrape-fallback: scrapecreators</code> and are marked in Request history.</span></div>
       </div>`);
   }
   async function renderPage() {

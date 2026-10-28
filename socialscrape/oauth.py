@@ -160,7 +160,7 @@ def install_oauth(app: FastAPI) -> None:
         return _page("Authorize", f'''<div class="eyebrow">Agent integration</div>
 <h1>Authorize {html.escape(fields["client_name"])}</h1>
 <p><strong>{html.escape(fields["client_name"])}</strong> wants to use Social Scrape as you.</p>
-<p>Redirect host: <strong>{html.escape(host)}</strong><br>Scope: <code>{SCOPE}</code></p>
+<p>Redirect host: <strong>{html.escape(host)}</strong><br>Scope: <code translate="no">{SCOPE}</code></p>
 <form method="post" action="/oauth/authorize">{hidden}
 <input type="hidden" name="csrf" value="{html.escape(principal.csrf)}">
 <div class="form-actions"><button class="primary" name="decision" value="approve" type="submit">Approve</button>

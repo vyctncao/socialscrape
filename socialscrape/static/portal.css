@@ -6,7 +6,8 @@
 :root[data-theme=light]{color-scheme:light}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html{background:var(--shell-chrome);scrollbar-color:var(--border-strong) transparent;scrollbar-width:thin}
+html{background:var(--shell-chrome);scrollbar-color:var(--border-strong) transparent;scrollbar-width:thin;scroll-padding-top:calc(var(--topbar-h) + var(--space-3));-webkit-tap-highlight-color:var(--hover)}
+@media(pointer:fine){html{overscroll-behavior-y:none}}
 body{margin:0;background:var(--shell-chrome);color:var(--text-1);font:400 var(--fs-body)/var(--lh-body) var(--font-sans);font-feature-settings:'cv02','cv03','cv04','cv11';-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:inherit;text-decoration:none}
 button,input,select,textarea{font:inherit}
@@ -21,7 +22,7 @@ svg.icon{display:block;flex:none;width:18px;height:18px;fill:none;stroke:current
 code,pre{font-family:var(--font-mono);font-size:12px}
 code{overflow-wrap:anywhere}
 p{margin:0 0 var(--space-4)}
-h1,h2,h3{color:var(--text-1);line-height:var(--lh-snug);letter-spacing:-.02em}
+h1,h2,h3{color:var(--text-1);line-height:var(--lh-snug);letter-spacing:-.02em;text-wrap:balance}
 h1{font-size:var(--fs-display);font-weight:650;margin:0}
 h2{font-size:var(--fs-h2);font-weight:600;margin:0 0 var(--space-4)}
 h3{font-size:var(--fs-h3);font-weight:600;margin:0 0 var(--space-2)}
@@ -165,6 +166,7 @@ td code{font-size:11px;white-space:normal;min-width:200px;display:block}
 .history-row .route-identity>span{display:grid;gap:var(--space-1);min-width:0}
 .history-query{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;color:var(--text-2);font-size:var(--fs-xs)}
 .history-action{position:sticky;right:0;background:var(--surface-1);text-align:right}
+.history-more{display:flex;justify-content:center;margin-top:var(--space-4)}
 .history-dialog{display:flex;flex-direction:column;overflow:hidden;width:min(920px,calc(100% - 32px))}
 .history-dialog:not([open]){display:none}
 .history-dialog .modal-head,.history-dialog .modal-foot{flex:none}
@@ -336,6 +338,8 @@ button.text-link{background:none;border:0;color:var(--text-1);font:inherit;min-h
 .auth-card>p{color:var(--text-2);margin-bottom:var(--space-8)}
 .auth-card form{display:grid;gap:var(--space-5)}
 .auth-card label{gap:var(--space-2)}
+.auth-field{display:grid;gap:var(--space-2);min-width:0}
+.auth-field .field-error{margin:0}
 .auth-card button[type=submit]{width:100%;margin-top:var(--space-2)}
 .auth-card .form-error{margin-bottom:var(--space-5)}
 .auth-footer{font-size:11px;color:var(--text-3);display:flex;justify-content:space-between;gap:var(--space-4)}
