@@ -322,6 +322,7 @@ def test_timeouts_unreachable_and_oversized_answers(make, upstream, monkeypatch)
     fail_profile(monkeypatch, UpstreamBlocked("Rate limited"))
     c = make(SOCIALSCRAPE_REQUEST_TIMEOUT="0.5")
     upstream.reply(200, SC_OK, delay=3)
+    gc.collect()
     started = time.monotonic()
     r = c.get(PROFILE, params={"handle": "someone"})
     assert time.monotonic() - started < 2
@@ -330,7 +331,9 @@ def test_timeouts_unreachable_and_oversized_answers(make, upstream, monkeypatch)
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         dead = s.getsockname()[1]  # nothing listens once it's closed
-    r = make(SOCIALSCRAPE_SCRAPECREATORS_URL=f"http://127.0.0.1:{dead}").get(PROFILE, params={"handle": "someone"})
+    dead_client = make(SOCIALSCRAPE_SCRAPECREATORS_URL=f"http://127.0.0.1:{dead}", SOCIALSCRAPE_REQUEST_TIMEOUT="5")
+    gc.collect()
+    r = dead_client.get(PROFILE, params={"handle": "someone"})
     assert r.status_code == 503 and r.json()["fallback"] == {
         "provider": "scrapecreators", "status": None, "error": "network_error",
         "message": "ScrapeCreators couldn't be reached"}
