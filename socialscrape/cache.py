@@ -177,7 +177,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     hit = None  # do not let a pre-upgrade partial cache entry bypass the tracking contract
                 else:
                     hit = (fallback._wrap_cursors(prepared, request.url.path, fallback._request_identity(request, {}),
-                                                  fallback.PROVIDER if paid else "native"), stored_at, paid)
+                                                  fallback.PROVIDER if paid else "native", fallback._binding(request, {})), stored_at, paid)
         # x-socialscrape-fallback: off asks for this server's own answer, so not one ScrapeCreators gave.
         if hit and not (hit[2] and request.headers.get("x-socialscrape-fallback", "").strip().lower() == "off"):
             body, stored_at, fallback = hit

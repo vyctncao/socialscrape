@@ -63,6 +63,7 @@ _CATALOG_METHODS["/v1/instagram/profile"] |= {"POST"}
 # The catalog's pagination params: the only ones that can carry our own cursors (cursor.PREFIX).
 _CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id", "paginationToken"})
 _CURSOR_FIELDS = _CURSOR_PARAMS | {"next_cursor", "nextCursor", "end_cursor", "next_page_token"}
+_PAGE_PARAMS = _CURSOR_PARAMS | {"next_page_id", "page", "offset", CACHE_PARAM}
 _PATH_CURSOR_PARAMS = {entry["path"]: set(entry.get("params", ())) & _CURSOR_PARAMS
                        for entry in CATALOG}
 # Sent with every fallback request. One that comes in with it isn't asked of ScrapeCreators again: an upstream URL
@@ -429,12 +430,17 @@ def _request_identity(request: Request, body_params: dict) -> str:
     # Bind opaque provider cursors to the same endpoint and selection. Cache freshness may change between pages.
     pairs = [(k, str(v).lower() if isinstance(v, bool) else str(v))
              for k, v in (*request.query_params.multi_items(), *body_params.items())
-             if k not in _CURSOR_PARAMS and k != CACHE_PARAM]
+             if k not in _PAGE_PARAMS]
     return hashlib.sha256(json.dumps([request.url.path, sorted(pairs, key=lambda pair: pair[0])],
                                     separators=(",", ":")).encode()).hexdigest()
 
 
-def _wrap_cursors(answer: dict, path: str, identity: str, provider: str = PROVIDER) -> dict:
+def _binding(request: Request, body_params: dict) -> dict:
+    return {"query": [(k, v) for k, v in request.query_params.multi_items() if k not in _PAGE_PARAMS],
+            "body": {k: v for k, v in body_params.items() if k not in _PAGE_PARAMS}}
+
+
+def _wrap_cursors(answer: dict, path: str, identity: str, provider: str = PROVIDER, binding: dict | None = None) -> dict:
     """Bind every subsequent page to the provider that produced its continuation."""
     allowed = _PATH_CURSOR_PARAMS.get(path, set())
     if not allowed:
@@ -455,7 +461,8 @@ def _wrap_cursors(answer: dict, path: str, identity: str, provider: str = PROVID
                                 and state.get("request") == identity and state.get("param") == param):
                             continue  # cached pages already carry the correct wrapper
                     result[name] = cursor.encode_cursor({"provider": provider, "path": path, "request": identity,
-                                                         "param": param, "cursor": token})
+                                                         "param": param, "cursor": token,
+                                                         **({"binding": binding} if binding is not None else {})})
             elif name in ("pagination", "paging", "page_info", "data") and isinstance(token, dict):
                 result[name] = visit(token)
         return result
@@ -541,8 +548,27 @@ class FallbackMiddleware:
             if not state or state.get("provider") not in (PROVIDER, "native"):
                 native_cursor = True
                 continue  # never send native continuation state to the provider
-            if (state.get("path") != path or state.get("request") != identity or state.get("param") != name
+            if (state.get("path") != path or state.get("param") != name
                     or not isinstance(state.get("cursor"), (str, int)) or isinstance(state.get("cursor"), bool)):
+                return LenientJSONResponse(BadRequest("Cursor does not belong to this request", code="bad_cursor").body(), 400)
+            if isinstance(saved := state.get("binding"), dict):
+                saved_query, saved_body = saved.get("query"), saved.get("body")
+                if (not isinstance(saved_query, list) or not isinstance(saved_body, dict)
+                        or not all(isinstance(pair, (list, tuple)) and len(pair) == 2 and all(isinstance(v, str) for v in pair)
+                                   for pair in saved_query)):
+                    return LenientJSONResponse(BadRequest("Invalid cursor selection", code="bad_cursor").body(), 400)
+                supplied = {k for k, v in query} | set(forwarded_body)
+                # Several upstream continuations allow the cursor alone. Retain their original public selectors,
+                # while still rejecting an explicitly changed owner, URL or filter.
+                for key, selected in (*saved_query, *saved_body.items()):
+                    if key not in supplied and key not in _PAGE_PARAMS:
+                        if request.method == "POST":
+                            forwarded_body[key] = selected
+                        else:
+                            query.append((key, str(selected).lower() if isinstance(selected, bool) else str(selected)))
+            selection = Request({**request.scope, "query_string": urlencode(query).encode()})
+            identity = _request_identity(selection, forwarded_body)
+            if state.get("request") != identity:
                 return LenientJSONResponse(BadRequest("Cursor does not belong to this request", code="bad_cursor").body(), 400)
             if state["provider"] == "native":
                 native_cursor = wrapped_native = True
@@ -554,6 +580,9 @@ class FallbackMiddleware:
         if native_cursor and provider_page:
             return LenientJSONResponse(BadRequest("Cannot mix native and provider cursors", code="bad_cursor").body(), 400)
         native_request = request
+        selection = Request({**request.scope, "query_string": urlencode(query).encode()})
+        binding = _binding(selection, forwarded_body)
+        params = {**dict(query), **forwarded_body}
         if wrapped_native:
             scope = {**request.scope, "query_string": urlencode(query).encode()}
             native_body = json.dumps(forwarded_body).encode() if body else b""
@@ -600,7 +629,7 @@ class FallbackMiddleware:
                         response = LenientJSONResponse({"success": False, "error": "incomplete_response",
                             "message": "Required tracking fields were not exposed by the source", "missing_fields": missing}, 502)
                     else:
-                        wrapped = _wrap_cursors(prepared, path, identity, "native")
+                        wrapped = _wrap_cursors(prepared, path, identity, "native", binding)
                         if wrapped != answer:
                             return LenientJSONResponse(wrapped, response.status_code,
                                 headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "content-type")})
@@ -619,7 +648,7 @@ class FallbackMiddleware:
                 budget.deadline.reset(token)
         code = local.get("error")
         status, answer_body, problem = await self._ask(request, c.api_key or "",
-            json.dumps(forwarded_body).encode() if body and provider_page else body,
+            json.dumps(forwarded_body).encode() if request.method == "POST" and provider_page else body,
             query=query, deadline=end)
         # Twitch clip is documented as a root GraphQL array. Accept that shape
         # only on explicitly documented array routes, and only for a 2xx answer.
@@ -651,7 +680,7 @@ class FallbackMiddleware:
                 or (no_local_answer and status in (400, 403, 404, 422))):
             log.info("%s: local %s %s, served by ScrapeCreators (%s)", path, local_status, code, status)
             if 200 <= status < 300:
-                answer = _wrap_cursors(answer, path, identity)
+                answer = _wrap_cursors(answer, path, identity, binding=binding)
                 return LenientJSONResponse(answer, status, headers={HEADER: PROVIDER})
             return Response(answer_body, status, headers={HEADER: PROVIDER}, media_type="application/json")
         detail = _failure(status, answer, problem, c.api_key or "")

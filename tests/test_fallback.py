@@ -794,8 +794,8 @@ def test_options_native_clients_cannot_honor_use_compatibility_instead(make, ups
 
 def test_cursor_selection_keeps_repeated_parameter_order():
     from starlette.requests import Request
-    first = Request({"type": "http", "path": PROFILE, "query_string": b"handle=a&handle=b"})
-    second = Request({"type": "http", "path": PROFILE, "query_string": b"handle=b&handle=a"})
+    first = Request({"type": "http", "path": PROFILE, "headers": [], "query_string": b"handle=a&handle=b"})
+    second = Request({"type": "http", "path": PROFILE, "headers": [], "query_string": b"handle=b&handle=a"})
     assert fallback._request_identity(first, {}) != fallback._request_identity(second, {})
 
 
@@ -818,11 +818,11 @@ def test_paid_feed_cursor_stays_with_its_provider_when_native_recovers(make, ups
     assert token.startswith("ss1.")
     cached = c.get(path, params={"handle": "someone", "cache_max_age": "1d"})
     assert cached.headers["x-cache"] == "hit" and cached.json()["max_cursor"] == token
-    second = c.get(path, params={"handle": "someone", "max_cursor": token, "cache_max_age": "1d"})
+    second = c.get(path, params={"max_cursor": token, "cache_max_age": "1d"})
     assert second.json()["aweme_list"] == [{"aweme_id": "second"}]
     assert second.json()["max_cursor"] == 0
     assert second.headers[fallback.HEADER] == fallback.PROVIDER and calls == [True]
-    assert upstream.requests[1]["query"] == [("handle", "someone"), ("max_cursor", "12345")]
+    assert dict(upstream.requests[1]["query"]) == {"handle": "someone", "max_cursor": "12345"}
     before = len(upstream.requests)
     wrong = c.get(path, params={"handle": "other", "max_cursor": token})
     assert wrong.status_code == 400 and wrong.json()["error"] == "bad_cursor"
@@ -845,7 +845,7 @@ def test_native_numeric_cursor_does_not_silently_switch_to_paid_feed(make, upstr
     assert first.status_code == 200, first.text
     token = first.json()["max_cursor"]
     assert token.startswith("ss1.")
-    second = c.get("/v3/tiktok/profile/videos", params={"handle": "someone", "max_cursor": token})
+    second = c.get("/v3/tiktok/profile/videos", params={"max_cursor": token})
     assert second.status_code == 503 and not upstream.requests
     # Turning paid fallback off must not strand a native traversal behind an opaque wrapper.
     third = c.get("/v3/tiktok/profile/videos", params={"handle": "someone", "max_cursor": token},
@@ -866,10 +866,23 @@ def test_post_provider_cursor_is_unwrapped_only_in_the_forwarded_body(make, upst
     first = c.post(path, json={"query": "nike", "trim": True})
     token = first.json()["cursor"]
     assert token.startswith("ss1.")
-    second = c.post(path, json={"query": "nike", "trim": True, "cursor": token})
+    second = c.post(path, json={"cursor": token})
     assert second.json()["ads"] == [{"id": "two"}]
     assert json.loads(upstream.requests[1]["body"]) == {"query": "nike", "trim": True, "cursor": "upstream-page2"}
     assert SC_KEY not in second.text and CLIENT_KEY not in json.dumps(upstream.requests)
+
+
+def test_provider_pagination_restores_selectors_and_preserves_collection_companions(make, upstream):
+    path = "/v1/facebook/profile/photos"
+    upstream.reply(200, {"success": True, "photos": [{"id": "one"}], "next_page_id": "collection", "cursor": "page2"})
+    upstream.reply(200, {"success": True, "photos": [{"id": "two"}], "cursor": None})
+    c = make()
+    first = c.get(path, params={"url": "https://www.facebook.com/public-fixture"})
+    token = first.json()["cursor"]
+    second = c.get(path, params={"cursor": token, "next_page_id": "collection"})
+    assert second.status_code == 200 and second.json()["photos"] == [{"id": "two"}]
+    assert dict(upstream.requests[1]["query"]) == {"cursor": "page2", "next_page_id": "collection",
+                                                 "url": "https://www.facebook.com/public-fixture"}
 
 
 def test_mcp_native_only_request_does_not_spend_fallback_credits(make, upstream):
