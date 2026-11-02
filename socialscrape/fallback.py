@@ -388,7 +388,7 @@ def _trigger(status: int, code: str | None) -> str | None:
         return "errors"
     if status == 403:
         return "restricted"
-    if status == 404 and code == "not_found":
+    if status == 404:  # region_unavailable, ad_not_found and company_not_found also need the optional second source
         return "not_found"
     return None
 
