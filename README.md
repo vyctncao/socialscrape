@@ -180,7 +180,7 @@ With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fail
   | `unsupported` | `501` (an endpoint or option this server can't serve: TikTok comments, Instagram pagination, ...), or `400 bad_cursor` (a token from an earlier ScrapeCreators page) | on |
   | `errors` | `500`, `502`, `503`: blocks, rate limits, timeouts, network failures, a server bug | on |
   | `restricted` | `403`: private, login-gated, age- or geo-restricted content | off |
-  | `not_found` | `404 not_found` | off |
+  | `not_found` | `404`, including typed native misses such as `region_unavailable` and `ad_not_found` | off |
 
   Other errors (a bad param, a missing key, a wrong method, `422 estimate_only`) never fall back. Native `ss1.` continuation state is never sent to ScrapeCreators. Requests with `x-socialscrape-fallback: off` stay native (the dashboard's endpoint tests send it unless you allow fallback; a cached paid response is bypassed too).
 - **Time budget.** When error fallback is enabled, tracking calls get at most 20 seconds of native work and 55 seconds total, below the tracking client's 60-second timeout. `SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT` and `SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT` override these limits; at least 60% is reserved for fallback. Other catalog calls retain `SOCIALSCRAPE_REQUEST_TIMEOUT` (180 seconds by default); AI transcription can use two thirds of that budget locally before failover. Extractor workers inherit the native deadline, including queue time and proxy retries. A native continuation stays native and can use the full total budget. Native-only requests retain the configured upstream timeout.

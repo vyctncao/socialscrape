@@ -237,6 +237,8 @@ def test_a_local_answer_never_asks_scrapecreators(make, upstream, monkeypatch):
     (UpstreamBlocked("Rate limited"), "errors"),
     (Forbidden("Private account"), "restricted"),
     (NotFound("No such user"), "not_found"),
+    (NotFound("The public sound did not expose a country", code="region_unavailable"), "not_found"),
+    (NotFound("The native ad page had no detail", code="ad_not_found"), "not_found"),
 ])
 def test_each_local_failure_falls_back_only_under_its_trigger(make, upstream, monkeypatch, exc, trigger):
     fail_profile(monkeypatch, exc)
