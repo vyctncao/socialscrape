@@ -1,8 +1,8 @@
 {
   "source": "https://docs.scrapecreators.com/openapi.json",
-  "retrieved_at": "2026-10-25",
-  "source_sha256": "5e27ef42d88fdfd2c8fd898cc00a3be02743772e59165887e4f75919ee57bba7",
-  "upstream_operations": 199,
+  "retrieved_at": "2026-11-01",
+  "source_sha256": "42ff3eb555a8d5b22354c48ca04d9233867f85e451b26642b44fee4c9ac17662",
+  "upstream_operations": 200,
   "operations": [
     {
       "method": "GET",
@@ -12580,9 +12580,6 @@
         "data.user.edge_owner_to_timeline_media.edges[].node.owner.username": [
           "string"
         ],
-        "data.user.edge_owner_to_timeline_media.edges[].node.pinned_for_users": [
-          "array"
-        ],
         "data.user.edge_owner_to_timeline_media.edges[].node.product_type": [
           "string"
         ],
@@ -17041,7 +17038,7 @@
           "object"
         ],
         "highlights[].cover_media.thumbnail_src": [
-          "string"
+          "null"
         ],
         "highlights[].cover_media_cropped_thumbnail": [
           "object"
@@ -17937,14 +17934,6 @@
           }
         },
         {
-          "name": "is_paid_promotions",
-          "in": "query",
-          "required": false,
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
           "name": "includeExtras",
           "in": "query",
           "required": false,
@@ -17965,7 +17954,6 @@
         "channelId": "UC-9-kyTW8ZkZNDHQJ6FgpwQ",
         "handle": "ThePatMcAfeeShow",
         "sort": "latest",
-        "is_paid_promotions": "false",
         "includeExtras": "false",
         "continuationToken": "4qmFsgKrCBIYVUNkRkpXVWE0M3NtUm00SXBIQnB"
       },
@@ -18845,6 +18833,9 @@
         "cache_max_age": "7d"
       },
       "response_fields": {
+        "aiDisclosure": [
+          "string"
+        ],
         "captionTracks": [
           "array"
         ],
@@ -18911,6 +18902,9 @@
         "description": [
           "null"
         ],
+        "descriptionCards": [
+          "array"
+        ],
         "descriptionLinks": [
           "array"
         ],
@@ -18926,6 +18920,9 @@
         "id": [
           "string"
         ],
+        "isMadeWithAI": [
+          "boolean"
+        ],
         "isPaidPromotion": [
           "boolean"
         ],
@@ -18940,6 +18937,24 @@
         ],
         "most_replayed": [
           "null"
+        ],
+        "ownerByline": [
+          "object"
+        ],
+        "ownerByline.badges": [
+          "array"
+        ],
+        "ownerByline.channelId": [
+          "string"
+        ],
+        "ownerByline.name": [
+          "string"
+        ],
+        "ownerByline.subscriberCountText": [
+          "string"
+        ],
+        "ownerByline.url": [
+          "string"
         ],
         "publishDate": [
           "string"
@@ -18957,6 +18972,18 @@
           "string"
         ],
         "type": [
+          "string"
+        ],
+        "uploader": [
+          "object"
+        ],
+        "uploader.author": [
+          "string"
+        ],
+        "uploader.channelId": [
+          "string"
+        ],
+        "uploader.url": [
           "string"
         ],
         "url": [
@@ -21427,10 +21454,25 @@
         "posts[].comments[].author": [
           "string"
         ],
+        "posts[].comments[].datePublished": [
+          "string"
+        ],
+        "posts[].comments[].id": [
+          "string"
+        ],
         "posts[].comments[].linkedinUrl": [
           "string"
         ],
+        "posts[].comments[].publishedTimeAgo": [
+          "string"
+        ],
+        "posts[].comments[].reactionCount": [
+          "integer"
+        ],
         "posts[].comments[].text": [
+          "string"
+        ],
+        "posts[].comments[].urn": [
           "string"
         ],
         "posts[].datePublished": [
@@ -21516,10 +21558,25 @@
         "comments[].author": [
           "string"
         ],
+        "comments[].datePublished": [
+          "null"
+        ],
+        "comments[].id": [
+          "string"
+        ],
         "comments[].linkedinUrl": [
           "string"
         ],
+        "comments[].publishedTimeAgo": [
+          "string"
+        ],
+        "comments[].reactionCount": [
+          "null"
+        ],
         "comments[].text": [
+          "string"
+        ],
+        "comments[].urn": [
           "string"
         ],
         "contentUrn": [
@@ -24517,7 +24574,7 @@
         {
           "name": "query",
           "in": "query",
-          "required": true,
+          "required": false,
           "schema": {
             "type": "string"
           }
@@ -34235,6 +34292,72 @@
       },
       "preset_expect": [
         "boards[].id"
+      ],
+      "response_kind": "object"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/pinterest/topic",
+      "tag": "Pinterest",
+      "summary": "Topic",
+      "parameters": [
+        {
+          "name": "url",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "examples": {
+        "url": "https://www.pinterest.com/ideas/how-to-stop-leash-pulling/894604313079/"
+      },
+      "response_fields": {
+        "credits_charged": [
+          "integer"
+        ],
+        "credits_remaining": [
+          "integer"
+        ],
+        "id": [
+          "string"
+        ],
+        "name": [
+          "string"
+        ],
+        "refinements": [
+          "array"
+        ],
+        "refinements[]": [
+          "object"
+        ],
+        "refinements[].label": [
+          "string"
+        ],
+        "refinements[].name": [
+          "string"
+        ],
+        "refinements[].url": [
+          "string"
+        ],
+        "search_count": [
+          "integer"
+        ],
+        "success": [
+          "boolean"
+        ],
+        "updated_at": [
+          "string"
+        ],
+        "url": [
+          "string"
+        ]
+      },
+      "preset_expect": [
+        "id",
+        "name",
+        "url"
       ],
       "response_kind": "object"
     },

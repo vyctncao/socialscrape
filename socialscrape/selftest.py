@@ -193,6 +193,11 @@ def _documented_preset(entry: dict[str, Any]) -> Preset:
     params = {key: str(value).lower() if isinstance(value, bool) else str(value)
               for key, value in entry.get("examples", {}).items()
               if key in entry["params"] and key != "cache_max_age" and value not in (None, "")}
+    # Documentation continuations belong to an old response; several are explicitly truncated. Test the first
+    # page instead. Operations which require a continuation get a live source through an explicit derive preset.
+    for name in ("cursor", "max_cursor", "next_max_id", "max_id", "continuationToken", "paginationToken", "next_page_id"):
+        if name not in entry["required"]:
+            params.pop(name, None)
     # The docs sometimes demonstrate handle and URL with two different users.
     if "handle" in params and "url" in params and "url" not in entry["required"]:
         params.pop("url")
@@ -216,6 +221,15 @@ for _path, _params in {
     _previous = PRESETS[_path]
     PRESETS[_path] = Preset({**_previous.params, **_params}, _previous.expect,
                            note=_previous.note, response_kind=_previous.response_kind)
+
+PRESETS["/v1/facebook/post/comment/replies"] = Preset({}, ("replies[].id",), {
+    "feedback_id": ("/v1/facebook/post/comments", "comments[].feedback_id"),
+    "expansion_token": ("/v1/facebook/post/comments", "comments[].expansion_token"),
+}, note="The first complete comment token pair from the comments test; requires paid fallback.")
+PRESETS["/v1/rumble/search"] = Preset({"query": "funny cats"}, ("videos[].id",),
+    note="Video search results; this query need not have Shorts, live streams or playlists.")
+PRESETS["/v1/reddit/subreddit/search"] = Preset({"subreddit": "AskReddit", "query": "advice"}, ("posts[].id",),
+    note="Subreddit post search does not require separate comment and media result categories.")
 
 
 def tests() -> list[dict[str, Any]]:

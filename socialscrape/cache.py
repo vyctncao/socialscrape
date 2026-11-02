@@ -165,6 +165,19 @@ class CacheMiddleware(BaseHTTPMiddleware):
 
         key = cache_key(request)
         hit = self.cache.get(key, max_age) if max_age is not None else None
+        if (hit and getattr(request.app.state, "fallback_env", None) is not None
+                and request.headers.get("x-socialscrape-fallback", "").strip().lower() != "off"):
+            from . import fallback, quality
+            current = fallback.active_config(request.app)
+            if (current.active and "errors" in current.triggers and request.url.path.split("/")[2] in current.platforms
+                    and request.url.path in quality.OPERATIONS):
+                body, stored_at, paid = hit
+                prepared = quality.prepare(request.url.path, body)
+                if quality.issues(request.url.path, dict(request.query_params), prepared):
+                    hit = None  # do not let a pre-upgrade partial cache entry bypass the tracking contract
+                else:
+                    hit = (fallback._wrap_cursors(prepared, request.url.path, fallback._request_identity(request, {}),
+                                                  fallback.PROVIDER if paid else "native"), stored_at, paid)
         # x-socialscrape-fallback: off asks for this server's own answer, so not one ScrapeCreators gave.
         if hit and not (hit[2] and request.headers.get("x-socialscrape-fallback", "").strip().lower() == "off"):
             body, stored_at, fallback = hit

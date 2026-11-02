@@ -973,6 +973,14 @@ def test_non_profile_pages_are_not_profiles(client, pages):
     assert pages.requested == []
 
 
+def test_profile_path_pasted_as_a_handle_is_normalized():
+    assert ig.clean_handle("/j.nelearns/") == "j.nelearns"
+    assert ig.clean_handle(" /@j.nelearns ") == "j.nelearns"
+    with pytest.raises(BadRequest) as error:
+        ig.clean_handle("/accounts/login/")
+    assert error.value.code == "bad_handle"
+
+
 def test_hashtag_cursor_is_a_page_number(client, stubbed):
     """gap-instagram-1: ScrapeCreators' cursor is a Google results page (1-11); 12 or more is its documented 400."""
     for cursor in ("12", "99", "0", "-1", "abc"):

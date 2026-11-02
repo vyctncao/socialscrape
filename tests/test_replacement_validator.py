@@ -28,7 +28,7 @@ def test_zero_is_valid_but_cannot_erase_a_previously_positive_view_count():
 def test_malformed_envelope_and_missing_date_fail_the_gate():
     assert validate("feed", "youtube", [], {}) == ["response.object_required"]
     assert validate("feed", "youtube", {"shorts": [None]}, {}) == ["feed[0].object_required"]
-    item = {"code": "abc", "media_type": 2, "play_count": 0, "caption": None}
+    item = {"code": "abc", "media_type": 2, "play_count": 0, "caption": None, "like_count": 0, "comment_count": 0}
     assert validate("feed", "instagram", {"items": [item]}, {}) == ["feed[0].date"]
     assert validate("feed", "instagram", {"items": [{**item, "taken_at": 1760000000}]}, {}) == []
 
@@ -40,7 +40,8 @@ def test_repeated_ids_and_cursor_cycles_are_failures():
     assert validate("feed", "instagram", {"items": [], "more_available": True}, {}) == ["feed.next_cursor"]
 
 
-def test_live_runner_follows_the_instagram_cursor_with_fallback_disabled(tmp_path):
+@pytest.mark.parametrize("allow_fallback", [False, True])
+def test_live_runner_follows_the_instagram_cursor_with_fallback_disabled(tmp_path, allow_fallback):
     calls = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -56,12 +57,14 @@ def test_live_runner_follows_the_instagram_cursor_with_fallback_disabled(tmp_pat
             calls.append((self.path, self.headers.get("x-socialscrape-fallback")))
             second = "next_max_id=page2" in self.path
             self.answer({"success": True, "items": [{"code": "second" if second else "first",
-                         "taken_at": 1760000000, "media_type": 2, "play_count": 0, "caption": None}],
+                         "taken_at": 1760000000, "media_type": 2, "play_count": 0, "caption": None,
+                         "like_count": 0, "comment_count": 0}],
                          "next_max_id": None if second else "page2"})
 
         def answer(self, body, status=200):
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
+            self.send_header("x-socialscrape-fallback", "scrapecreators")
             self.end_headers()
             self.wfile.write(json.dumps(body).encode())
 
@@ -75,11 +78,16 @@ def test_live_runner_follows_the_instagram_cursor_with_fallback_disabled(tmp_pat
         result = subprocess.run([sys.executable, str(Path(__file__).parents[1] / "scripts/validate_replacement.py"),
                                  "--cohort", str(cohort), "--output", str(output), "--base-url",
                                  f"http://127.0.0.1:{server.server_port}", "--feeds-per-platform", "1",
-                                 "--pages-per-feed", "2"], capture_output=True, text=True, timeout=10)
+                                 "--pages-per-feed", "2", *(["--allow-fallback"] if allow_fallback else [])],
+                                capture_output=True, text=True, timeout=10)
         assert result.returncode == 1  # The missing profile must not be greenwashed by healthy feed pages.
         rows = [json.loads(line) for line in (output / "results.jsonl").read_text().splitlines()]
-        assert [r["outcome"] for r in rows if r["kind"] == "feed"] == ["passed", "passed"]
-        assert all(fallback == "off" for _, fallback in calls)
+        assert [r["outcome"] for r in rows if r["kind"] == "feed"] == (["passed", "passed"] if allow_fallback else ["failed", "failed"])
+        assert all(value == (None if allow_fallback else "off") for _, value in calls)
+        assert all(("provider.fallback_used" in r["issues"]) != allow_fallback for r in rows if r["kind"] == "feed")
+        summary = json.loads((output / "summary.json").read_text())
+        assert summary["fallback"] == ("allowed" if allow_fallback else "off")
+        assert summary["fallback_responses"] == 3
         assert any("next_max_id=page2" in path for path, _ in calls)
     finally:
         server.shutdown()
