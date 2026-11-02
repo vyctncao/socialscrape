@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gc
 import logging
 import os
 import re
@@ -309,6 +310,7 @@ def test_max_workers_one_serialises_without_blocking_health(tmp_path):
 def test_request_timeout_is_enforced(tmp_path):
     slow = lambda platform, fn, opts: time.sleep(1.5)  # noqa: E731
     with app_with({"SOCIALSCRAPE_REQUEST_TIMEOUT": "0.3"}, tmp_path, patches=[(ytdlp, "_run", slow)]) as c:
+        gc.collect()  # Do not include schema collection from earlier app fixtures in the upstream wait budget.
         t0 = time.monotonic()
         r = c.get("/v1/tiktok/profile", params={"handle": "tiktok"})
         elapsed = time.monotonic() - t0

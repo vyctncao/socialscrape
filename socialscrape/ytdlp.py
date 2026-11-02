@@ -19,6 +19,7 @@ import re
 import stat
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from functools import lru_cache, partial
 from http.cookiejar import Cookie
 from typing import Any, Callable, TypeVar
@@ -26,6 +27,7 @@ from urllib.parse import parse_qs, urljoin
 
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError, YoutubeDLCookieJar
+from yt_dlp.networking import Request
 from yt_dlp.extractor.youtube import YoutubeBaseInfoExtractor, YoutubeIE
 from yt_dlp.networking.exceptions import HTTPError, NoSupportingHandlers, ProxyError, RequestError, TransportError
 from yt_dlp.utils import (
@@ -44,6 +46,7 @@ from yt_dlp.utils import (
 )
 from yt_dlp.utils import _utils as yt_dlp_utils
 
+from . import budget
 from .config import get_settings
 from .errors import (ApiError, BadRequest, Forbidden, LoginRequired, Misconfigured, NotFound, SessionInvalid,
                      UpstreamBlocked, UpstreamError, UpstreamUnreachable)
@@ -173,6 +176,20 @@ def _run(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], opts: dict[str, Any
     if extractor_args:
         merged["extractor_args"] = extractor_args
     with yt_dlp.YoutubeDL(merged) as ydl:
+        if budget.deadline.get() is not None:
+            original_open = ydl.urlopen
+
+            def bounded_open(request):
+                left = budget.remaining(get_settings().socket_timeout)
+                if left <= 0:
+                    raise UpstreamError("Native request exceeded its failover budget", code="timeout")
+                if isinstance(request, str):
+                    request = Request(request)
+                if isinstance(getattr(request, "extensions", None), dict):
+                    request.extensions["timeout"] = min(request.extensions.get("timeout", left), left)
+                return original_open(request)
+
+            ydl.urlopen = bounded_open
         if dashboard_cookies:
             try:
                 ydl.cookiejar._really_load(io.StringIO(dashboard_cookies), "dashboard cookies.txt", True, True)
@@ -596,6 +613,8 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
     login_only = False  # a call without account cookies failed its login pre-flight: the route needs an account
     fallback = False  # the account's failures leave a call without account cookies to try
     while True:
+        if budget.remaining(get_settings().request_timeout) <= 0:
+            raise UpstreamError("Native request exceeded its failover budget", code="timeout")
         proxy = proxies[min(index, len(proxies) - 1)] if proxies else None
         account = None if cookieless or not usable else usable[min(index, len(usable) - 1)]
         options = dict(ydl_opts)
@@ -613,8 +632,8 @@ async def with_ydl(platform: str, fn: Callable[[yt_dlp.YoutubeDL], T], *, confir
             options.update(_dashboard_cookies=NO_COOKIES, cookiefile=None, cookiesfrombrowser=None)
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(_pool(), _run, platform, fn, options),
-                timeout=get_settings().request_timeout,
+                loop.run_in_executor(_pool(), copy_context().run, _run, platform, fn, options),
+                timeout=budget.remaining(get_settings().request_timeout),
             )
         except asyncio.TimeoutError as exc:
             error: ApiError = UpstreamError("Timed out waiting for the platform", code="timeout")

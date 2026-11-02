@@ -49,8 +49,18 @@ def test_a_derived_param_comes_from_a_static_preset_on_the_same_platform():
         for source, pick in preset.derive.values():
             assert source != path and source.split("/")[2] == path.split("/")[2]
             # The dashboard runs a lane's tests in order, after their sources: no chains, nothing unanswerable.
-            assert source in implemented and not selftest.PRESETS[source].derive
-            assert pick in load_contract(source)
+            assert source in ENTRIES and not selftest.PRESETS[source].derive
+            # The live compatibility response includes these tokens even though its pinned example omits them.
+            observed_tokens = {("/v1/facebook/post/comments", "comments[].feedback_id"),
+                               ("/v1/facebook/post/comments", "comments[].expansion_token")}
+            assert pick in load_contract(source) or (source, pick) in observed_tokens
+
+
+def test_documented_presets_start_with_real_first_page_parameters():
+    for path in ("/v1/facebook/profile/photos", "/v1/facebook/profile/reels"):
+        assert not {"cursor", "next_page_id"} & selftest.PRESETS[path].params.keys()
+    replies = selftest.PRESETS["/v1/facebook/post/comment/replies"]
+    assert not replies.params and set(replies.derive) == {"feedback_id", "expansion_token"}
 
 
 @pytest.fixture

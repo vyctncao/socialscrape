@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlsplit
 from curl_cffi import requests
 from curl_cffi.requests.exceptions import RequestException, Timeout
 
+from .. import budget
 from ..config import get_settings
 from ..errors import (
     BadRequest,
@@ -58,7 +59,7 @@ def fetch(
     if not _allowed(url, hosts):
         raise BadRequest("The URL must identify a supported public platform")
     settings = get_settings()
-    deadline = time.monotonic() + settings.request_timeout
+    deadline = time.monotonic() + budget.remaining(settings.request_timeout)
     proxy = ydl.params.get("proxy") or None
     # A new session per fetch has no browser cookies or authentication context.
     with requests.Session(trust_env=False) as session:

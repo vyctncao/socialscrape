@@ -17,6 +17,7 @@ from fastapi import APIRouter, Query
 from yt_dlp.networking import Request
 from yt_dlp.networking.exceptions import HTTPError, TransportError
 
+from .. import budget
 from ..config import get_settings
 from ..errors import BadRequest, Forbidden, NotFound, UpstreamBlocked, UpstreamError
 from ..registry import sc_get
@@ -43,7 +44,7 @@ def actor(value: str | None) -> str:
 
 def _read_public(ydl: yt_dlp.YoutubeDL, request: Request) -> bytes:
     settings = get_settings()
-    deadline = monotonic() + settings.request_timeout
+    deadline = monotonic() + budget.remaining(settings.request_timeout)
     for attempt in range(2):
         remaining = deadline - monotonic()
         if remaining <= 0:

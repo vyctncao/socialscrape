@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 import http.client
 import json
 import logging
@@ -29,14 +30,14 @@ from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, HTTPException, Request
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
+from starlette.types import ASGIApp, Scope, Receive, Send
 
-from . import cursor, ytdlp
+from . import budget, cursor, quality, ytdlp
 from .cache import CACHE_PARAM
 from .catalog import CATALOG
-from .config import PLATFORMS as PROXY_PLATFORMS, ConfigError, _env, get_settings
-from .errors import ApiError
+from .config import PLATFORMS as PROXY_PLATFORMS, ConfigError, _env, _number, get_settings
+from .errors import ApiError, BadRequest
 from .portal import PortalStore, _csrf, _owner
 from .responses import LenientJSONResponse
 
@@ -60,7 +61,11 @@ _ARRAY_RESPONSES = {entry["path"] for entry in CATALOG if entry.get("response_ki
 # profile operation, and ScrapeCreators accepts the same JSON-body request.
 _CATALOG_METHODS["/v1/instagram/profile"] |= {"POST"}
 # The catalog's pagination params: the only ones that can carry our own cursors (cursor.PREFIX).
-_CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id"})
+_CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id", "paginationToken"})
+_CURSOR_FIELDS = _CURSOR_PARAMS | {"next_cursor", "nextCursor", "end_cursor", "next_page_token"}
+_PAGE_PARAMS = _CURSOR_PARAMS | {"next_page_id", "page", "offset", CACHE_PARAM}
+_PATH_CURSOR_PARAMS = {entry["path"]: set(entry.get("params", ())) & _CURSOR_PARAMS
+                       for entry in CATALOG}
 # Sent with every fallback request. One that comes in with it isn't asked of ScrapeCreators again: an upstream URL
 # pointed back at this server (or at another that falls back here) would otherwise loop until the timeouts.
 _VIA = "1.1 socialscrape"
@@ -76,6 +81,8 @@ class FallbackEnv:
     url: str  # no trailing slash
     triggers: tuple[str, ...]
     platforms: tuple[str, ...]
+    native_timeout: float = 20
+    total_timeout: float = 55
 
 
 @dataclasses.dataclass(frozen=True)
@@ -134,7 +141,9 @@ def env_config() -> FallbackEnv:
     key_name = "SOCIALSCRAPE_SCRAPECREATORS_API_KEY"
     return FallbackEnv(_api_key(_env(key_name), key_name), url,
                        _names("SOCIALSCRAPE_SCRAPECREATORS_FALLBACK", TRIGGERS, DEFAULT_TRIGGERS, aliases=True),
-                       _names("SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS", PLATFORMS, PLATFORMS))
+                       _names("SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS", PLATFORMS, PLATFORMS),
+                       _number("SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT", "20", float, minimum=0, inclusive=False),
+                       _number("SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT", "55", float, minimum=0, inclusive=False))
 
 
 def _options(data: Any) -> dict[str, Any]:
@@ -417,7 +426,51 @@ def _failure(status: int | None, answer: dict[str, Any] | None, problem: str | N
     return {"provider": PROVIDER, "status": status, "error": error, "message": message}
 
 
-class FallbackMiddleware(BaseHTTPMiddleware):
+def _request_identity(request: Request, body_params: dict) -> str:
+    # Bind opaque provider cursors to the same endpoint and selection. Cache freshness may change between pages.
+    pairs = [(k, str(v).lower() if isinstance(v, bool) else str(v))
+             for k, v in (*request.query_params.multi_items(), *body_params.items())
+             if k not in _PAGE_PARAMS]
+    return hashlib.sha256(json.dumps([request.url.path, sorted(pairs, key=lambda pair: pair[0])],
+                                    separators=(",", ":")).encode()).hexdigest()
+
+
+def _binding(request: Request, body_params: dict) -> dict:
+    return {"query": [(k, v) for k, v in request.query_params.multi_items() if k not in _PAGE_PARAMS],
+            "body": {k: v for k, v in body_params.items() if k not in _PAGE_PARAMS}}
+
+
+def _wrap_cursors(answer: dict, path: str, identity: str, provider: str = PROVIDER, binding: dict | None = None) -> dict:
+    """Bind every subsequent page to the provider that produced its continuation."""
+    allowed = _PATH_CURSOR_PARAMS.get(path, set())
+    if not allowed:
+        return answer
+
+    def visit(value: dict) -> dict:
+        result = dict(value)
+        for name, token in value.items():
+            if name in _CURSOR_FIELDS and isinstance(token, (str, int)) and not isinstance(token, bool) and token not in ("", 0):
+                param = name if name in allowed else next(iter(allowed)) if len(allowed) == 1 else None
+                if param:
+                    if isinstance(token, str) and token.startswith(cursor.PREFIX):
+                        try:
+                            state = cursor.decode_cursor(token) or {}
+                        except BadRequest:
+                            state = {}
+                        if (state.get("provider") == provider and state.get("path") == path
+                                and state.get("request") == identity and state.get("param") == param):
+                            continue  # cached pages already carry the correct wrapper
+                    result[name] = cursor.encode_cursor({"provider": provider, "path": path, "request": identity,
+                                                         "param": param, "cursor": token,
+                                                         **({"binding": binding} if binding is not None else {})})
+            elif name in ("pagination", "paging", "page_info", "data") and isinstance(token, dict):
+                result[name] = visit(token)
+        return result
+
+    return visit(answer)
+
+
+class FallbackMiddleware:
     """Asks ScrapeCreators when a catalog request fails with an enabled trigger (see _trigger), and answers with:
 
     - its success (2xx, a JSON object) as it is, with HEADER;
@@ -427,11 +480,44 @@ class FallbackMiddleware(BaseHTTPMiddleware):
 
     Added before CacheMiddleware, so it runs after it (Starlette runs the last-added middleware first)."""
 
-    def __init__(self, app, env: FallbackEnv):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp, env: FallbackEnv):
+        self.app = app
         self.env = env
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] not in _CATALOG_METHODS.get(scope["path"], ()):
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope, receive)
+
+        async def call_next(request: Request) -> Response:
+            # Buffer the native JSON until it is complete. A timed-out coroutine can then be cancelled before any
+            # headers are sent; BaseHTTPMiddleware's child task would otherwise keep running after failover.
+            body, delivered, status, headers, chunks = await request.body(), False, 500, [], []
+
+            async def replay():
+                nonlocal delivered
+                if not delivered:
+                    delivered = True
+                    return {"type": "http.request", "body": body, "more_body": False}
+                return await receive()
+
+            async def capture(message):
+                nonlocal status, headers
+                if message["type"] == "http.response.start":
+                    status, headers = message["status"], message["headers"]
+                elif message["type"] == "http.response.body":
+                    chunks.append(message.get("body", b""))
+
+            await self.app(request.scope, replay, capture)
+            result = Response(b"".join(chunks), status)
+            result.raw_headers = headers
+            return result
+
+        response = await self.dispatch(request, call_next)
+        await response(scope, receive, send)
+
+    async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
         if request.method not in _CATALOG_METHODS.get(path, ()):
             return await call_next(request)
@@ -443,15 +529,95 @@ class FallbackMiddleware(BaseHTTPMiddleware):
         if not isinstance(body_params, dict):  # the route answers its 400; there are no cursors to look at
             body_params = {}
         c = config(self.env, getattr(request.app.state, "portal", None))
-        if (not c.active or path.split("/")[2] not in c.platforms or _VIA in request.headers.get("via", "")
-                # The caller asked for this server's own answer (the dashboard's endpoint tests do).
-                or request.headers.get(HEADER, "").strip().lower() == "off"
-                # Our own cursors mean nothing to ScrapeCreators.
-                or any(name in _CURSOR_PARAMS and isinstance(value, str) and value.startswith(cursor.PREFIX)
-                       for name, value in (*request.query_params.multi_items(), *body_params.items()))):
-            return await call_next(request)
+        eligible = (c.active and path.split("/")[2] in c.platforms and _VIA not in request.headers.get("via", "")
+                    and request.headers.get(HEADER, "").strip().lower() != "off")
+        identity = _request_identity(request, body_params)
+        params = {**dict(request.query_params), **body_params}
+        query = list(request.query_params.multi_items())
+        forwarded_body = dict(body_params)
+        provider_page = False
+        native_cursor = False
+        wrapped_native = False
+        for name, value in (*query, *body_params.items()):
+            if name not in _CURSOR_PARAMS or not isinstance(value, str) or not value.startswith(cursor.PREFIX):
+                continue
+            try:
+                state = cursor.decode_cursor(value)
+            except BadRequest as exc:
+                return LenientJSONResponse(exc.body(), exc.status)
+            if not state or state.get("provider") not in (PROVIDER, "native"):
+                native_cursor = True
+                continue  # never send native continuation state to the provider
+            if (state.get("path") != path or state.get("param") != name
+                    or not isinstance(state.get("cursor"), (str, int)) or isinstance(state.get("cursor"), bool)):
+                return LenientJSONResponse(BadRequest("Cursor does not belong to this request", code="bad_cursor").body(), 400)
+            if isinstance(saved := state.get("binding"), dict):
+                saved_query, saved_body = saved.get("query"), saved.get("body")
+                if (not isinstance(saved_query, list) or not isinstance(saved_body, dict)
+                        or not all(isinstance(pair, (list, tuple)) and len(pair) == 2 and all(isinstance(v, str) for v in pair)
+                                   for pair in saved_query)):
+                    return LenientJSONResponse(BadRequest("Invalid cursor selection", code="bad_cursor").body(), 400)
+                supplied = {k for k, v in query} | set(forwarded_body)
+                # Several upstream continuations allow the cursor alone. Retain their original public selectors,
+                # while still rejecting an explicitly changed owner, URL or filter.
+                for key, selected in (*saved_query, *saved_body.items()):
+                    if key not in supplied and key not in _PAGE_PARAMS:
+                        if request.method == "POST":
+                            forwarded_body[key] = selected
+                        else:
+                            query.append((key, str(selected).lower() if isinstance(selected, bool) else str(selected)))
+            selection = Request({**request.scope, "query_string": urlencode(query).encode()})
+            identity = _request_identity(selection, forwarded_body)
+            if state.get("request") != identity:
+                return LenientJSONResponse(BadRequest("Cursor does not belong to this request", code="bad_cursor").body(), 400)
+            if state["provider"] == "native":
+                native_cursor = wrapped_native = True
+            else:
+                provider_page = True
+            query = [(k, str(state["cursor"]) if k == name else v) for k, v in query]
+            if name in forwarded_body:
+                forwarded_body[name] = state["cursor"]
+        if native_cursor and provider_page:
+            return LenientJSONResponse(BadRequest("Cannot mix native and provider cursors", code="bad_cursor").body(), 400)
+        native_request = request
+        selection = Request({**request.scope, "query_string": urlencode(query).encode()})
+        binding = _binding(selection, forwarded_body)
+        params = {**dict(query), **forwarded_body}
+        if wrapped_native:
+            scope = {**request.scope, "query_string": urlencode(query).encode()}
+            native_body = json.dumps(forwarded_body).encode() if body else b""
+
+            async def replay_body():
+                return {"type": "http.request", "body": native_body, "more_body": False}
+
+            native_request = Request(scope, replay_body)
+        if not eligible:
+            return await call_next(native_request)
+        # Tracking clients have a 60s deadline. Other public operations retain the configured upstream budget;
+        # local AI transcription can legitimately take longer than a metadata request.
+        configured_timeout = get_settings().request_timeout
+        total = min(self.env.total_timeout, configured_timeout) if path in quality.OPERATIONS else configured_timeout
+        end = time.monotonic() + total
+        native_seconds = (total if native_cursor else total * 2 / 3 if path.endswith("/transcript")
+                          else min(self.env.native_timeout, total * 0.4))
+        token = budget.deadline.set(time.monotonic() + native_seconds) if "errors" in c.triggers else None
         try:
-            response = await call_next(request)
+            if provider_page:
+                response = LenientJSONResponse({"success": False, "error": "bad_cursor"}, 400)
+            elif (not native_cursor and "unsupported" in c.triggers and (
+                    path == "/v3/tiktok/profile/videos" and str(params.get("include_pinned", "")).lower() in ("false", "0")
+                    or path == "/v1/youtube/search" and str(params.get("includeExtras", "")).lower() in ("true", "1"))):
+                # These native clients explicitly cannot honor these options. A successful but wrong selection
+                # must not suppress compatibility fallback.
+                response = LenientJSONResponse({"success": False, "error": "not_supported",
+                    "message": "The requested option requires the compatibility provider"}, 501)
+            elif "errors" in c.triggers:
+                try:
+                    response = await asyncio.wait_for(call_next(native_request), native_seconds)
+                except TimeoutError:
+                    response = LenientJSONResponse(ApiError("Native request exceeded its failover budget", code="timeout").body(), 500)
+            else:
+                response = await call_next(native_request)
         except Exception:  # not an ApiError: those are responses by now
             if "errors" not in c.triggers:
                 raise
@@ -459,16 +625,35 @@ class FallbackMiddleware(BaseHTTPMiddleware):
             local_status, local, headers = 500, ApiError("Internal server error").body(), {}
         else:
             if response.status_code < 400:
-                return response
+                answer = _json_object(response.body)
+                if answer is not None:
+                    prepared = quality.prepare(path, answer)
+                    missing = quality.issues(path, params, prepared) if "errors" in c.triggers else []
+                    if missing:
+                        response = LenientJSONResponse({"success": False, "error": "incomplete_response",
+                            "message": "Required tracking fields were not exposed by the source", "missing_fields": missing}, 502)
+                    else:
+                        wrapped = _wrap_cursors(prepared, path, identity, "native", binding)
+                        if wrapped != answer:
+                            return LenientJSONResponse(wrapped, response.status_code,
+                                headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "content-type")})
+                        return response
+                else:
+                    return response
             local_status = response.status_code
-            payload = b"".join([chunk async for chunk in response.body_iterator])  # type: ignore[attr-defined]
+            payload = response.body
             headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
             local = _json_object(payload)
-            if local is None or _trigger(local_status, local.get("error")) not in c.triggers:
+            if local is None or native_cursor or (not provider_page and _trigger(local_status, local.get("error")) not in c.triggers):
                 return Response(payload, local_status, headers=headers)
             headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
+        finally:
+            if token is not None:
+                budget.deadline.reset(token)
         code = local.get("error")
-        status, answer_body, problem = await self._ask(request, c.api_key or "", body)
+        status, answer_body, problem = await self._ask(request, c.api_key or "",
+            json.dumps(forwarded_body).encode() if request.method == "POST" and provider_page else body,
+            query=query, deadline=end)
         # Twitch clip is documented as a root GraphQL array. Accept that shape
         # only on explicitly documented array routes, and only for a 2xx answer.
         if problem is None and status is not None and 200 <= status < 300 and path in _ARRAY_RESPONSES:
@@ -480,11 +665,27 @@ class FallbackMiddleware(BaseHTTPMiddleware):
                 log.info("%s: local %s %s, served by ScrapeCreators (%s)", path, local_status, code, status)
                 return Response(answer_body, status, headers={HEADER: PROVIDER}, media_type="application/json")
         answer = _json_object(answer_body) if problem is None else None
+        # ScrapeCreators can use HTTP 200 / success:true for a deactivated account, with no profile. Kori's
+        # adapter would read every missing counter as zero. Preserve the provider's evidence as an honest 404.
+        if (answer is not None and status == 200 and path == "/v1/tiktok/profile"
+                and answer.get("account_deactivated") is True and not answer.get("user")):
+            return LenientJSONResponse({**answer, "success": False, "error": "not_found"}, 404,
+                                       headers={HEADER: PROVIDER})
+        if answer is not None and status is not None and 200 <= status < 300:
+            answer = quality.prepare(path, answer)
+            if missing := quality.issues(path, params, answer):
+                return LenientJSONResponse({"success": False, "error": "incomplete_response",
+                    "message": "Required tracking fields were not exposed by either source", "missing_fields": missing,
+                    "fallback": {"provider": PROVIDER, "status": status, "error": "incomplete_response"}}, 502,
+                    headers={HEADER: PROVIDER})
         no_local_answer = local_status == 501 or code == "bad_cursor"
         if answer is not None and status is not None and (
                 200 <= status < 300 or (no_local_answer and answer is not None)
                 or (no_local_answer and status in (400, 403, 404, 422))):
             log.info("%s: local %s %s, served by ScrapeCreators (%s)", path, local_status, code, status)
+            if 200 <= status < 300:
+                answer = _wrap_cursors(answer, path, identity, binding=binding)
+                return LenientJSONResponse(answer, status, headers={HEADER: PROVIDER})
             return Response(answer_body, status, headers={HEADER: PROVIDER}, media_type="application/json")
         detail = _failure(status, answer, problem, c.api_key or "")
         log.info("%s: local %s %s, ScrapeCreators failed too (%s %s)", path, local_status, code, status,
@@ -494,13 +695,17 @@ class FallbackMiddleware(BaseHTTPMiddleware):
                                         "message": detail["message"], "fallback": detail}, 502, headers=headers)
         return LenientJSONResponse({**local, "fallback": detail}, local_status, headers=headers)
 
-    async def _ask(self, request: Request, api_key: str, body: bytes | None = None
+    async def _ask(self, request: Request, api_key: str, body: bytes | None = None, *,
+                   query: list[tuple[str, str]] | None = None, deadline: float | None = None
                    ) -> tuple[int | None, bytes, str | None]:
         # Without cache_max_age: an answer from ScrapeCreators' cache would go into ours as new, and then be served to a
         # cache_max_age it is older than.
-        query = urlencode([(k, v) for k, v in request.query_params.multi_items() if k != CACHE_PARAM])
-        url = f"{self.env.url}{request.url.path}" + (f"?{query}" if query else "")
-        timeout = get_settings().request_timeout
+        query_string = urlencode([(k, v) for k, v in (query if query is not None else request.query_params.multi_items())
+                                  if k != CACHE_PARAM])
+        url = f"{self.env.url}{request.url.path}" + (f"?{query_string}" if query_string else "")
+        timeout = min(get_settings().request_timeout, max(0, deadline - time.monotonic())) if deadline else get_settings().request_timeout
+        if timeout <= 0:
+            return None, b"", "timeout"
         loop = asyncio.get_running_loop()
         try:  # the time queued for a thread counts too
             return await asyncio.wait_for(

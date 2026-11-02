@@ -147,7 +147,7 @@ def post_url(url: str | None) -> tuple[str, str]:
 
 
 def clean_handle(handle: str | None) -> str:
-    """'@jane', 'jane', 'jane/' or a profile URL (optionally a tab of it, its /followers/ or /following/ list or a
+    """'@jane', 'jane', '/jane', 'jane/' or a profile URL (optionally a tab of it, its /followers/ or /following/ list or a
     saved collection), or that of jane's story (/stories/jane/) -> 'jane'. 400 for anything else. The '@' may be
     the full-width '＠' of Japanese and Chinese keyboards."""
     value = (handle or "").strip()
@@ -155,7 +155,7 @@ def clean_handle(handle: str | None) -> str:
         m = _PROFILE_URL.fullmatch(canonical_url(value))
         # /stories/highlights/<id>/ is a highlight, not the story of an account named 'highlights'
         value = (m["user"] or m["story"]) if m and (m["story"] or "").lower() != "highlights" else ""
-    value = value.lstrip("@＠﹫").rstrip("/")
+    value = value.lstrip("/@＠﹫").rstrip("/")
     if not _HANDLE.fullmatch(value) or value.lower() in _RESERVED_PATHS:
         raise BadRequest("Not a valid Instagram handle", code="bad_handle")
     return value

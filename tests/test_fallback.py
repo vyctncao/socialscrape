@@ -4,6 +4,8 @@ it is sent and answers as scripted, and local failures come from a patched /v1/t
 from __future__ import annotations
 
 import json
+import asyncio
+import gc
 import logging
 import socket
 import sqlite3
@@ -16,7 +18,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
-from socialscrape import fallback
+from socialscrape import fallback, quality
 from socialscrape.config import ConfigError, get_settings
 from socialscrape.errors import (BadRequest, Forbidden, NotFound, NotSupported, UpstreamBlocked, UpstreamError,
                                  UpstreamUnreachable)
@@ -29,6 +31,7 @@ SC_KEY = "sc-secret-key-123"
 UNSUPPORTED = "/v1/tiktok/video/comments"  # a 501 route
 PROFILE = "/v1/tiktok/profile"  # implemented: its with_ydl is patched
 SC_OK = {"success": True, "credits_remaining": 99, "comments": [{"text": "hi"}]}
+REAL_QUALITY_ISSUES = quality.issues
 
 
 class Upstream:
@@ -99,6 +102,8 @@ def make(monkeypatch, upstream):
                  "SOCIALSCRAPE_PORTAL_PATH", "SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY", "SOCIALSCRAPE_SETUP_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(fallback, "_executor", None)
+    # Transport tests use small arbitrary JSON objects. Completeness has its own real-checker cases below.
+    monkeypatch.setattr(quality, "issues", lambda *args: [])
 
     def build(**env: str | None) -> TestClient:
         values = {"SOCIALSCRAPE_API_KEYS": CLIENT_KEY, "SOCIALSCRAPE_SCRAPECREATORS_API_KEY": SC_KEY,
@@ -317,6 +322,7 @@ def test_timeouts_unreachable_and_oversized_answers(make, upstream, monkeypatch)
     fail_profile(monkeypatch, UpstreamBlocked("Rate limited"))
     c = make(SOCIALSCRAPE_REQUEST_TIMEOUT="0.5")
     upstream.reply(200, SC_OK, delay=3)
+    gc.collect()
     started = time.monotonic()
     r = c.get(PROFILE, params={"handle": "someone"})
     assert time.monotonic() - started < 2
@@ -325,7 +331,9 @@ def test_timeouts_unreachable_and_oversized_answers(make, upstream, monkeypatch)
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         dead = s.getsockname()[1]  # nothing listens once it's closed
-    r = make(SOCIALSCRAPE_SCRAPECREATORS_URL=f"http://127.0.0.1:{dead}").get(PROFILE, params={"handle": "someone"})
+    dead_client = make(SOCIALSCRAPE_SCRAPECREATORS_URL=f"http://127.0.0.1:{dead}", SOCIALSCRAPE_REQUEST_TIMEOUT="5")
+    gc.collect()
+    r = dead_client.get(PROFILE, params={"handle": "someone"})
     assert r.status_code == 503 and r.json()["fallback"] == {
         "provider": "scrapecreators", "status": None, "error": "network_error",
         "message": "ScrapeCreators couldn't be reached"}
@@ -645,6 +653,256 @@ def test_local_account_identity_and_usage_never_proxy_to_upstream_owner(make, up
     assert c.get("/v1/account/get-daily-usage-count").status_code == 403
     assert c.get("/v1/account/get-most-used-routes").status_code == 403
     assert not upstream.requests
+
+
+def test_slow_native_work_is_cancelled_in_time_for_fallback(make, upstream, monkeypatch):
+    cancelled = []
+
+    async def slow(*args, **kwargs):
+        try:
+            await asyncio.sleep(10)
+        finally:
+            cancelled.append(True)
+
+    monkeypatch.setattr(tiktok, "with_ydl", slow)
+    c = make(SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT="0.05", SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT="2")
+    gc.collect()  # Release schemas from earlier app fixtures before measuring this request's deadline.
+    start = time.monotonic()
+    result = c.get(PROFILE, params={"handle": "someone"})
+    assert result.status_code == 200 and result.headers[fallback.HEADER] == fallback.PROVIDER
+    assert time.monotonic() - start < 3 and cancelled == [True]
+
+
+def test_native_and_provider_share_one_total_deadline(make, upstream, monkeypatch):
+    async def slow(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(tiktok, "with_ydl", slow)
+    upstream.reply(200, SC_OK, delay=1)
+    c = make(SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT="0.08", SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT="0.2")
+    gc.collect()
+    start = time.monotonic()
+    result = c.get(PROFILE, params={"handle": "someone"})
+    assert time.monotonic() - start < 5
+    assert result.status_code == 500 and result.json()["error"] == "timeout"
+    assert result.json()["fallback"]["error"] == "timeout"
+
+
+def test_deactivated_provider_profile_cannot_be_read_as_zero_metrics(make, upstream, monkeypatch):
+    fail_profile(monkeypatch, NotFound("No such user"))
+    upstream.reply(200, {"success": True, "account_deactivated": True, "handle": "someone",
+                         "message": "This account is deactivated", "credits_charged": 1})
+    result = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all").get(PROFILE, params={"handle": "someone"})
+    assert result.status_code == 404 and result.json()["success"] is False
+    assert result.json()["account_deactivated"] is True and result.json()["error"] == "not_found"
+    assert result.headers[fallback.HEADER] == fallback.PROVIDER
+
+
+def test_slow_native_cursor_page_is_bounded_without_leaking_its_state(make, upstream, monkeypatch):
+    async def slow(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(instagram, "fetch_feed", slow)
+    c = make(SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT="0.05", SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT="0.15")
+    gc.collect()
+    start = time.monotonic()
+    result = c.get("/v2/instagram/user/posts", params={"handle": "someone", "next_max_id": "ss1.e30"})
+    assert result.status_code == 500 and result.json()["error"] == "timeout"
+    assert time.monotonic() - start < 5 and not upstream.requests
+
+
+def test_native_deadline_reaches_extractor_worker_and_does_not_leak(make, monkeypatch):
+    from socialscrape import budget, ytdlp
+
+    async def run():
+        token = budget.deadline.set(time.monotonic() + 2)
+        try:
+            value = await ytdlp.with_ydl("tiktok", lambda ydl: budget.remaining(99))
+            assert 0 < value <= 2
+        finally:
+            budget.deadline.reset(token)
+        assert budget.remaining(99) == 99
+
+    monkeypatch.setattr(ytdlp, "_run", lambda platform, fn, options: fn(None))
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("native_error", [False, True])
+@pytest.mark.parametrize("provider_complete", [False, True])
+def test_tracking_quality_rejects_missing_counters_instead_of_creating_zero_metrics(
+        make, upstream, monkeypatch, native_error, provider_complete):
+    complete = {"success": True, "user": {"id": "1", "uniqueId": "someone", "verified": False,
+        "avatarLarger": "https://example.com/avatar.jpg"}, "stats": {
+        "followerCount": 42, "followingCount": 0, "videoCount": 1, "heartCount": 0}}
+    incomplete = {**complete, "stats": {**complete["stats"], "followerCount": None}}
+
+    async def native(*args, **kwargs):
+        if native_error:
+            raise UpstreamBlocked("blocked")
+        return incomplete
+
+    monkeypatch.setattr(tiktok, "with_ydl", native)
+    monkeypatch.setattr(quality, "issues", REAL_QUALITY_ISSUES)
+    upstream.reply(200, complete if provider_complete else incomplete)
+    response = make().get(PROFILE, params={"handle": "someone"})
+    assert response.headers[fallback.HEADER] == fallback.PROVIDER
+    if provider_complete:
+        assert response.status_code == 200 and response.json()["stats"]["followerCount"] == 42
+    else:
+        assert response.status_code == 502 and response.json()["error"] == "incomplete_response"
+        assert response.json()["missing_fields"] == ["profile.followerCount"]
+
+
+def test_an_old_partial_cache_entry_cannot_bypass_tracking_quality(make, upstream, monkeypatch, tmp_path):
+    from socialscrape.cache import ResponseCache
+    complete = {"success": True, "user": {"id": "1", "uniqueId": "someone", "verified": False,
+        "avatarLarger": "https://example.com/avatar.jpg"}, "stats": {
+        "followerCount": 42, "followingCount": 0, "videoCount": 1, "heartCount": 0}}
+    cache_path = str(tmp_path / "cache.sqlite3")
+    cache = ResponseCache(cache_path)
+    cache.put(PROFILE + "?handle=someone", json.dumps({**complete, "stats": {**complete["stats"], "followerCount": None}}))
+    cache.close()
+
+    async def native(*args, **kwargs):
+        return complete
+
+    monkeypatch.setattr(tiktok, "with_ydl", native)
+    monkeypatch.setattr(quality, "issues", REAL_QUALITY_ISSUES)
+    response = make(SOCIALSCRAPE_CACHE_PATH=cache_path).get(PROFILE, params={"handle": "someone", "cache_max_age": "1d"})
+    assert response.status_code == 200 and response.json()["stats"]["followerCount"] == 42
+    assert response.headers["x-cache"] == "miss" and not upstream.requests
+
+
+@pytest.mark.parametrize("path,params", [
+    ("/v3/tiktok/profile/videos", {"handle": "someone", "include_pinned": "false"}),
+    ("/v1/youtube/search", {"query": "science", "includeExtras": "true"}),
+])
+def test_options_native_clients_cannot_honor_use_compatibility_instead(make, upstream, monkeypatch, path, params):
+    from socialscrape.platforms import youtube_listings
+    calls = []
+
+    async def native(*args, **kwargs):
+        calls.append(True)
+        raise NotSupported("option unavailable")
+
+    monkeypatch.setattr(tiktok, "with_ydl", native)
+    monkeypatch.setattr(youtube_listings, "with_ydl", native)
+    result = make().get(path, params=params)
+    assert result.status_code == 200 and result.headers[fallback.HEADER] == fallback.PROVIDER
+    assert calls == [] and dict(upstream.requests[0]["query"]) == params
+
+
+def test_cursor_selection_keeps_repeated_parameter_order():
+    from starlette.requests import Request
+    first = Request({"type": "http", "path": PROFILE, "headers": [], "query_string": b"handle=a&handle=b"})
+    second = Request({"type": "http", "path": PROFILE, "headers": [], "query_string": b"handle=b&handle=a"})
+    assert fallback._request_identity(first, {}) != fallback._request_identity(second, {})
+
+
+def test_paid_feed_cursor_stays_with_its_provider_when_native_recovers(make, upstream, monkeypatch, tmp_path):
+    calls = []
+
+    async def native(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == 1:
+            raise UpstreamBlocked("blocked on page one")
+        raise AssertionError("A provider continuation must never run the native feed")
+
+    monkeypatch.setattr(tiktok, "with_ydl", native)
+    path = "/v3/tiktok/profile/videos"
+    upstream.reply(200, {"success": True, "aweme_list": [{"aweme_id": "first"}], "has_more": True, "max_cursor": 12345})
+    upstream.reply(200, {"success": True, "aweme_list": [{"aweme_id": "second"}], "has_more": False, "max_cursor": 0})
+    c = make(SOCIALSCRAPE_CACHE_PATH=str(tmp_path / "cache.sqlite3"))
+    first = c.get(path, params={"handle": "someone", "cache_max_age": "1d"})
+    token = first.json()["max_cursor"]
+    assert token.startswith("ss1.")
+    cached = c.get(path, params={"handle": "someone", "cache_max_age": "1d"})
+    assert cached.headers["x-cache"] == "hit" and cached.json()["max_cursor"] == token
+    second = c.get(path, params={"max_cursor": token, "cache_max_age": "1d"})
+    assert second.json()["aweme_list"] == [{"aweme_id": "second"}]
+    assert second.json()["max_cursor"] == 0
+    assert second.headers[fallback.HEADER] == fallback.PROVIDER and calls == [True]
+    assert dict(upstream.requests[1]["query"]) == {"handle": "someone", "max_cursor": "12345"}
+    before = len(upstream.requests)
+    wrong = c.get(path, params={"handle": "other", "max_cursor": token})
+    assert wrong.status_code == 400 and wrong.json()["error"] == "bad_cursor"
+    assert len(upstream.requests) == before
+
+
+def test_native_numeric_cursor_does_not_silently_switch_to_paid_feed(make, upstream, monkeypatch):
+    calls = []
+
+    async def native(platform, fn, **options):
+        calls.append(True)
+        if len(calls) == 1:
+            # Test the transport boundary without depending on TikTok's extractor internals.
+            return ([{"id": "one", "desc": "first", "createTime": 1760000000}], 1760000000000)
+        raise UpstreamBlocked("second page temporarily blocked")
+
+    monkeypatch.setattr(tiktok, "with_ydl", native)
+    c = make()
+    first = c.get("/v3/tiktok/profile/videos", params={"handle": "someone"})
+    assert first.status_code == 200, first.text
+    token = first.json()["max_cursor"]
+    assert token.startswith("ss1.")
+    second = c.get("/v3/tiktok/profile/videos", params={"max_cursor": token})
+    assert second.status_code == 503 and not upstream.requests
+    # Turning paid fallback off must not strand a native traversal behind an opaque wrapper.
+    third = c.get("/v3/tiktok/profile/videos", params={"handle": "someone", "max_cursor": token},
+                  headers={fallback.HEADER: "off"})
+    assert third.status_code == 503 and len(calls) == 3 and not upstream.requests
+
+
+def test_post_provider_cursor_is_unwrapped_only_in_the_forwarded_body(make, upstream, monkeypatch):
+    path = "/v1/facebook/adLibrary/search/ads"
+
+    async def blocked(*args, **kwargs):
+        raise UpstreamBlocked("blocked")
+
+    monkeypatch.setattr(facebook_ads, "with_ydl", blocked)
+    upstream.reply(200, {"success": True, "ads": [{"id": "one"}], "cursor": "upstream-page2"})
+    upstream.reply(200, {"success": True, "ads": [{"id": "two"}]})
+    c = make()
+    first = c.post(path, json={"query": "nike", "trim": True})
+    token = first.json()["cursor"]
+    assert token.startswith("ss1.")
+    second = c.post(path, json={"cursor": token})
+    assert second.json()["ads"] == [{"id": "two"}]
+    assert json.loads(upstream.requests[1]["body"]) == {"query": "nike", "trim": True, "cursor": "upstream-page2"}
+    assert SC_KEY not in second.text and CLIENT_KEY not in json.dumps(upstream.requests)
+
+
+def test_provider_pagination_restores_selectors_and_preserves_collection_companions(make, upstream):
+    path = "/v1/facebook/profile/photos"
+    upstream.reply(200, {"success": True, "photos": [{"id": "one"}], "next_page_id": "collection", "cursor": "page2"})
+    upstream.reply(200, {"success": True, "photos": [{"id": "two"}], "cursor": None})
+    c = make()
+    first = c.get(path, params={"url": "https://www.facebook.com/public-fixture"})
+    token = first.json()["cursor"]
+    second = c.get(path, params={"cursor": token, "next_page_id": "collection"})
+    assert second.status_code == 200 and second.json()["photos"] == [{"id": "two"}]
+    assert dict(upstream.requests[1]["query"]) == {"cursor": "page2", "next_page_id": "collection",
+                                                 "url": "https://www.facebook.com/public-fixture"}
+
+
+def test_ai_transcription_keeps_its_configured_budget_instead_of_the_tracking_deadline(make, upstream, monkeypatch):
+    from dataclasses import replace
+    from fastapi import FastAPI
+    make(SOCIALSCRAPE_REQUEST_TIMEOUT="2", SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT="0.01",
+         SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT="0.05")
+    app = FastAPI()
+
+    @app.get("/v2/instagram/media/transcript")
+    async def transcript():
+        await asyncio.sleep(0.1)
+        return {"success": True, "transcripts": [{"text": "real local result"}]}
+
+    env = fallback.env_config()
+    app.state.fallback_env = env
+    app.add_middleware(fallback.FallbackMiddleware, env=env)
+    response = TestClient(app).get("/v2/instagram/media/transcript", params={"url": "https://www.instagram.com/reel/example"})
+    assert response.json()["transcripts"][0]["text"] == "real local result"
+    assert fallback.HEADER not in response.headers and not upstream.requests
 
 
 def test_mcp_native_only_request_does_not_spend_fallback_credits(make, upstream):
