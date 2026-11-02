@@ -593,9 +593,13 @@ class FallbackMiddleware:
             native_request = Request(scope, replay_body)
         if not eligible:
             return await call_next(native_request)
-        total = min(self.env.total_timeout, get_settings().request_timeout)
+        # Tracking clients have a 60s deadline. Other public operations retain the configured upstream budget;
+        # local AI transcription can legitimately take longer than a metadata request.
+        configured_timeout = get_settings().request_timeout
+        total = min(self.env.total_timeout, configured_timeout) if path in quality.OPERATIONS else configured_timeout
         end = time.monotonic() + total
-        native_seconds = total if native_cursor else min(self.env.native_timeout, total * 0.4)
+        native_seconds = (total if native_cursor else total * 2 / 3 if path.endswith("/transcript")
+                          else min(self.env.native_timeout, total * 0.4))
         token = budget.deadline.set(time.monotonic() + native_seconds) if "errors" in c.triggers else None
         try:
             if provider_page:

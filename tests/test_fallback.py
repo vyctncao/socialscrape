@@ -885,6 +885,26 @@ def test_provider_pagination_restores_selectors_and_preserves_collection_compani
                                                  "url": "https://www.facebook.com/public-fixture"}
 
 
+def test_ai_transcription_keeps_its_configured_budget_instead_of_the_tracking_deadline(make, upstream, monkeypatch):
+    from dataclasses import replace
+    from fastapi import FastAPI
+    make(SOCIALSCRAPE_REQUEST_TIMEOUT="2", SOCIALSCRAPE_SCRAPECREATORS_NATIVE_TIMEOUT="0.01",
+         SOCIALSCRAPE_SCRAPECREATORS_TOTAL_TIMEOUT="0.05")
+    app = FastAPI()
+
+    @app.get("/v2/instagram/media/transcript")
+    async def transcript():
+        await asyncio.sleep(0.1)
+        return {"success": True, "transcripts": [{"text": "real local result"}]}
+
+    env = fallback.env_config()
+    app.state.fallback_env = env
+    app.add_middleware(fallback.FallbackMiddleware, env=env)
+    response = TestClient(app).get("/v2/instagram/media/transcript", params={"url": "https://www.instagram.com/reel/example"})
+    assert response.json()["transcripts"][0]["text"] == "real local result"
+    assert fallback.HEADER not in response.headers and not upstream.requests
+
+
 def test_mcp_native_only_request_does_not_spend_fallback_credits(make, upstream):
     c = make()
     call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
