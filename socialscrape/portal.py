@@ -701,8 +701,13 @@ class PortalStore:
             self._conn.commit()
         return cleared
 
-    def history(self, principal: Principal, limit: int = 100) -> list[dict[str, Any]]:
-        where, args = ("", ()) if principal.role == "owner" else ("WHERE r.member_id=?", (principal.id,))
+    def history(self, principal: Principal, limit: int = 100, fallback: bool | None = None) -> list[dict[str, Any]]:
+        """The latest requests, newest first; fallback=True keeps only those ScrapeCreators served, False the rest."""
+        conditions, args = ([], []) if principal.role == "owner" else (["r.member_id=?"], [principal.id])
+        if fallback is not None:
+            conditions.append("r.fallback=?")
+            args.append(int(fallback))
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT r.id,r.created_at,r.method,r.path,r.query,r.status,r.duration_ms,r.cached,r.fallback,"
@@ -714,6 +719,13 @@ class PortalStore:
         for item in result:
             item["has_response"] = bool(item["has_response"])
         return result
+
+    def history_counts(self, principal: Principal) -> dict[str, int]:
+        """All-time totals behind the history filter: every request, those ScrapeCreators served, and the rest."""
+        where, args = ("", ()) if principal.role == "owner" else ("WHERE member_id=?", (principal.id,))
+        with self._lock:
+            total, fallback = self._conn.execute(f"SELECT COUNT(*),COALESCE(SUM(fallback),0) FROM requests {where}", args).fetchone()
+        return {"all": total, "fallback": fallback, "direct": total - fallback}
 
     def history_detail(self, principal: Principal, request_id: int) -> dict[str, Any] | None:
         where, args = (("r.id=?", (request_id,)) if principal.role == "owner"
@@ -1483,8 +1495,9 @@ def install_portal(app, store: PortalStore) -> None:
         return {"moved": True}
 
     @router.get("/portal/api/history")
-    async def history(request: Request, limit: int = 100):
-        return {"requests": store.history(_require(request), limit)}
+    async def history(request: Request, limit: int = 100, fallback: bool | None = None):
+        principal = _require(request)
+        return {"requests": store.history(principal, limit, fallback), "counts": store.history_counts(principal)}
 
     @router.get("/portal/api/history/{request_id}")
     async def history_detail(request: Request, request_id: int):

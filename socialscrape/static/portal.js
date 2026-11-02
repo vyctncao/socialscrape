@@ -347,7 +347,7 @@ const HISTORY_PAGE = 50;
 const historyQueryPreview = query => { const limit=180, shortened=query.length > limit; return `<span class="history-query">${esc(query.slice(0,limit))}${shortened ? `…<span class="sr-only"> Query shortened; view details for the complete request</span>` : ''}</span>`; };
 function historyRow(request) {
   const time=fmt(request.created_at);
-  return `<tr class="history-row"><td>${time}</td><td>${esc(request.prefix || 'Signed-in dashboard session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<span><code translate="no">${esc(request.method)} ${esc(request.path)}</code>${request.query ? historyQueryPreview(request.query) : ''}</span></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span>${request.fallback ? ' <span class="badge">via ScrapeCreators</span>' : ''}</td><td>${number(request.duration_ms)}\u00a0ms</td><td>${request.cached ? 'Cached' : 'Live'}</td><td class="history-action"><button class="icon-button" type="button" data-history-id="${request.id}" aria-label="View details for request at ${esc(time)}">${icon('arrow-right')}</button></td></tr>`;
+  return `<tr class="history-row"><td>${time}</td><td>${esc(request.prefix || 'Signed-in dashboard session')}</td><td><div class="route-identity">${platformIcon(platformFromPath(request.path))}<span><code translate="no">${esc(request.method)} ${esc(request.path)}</code>${request.query ? historyQueryPreview(request.query) : ''}</span></div></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span></td><td class="history-fallback">${request.fallback ? `<span class="fallback-mark" title="Served by ScrapeCreators">${icon('check')}<span class="sr-only">Yes, served by ScrapeCreators</span></span>` : '<span class="fallback-none" aria-hidden="true">–</span><span class="sr-only">No</span>'}</td><td>${number(request.duration_ms)}\u00a0ms</td><td>${request.cached ? 'Cached' : 'Live'}</td><td class="history-action"><button class="icon-button" type="button" data-history-id="${request.id}" aria-label="View details for request at ${esc(time)}">${icon('arrow-right')}</button></td></tr>`;
 }
 const historyMore = remaining => `<div class="history-more"><button class="ghost" type="button" data-history-more>Show ${number(Math.min(HISTORY_PAGE, remaining))} more</button></div>`;
 function showMoreHistory(button) {
@@ -360,12 +360,49 @@ function showMoreHistory(button) {
   body.rows[start]?.querySelector('[data-history-id]')?.focus();
   button.closest('.history-more').remove();
 }
+// The fallback filter asks the server, so "Fallback" means the latest fallback requests, not a slice of the latest 200.
+const HISTORY_FILTERS = {all:{label:'All', count:'all', noun:'request'}, yes:{label:'Fallback', count:'fallback', noun:'fallback request'}, no:{label:'No fallback', count:'direct', noun:'request without fallback', many:'requests without fallback'}};
+let historyRequestId = 0;
+function historyFilter() { const value = new URLSearchParams(location.search).get('fallback'); return HISTORY_FILTERS[value] ? value : 'all'; }
+const loadHistory = filter => api(`/portal/api/history?limit=200${filter === 'all' ? '' : `&fallback=${filter === 'yes'}`}`);
+function historyFilters(filter, counts) {
+  return `<div class="usage-filters"><fieldset class="usage-intervals history-filter"><legend class="sr-only">Fallback</legend>${Object.entries(HISTORY_FILTERS).map(([key, option]) => `<label><input type="radio" name="history-fallback" value="${key}"${key === filter ? ' checked' : ''}>${option.label}<small data-history-count="${key}">${number(counts[option.count])}</small></label>`).join('')}</fieldset></div>`;
+}
+function historyResults(data, filter) {
+  const option = HISTORY_FILTERS[filter], scope = PORTAL.role === 'owner' ? 'Workspace' : 'Your account';
+  const empty = filter === 'yes' ? emptyState('check-circle', 'No fallback requests yet', 'Requests ScrapeCreators serves for Social Scrape appear here.', '<a class="ghost" href="/app/history">Show all requests</a>', 2)
+    : filter === 'no' ? emptyState('clock', 'No requests without fallback yet', 'Requests Social Scrape answers on its own appear here.', '<a class="ghost" href="/app/history">Show all requests</a>', 2)
+    : emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>', 2);
+  return `<div class="table-caption"><span>Latest ${plural(data.requests.length, option.noun, option.many)} · ${scope}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
+    <div class="form-error history-error" id="history-error" role="alert" hidden><span></span> <button class="text-link" type="button" data-history-filter-retry>Try again</button></div>
+    ${data.requests.length ? `${tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">Authentication</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col" class="history-fallback">Fallback</th><th scope="col">Duration</th><th scope="col">Source</th><th scope="col">Actions</th></tr></thead><tbody id="history-rows">${data.requests.slice(0, HISTORY_PAGE).map(historyRow).join('')}</tbody></table>`)}${data.requests.length > HISTORY_PAGE ? historyMore(data.requests.length - HISTORY_PAGE) : ''}` : `<section class="card">${empty}</section>`}`;
+}
 async function requestHistory() {
-  const data = await api('/portal/api/history?limit=200');
-  state.historyRequests = data.requests;
-  return layout('Usage', usageLede, `${pageTabs('history')}
-    <div class="table-caption"><span>Latest ${plural(data.requests.length, 'request')} · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
-    ${data.requests.length ? `${tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">Authentication</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Source</th><th scope="col">Actions</th></tr></thead><tbody id="history-rows">${data.requests.slice(0, HISTORY_PAGE).map(historyRow).join('')}</tbody></table>`)}${data.requests.length > HISTORY_PAGE ? historyMore(data.requests.length - HISTORY_PAGE) : ''}` : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>', 2)}</section>`}`);
+  const filter = historyFilter(), data = await loadHistory(filter);
+  state.historyRequests = data.requests; state.historyFilter = filter;
+  return layout('Usage', usageLede, `${pageTabs('history')}${historyFilters(filter, data.counts)}<div id="history-results">${historyResults(data, filter)}</div>`);
+}
+// Switching keeps the filter (and its focus) in place and swaps only the results, dimming the old table meanwhile.
+async function updateHistory(filter) {
+  const url = new URL(location.href), request = ++historyRequestId, results = $('#history-results');
+  if (filter === 'all') url.searchParams.delete('fallback'); else url.searchParams.set('fallback', filter);
+  if (url.href !== location.href) { history.replaceState(history.state, '', url.pathname + url.search + url.hash); committedUrl = location.href; }
+  if (!results) return;
+  results.setAttribute('aria-busy','true'); results.classList.add('is-refreshing');
+  try {
+    const data = await loadHistory(filter);
+    if (request !== historyRequestId || !$('#history-results')) return;
+    state.historyRequests = data.requests; state.historyFilter = filter;
+    results.innerHTML = historyResults(data, filter);
+    Object.entries(HISTORY_FILTERS).forEach(([key, option]) => { const count = document.querySelector(`[data-history-count="${key}"]`); if (count) count.textContent = number(data.counts[option.count]); });
+    const option = HISTORY_FILTERS[filter];
+    $('#loading-status').textContent = `Showing the latest ${plural(data.requests.length, option.noun, option.many)}.`;
+  } catch (error) {
+    if (request !== historyRequestId || !$('#history-results')) return;
+    const note = $('#history-error'); note.hidden = false; note.querySelector('span').textContent = `Could not load ${HISTORY_FILTERS[filter].label.toLowerCase()} requests. ${error.message}`;
+  } finally {
+    if (request === historyRequestId && $('#history-results')) { results.setAttribute('aria-busy','false'); results.classList.remove('is-refreshing'); }
+  }
 }
 
 async function showHistoryDetail(id) {
@@ -385,7 +422,7 @@ async function showHistoryDetail(id) {
     content.innerHTML = `<dl class="history-facts"><div><dt>Time</dt><dd>${esc(fmt(detail.created_at))}</dd></div><div><dt>Authentication</dt><dd>${esc(detail.prefix || 'Signed-in dashboard session')}</dd></div><div><dt>Request</dt><dd><code translate="no">${esc(route)}</code></dd></div></dl>${detail.response_truncated ? '<div class="inline-note">The stored response was capped at 2\u00a0MiB.</div>' : ''}${response}`;
     if (hasBody) content.querySelector('pre').textContent = formatted;
     $('#dialog-title').textContent = `${detail.method} ${detail.path}`;
-    $('#dialog-description').textContent = `${detail.status} · ${number(detail.duration_ms)}\u00a0ms · ${detail.cached ? 'Cached' : 'Live'}`;
+    $('#dialog-description').textContent = `${detail.status} · ${number(detail.duration_ms)}\u00a0ms · ${detail.cached ? 'Cached' : 'Live'}${detail.fallback ? ' · via ScrapeCreators' : ''}`;
     body.prepend(content); body.setAttribute('aria-busy','false'); overlay.classList.add('loading-overlay'); reveal(content, overlay);
     if (hasBody) $('#dialog .modal-foot').insertAdjacentHTML('beforeend', `<button class="primary" data-copy="history-response">${icon('copy')}Copy response</button>`);
     $('#loading-status').textContent = `Stored response loaded. Status ${detail.status}.`;
@@ -1515,6 +1552,7 @@ document.addEventListener('click', event => {
   if (historyRetry) { showHistoryDetail(historyRetry.dataset.historyRetry); return; }
   const historyRow = event.target.closest('[data-history-id]');
   if (historyRow) { showHistoryDetail(historyRow.dataset.historyId); return; }
+  if (event.target.closest('[data-history-filter-retry]')) { updateHistory(historyFilter()); return; }
   const historyMoreButton = event.target.closest('[data-history-more]');
   if (historyMoreButton) { showMoreHistory(historyMoreButton); return; }
   const revoke = event.target.closest('[data-revoke]');
@@ -1558,6 +1596,7 @@ document.addEventListener('input', event => {
   if (event.target.id === 'doc-search') { state.docSearch = event.target.value; filterDocs(event.target.value, {announce:true, immediate:!event.target.value}); syncDocSearchUrl(event.target.value); }
 });
 document.addEventListener('change', event => {
+  if (event.target.name === 'history-fallback') { updateHistory(event.target.value); return; }
   if (event.target.id === 'pg-platform') fillEndpoints();
   if (event.target.id === 'pg-endpoint') fillParams();
   if (event.target.id === 'pg-key') state.selectedKey = event.target.value;
