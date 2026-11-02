@@ -2171,8 +2171,6 @@ def test_user_live_doesnt_repeat_a_blocked_pass(client, monkeypatch):
 
 def test_private_tiktok_routes_need_saved_account_cookies(client):
     requests = [
-        ("/v1/tiktok/video/comments", {"url": STOOL_VIDEO}),
-        ("/v1/tiktok/video/comment/replies", {"url": STOOL_VIDEO, "comment_id": "1"}),
         ("/v1/tiktok/user/followers", {"handle": "stoolpresidente"}),
         ("/v1/tiktok/user/following", {"handle": "stoolpresidente"}),
         ("/v1/tiktok/search/suggestions", {"query": "travel"}),
@@ -2186,8 +2184,6 @@ def test_private_tiktok_routes_need_saved_account_cookies(client):
 def test_all_credential_gated_tiktok_routes_are_registered(client):
     # search/keyword and /hashtag answer from TikTok's public keyword pages first (tests/test_tiktok_search.py)
     expected = {
-        "/v1/tiktok/video/comments": "platform_auth_required",
-        "/v1/tiktok/video/comment/replies": "platform_auth_required",
         "/v1/tiktok/user/followers": "platform_auth_required",
         "/v1/tiktok/user/following": "platform_auth_required",
         "/v1/tiktok/search/suggestions": "platform_auth_required",

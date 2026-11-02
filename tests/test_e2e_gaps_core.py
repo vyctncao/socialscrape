@@ -366,7 +366,7 @@ def test_cache_max_age_with_too_many_digits_is_400(tmp_path, cache):
     with app_with(env, tmp_path, raise_errors=False) as c:
         # rejected before any upstream work; a 501 route checks it too, also with the cache off (gap-instagram-5)
         calls = [("/v1/tiktok/profile", {"handle": TT_HANDLE}),
-                 ("/v1/tiktok/video/comments", {"url": "x"})]
+                 ("/v1/tiktok/product", {"url": "x"})]
         for path, params in calls:
             r = c.get(path, params={**params, "cache_max_age": HUGE_AGE})
             assert r.status_code == 400 and is_envelope(r), f"{path}: {r.status_code} {r.text[:200]}"

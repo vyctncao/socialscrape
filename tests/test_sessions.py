@@ -916,9 +916,7 @@ def test_tiktok_routes_name_the_rejected_env_account(tmp_path, monkeypatch):
     monkeypatch.setattr(sessions, "PROBES", {"tiktok": lambda ydl: Verdict(
         "rejected", "TikTok says the session expired (session expired, please sign in again)")})
     with app_with({"SOCIALSCRAPE_COOKIES_TIKTOK": str(path)}) as c:
-        for route, params in (("/v1/tiktok/video/comments",
-                               {"url": "https://www.tiktok.com/@a/video/7499229683859426602"}),
-                              ("/v1/tiktok/search/suggestions", {"query": "travel"}),
+        for route, params in (("/v1/tiktok/search/suggestions", {"query": "travel"}),
                               ("/v1/tiktok/user/following", {"handle": "a"})):
             r = c.get(route, params=params, headers={"x-socialscrape-fallback": "off"})
             body = r.json()

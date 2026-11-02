@@ -42,37 +42,6 @@ def _app(path: str, item_id: str, query: dict[str, Any]):
     return go
 
 
-@sc_get(router, "/v1/tiktok/video/comments", source="TikTok mobile comment/list API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in TikTok cookie account configured in Platform settings.")
-async def comments(url: str = Query(...), cursor: str | None = None, trim: str | None = None):
-    await _require_account()
-    ref = M.post_url(url)
-    if not ref:
-        raise BadRequest("url must be a TikTok video URL")
-    aweme_id = ref[1]
-    data = await with_ydl(P, _app("comment/list", aweme_id,
-                                  {"aweme_id": aweme_id, "cursor": cursor or "0", "count": "20"}),
-                           extractor_args=_APP_API)
-    return {"comments": M.objs(data.get("comments")), "cursor": str(data.get("cursor") or "0"),
-            "has_more": bool(data.get("has_more"))}
-
-
-@sc_get(router, "/v1/tiktok/video/comment/replies",
-        source="TikTok mobile comment/list/reply API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in TikTok cookie account configured in Platform settings.")
-async def comment_replies(comment_id: str = Query(...), url: str = Query(...), cursor: str | None = None):
-    await _require_account()
-    ref = M.post_url(url)
-    if not ref:
-        raise BadRequest("url must be a TikTok video URL")
-    aweme_id = ref[1]
-    data = await with_ydl(P, _app("comment/list/reply", comment_id,
-                                  {"item_id": aweme_id, "comment_id": comment_id,
-                                   "cursor": cursor or "0", "count": "20"}), extractor_args=_APP_API)
-    return {"comments": M.objs(data.get("comments")), "cursor": str(data.get("cursor") or "0"),
-            "has_more": bool(data.get("has_more"))}
-
-
 async def _require_account() -> None:
     """501 unless a usable signed-in TikTok account is configured (AccountRejected when TikTok rejected it)."""
     await with_ydl(P, _signed_in)

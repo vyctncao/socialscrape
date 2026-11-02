@@ -810,6 +810,77 @@ async def tiktok_transcript(url: str = Query(...), language: str | None = None,
     return {"id": str(item["id"]), "url": page, "transcript": transcript}
 
 
+# The web app's comment lists answer anonymously when asked with only these parameters; the full set the web app
+# sends (device_id, browser and region fields) gets an empty body unless signed. Logged-out readers see comments on
+# tiktok.com the same way, so no account is needed (none is sent: a dead session must not cost a working answer)
+# and ScrapeCreators' answer is this body as TikTok sends it.
+_COMMENTS = "https://www.tiktok.com/api/comment/list/"
+_REPLIES = "https://www.tiktok.com/api/comment/list/reply/"
+_COMMENT_PAGE = "20"
+
+
+def _post_id(ydl: yt_dlp.YoutubeDL, url: str) -> str:
+    """A post URL or short link -> aweme_id (BadRequest for anything else, NotFound for a short link to no post)."""
+    url = M.with_scheme(url)
+    ref = M.post_url(url)
+    if ref is None:
+        if not M.is_short_url(url):
+            raise BadRequest("url must be a TikTok video URL")
+        ref = M.post_url(_resolve_short_link(ydl, url))
+        if ref is None:
+            raise NotFound("This short link does not lead to a TikTok post")
+    return ref[1]
+
+
+def _comment_page(ydl: yt_dlp.YoutubeDL, url: str, query: dict[str, str], what: str) -> dict[str, Any]:
+    """One page of a comment list as TikTok answers it. A post with comments turned off, none yet, or one TikTok
+    doesn't have all come back as status 0 with null fields: an empty page, so the next page is never asked for."""
+    ie = ydl.get_info_extractor("TikTok")
+    data = dict(M.obj(_web_api(ie, url, query.get("comment_id") or query["aweme_id"], f"Downloading {what}",
+                               query, what)))
+    status = data.get("status_code")
+    if status:
+        raise UpstreamError(f"TikTok refused the {what} request: {data.get('status_msg') or f'status {status}'}")
+    data["comments"] = M.objs(data.get("comments"))
+    data["cursor"] = M.to_int(data.get("cursor")) or int(query["cursor"])
+    data["has_more"] = 1 if data.get("has_more") else 0
+    data["total"] = M.to_int(data.get("total")) or 0
+    return data
+
+
+@sc_get(router, "/v1/tiktok/video/comments", source="TikTok web /api/comment/list/ (anonymous, unsigned)",
+        notes="Pages of 20, newest ranking first as TikTok orders them; pass the returned cursor for the next page. "
+              "Accepts post URLs and vm./vt./t/ short links. A post with comments turned off returns an empty list. "
+              "trim is ignored.")
+async def comments(url: str = Query(...), cursor: str | None = None, trim: str | None = None) -> dict[str, Any]:
+    if cursor is not None and not _OFFSET.fullmatch(cursor):
+        raise BadRequest("cursor must be a whole number from a previous response")
+
+    def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
+        aweme_id = _post_id(ydl, url)
+        return _comment_page(ydl, _COMMENTS, {"aid": "1988", "aweme_id": aweme_id, "count": _COMMENT_PAGE,
+                                              "cursor": cursor or "0"}, "comments")
+    return await with_ydl(P, go, use_cookies=False)
+
+
+@sc_get(router, "/v1/tiktok/video/comment/replies", source="TikTok web /api/comment/list/reply/ (anonymous, unsigned)",
+        notes="Replies to one comment (comment_id is a cid from /v1/tiktok/video/comments), pages of 20; pass the "
+              "returned cursor for the next page.")
+async def comment_replies(comment_id: str = Query(...), url: str = Query(...),
+                          cursor: str | None = None) -> dict[str, Any]:
+    if not _ID.fullmatch(comment_id):
+        raise BadRequest("comment_id must be a TikTok comment id (cid)")
+    if cursor is not None and not _OFFSET.fullmatch(cursor):
+        raise BadRequest("cursor must be a whole number from a previous response")
+
+    def go(ydl: yt_dlp.YoutubeDL) -> dict[str, Any]:
+        aweme_id = _post_id(ydl, url)
+        return _comment_page(ydl, _REPLIES, {"aid": "1988", "item_id": aweme_id, "aweme_id": aweme_id,
+                                             "comment_id": comment_id, "count": _COMMENT_PAGE,
+                                             "cursor": cursor or "0"}, "comment replies")
+    return await with_ydl(P, go, use_cookies=False)
+
+
 @sc_get(router, "/v1/tiktok/profile", source="yt-dlp TikTokUserIE (user page webapp.user-detail)",
         notes="TikTok's web userInfo as-is (user, stats, itemList — itemList is usually empty on the web page). "
               "user_id must be the numeric id; it is looked up through the same page (/@<id>). A profile-not-found "

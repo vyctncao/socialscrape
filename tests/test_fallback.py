@@ -28,7 +28,7 @@ from socialscrape.portal import PortalStore
 
 CLIENT_KEY = "client-key"
 SC_KEY = "sc-secret-key-123"
-UNSUPPORTED = "/v1/tiktok/video/comments"  # a 501 route
+UNSUPPORTED = "/v1/tiktok/product"  # a 501 route
 PROFILE = "/v1/tiktok/profile"  # implemented: its with_ydl is patched
 SC_OK = {"success": True, "credits_remaining": 99, "comments": [{"text": "hi"}]}
 REAL_QUALITY_ISSUES = quality.issues

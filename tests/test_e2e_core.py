@@ -149,7 +149,7 @@ def test_health_reflects_settings(tmp_path):
 @pytest.mark.parametrize("keys,good", [("solo", ["solo"]), (" k1 , k2 ,,", ["k1", "k2"])])
 def test_api_key_auth(tmp_path, keys, good):
     with app_with({"SOCIALSCRAPE_API_KEYS": keys}, tmp_path) as c:
-        path = "/v1/tiktok/video/comments"
+        path = "/v1/tiktok/product"
         for headers in ({}, {"x-api-key": ""}, {"x-api-key": "wrong"}, {"x-api-key": good[0].upper()},
                         {"x-api-key": ",".join(good) + ",x"}, {"Authorization": f"Bearer {good[0]}"}):
             r = c.get(path, headers=headers)
