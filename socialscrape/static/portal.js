@@ -129,9 +129,10 @@ function loadKeys() {
   if (!reads.keys) reads.keys = api('/portal/api/keys').then(data => (state.keys = data.keys)).finally(() => { reads.keys = null; });
   return reads.keys;
 }
-function loadUsage() {
-  if (!reads.usage) reads.usage = api('/portal/api/usage').finally(() => { reads.usage = null; });
-  return reads.usage;
+function loadUsage(view = usageView()) {
+  const query = new URLSearchParams({range:view.range, interval:view.interval, tz:usageZone()}), key = `usage?${query}`;
+  if (!reads[key]) reads[key] = api(`/portal/api/usage?${query}`).finally(() => { delete reads[key]; });
+  return reads[key];
 }
 // Related views share one sidebar destination; each tab keeps its own URL for Back and sharing.
 const sections = {
@@ -396,18 +397,225 @@ async function showHistoryDetail(id) {
   } finally { if (state.historyRequest === request) state.historyRequest = null; }
 }
 
+// Usage analytics: a date range and an interval scope the chart and the endpoint list below it. The server buckets
+// requests on the viewer's calendar (its timezone comes along), so every label here formats in that same zone.
+const USAGE_SERIES = [['instagram','Instagram'],['tiktok','TikTok'],['youtube','YouTube'],['facebook','Facebook'],['google','Google'],['other','Other']];
+const USAGE_RANGES = {'24h':{label:'Last 24 hours', intervals:['hour']}, '7d':{label:'Last 7 days', intervals:['day','hour']}, '30d':{label:'Last 30 days', intervals:['day','week']}, '90d':{label:'Last 90 days', intervals:['week','day']}, '12m':{label:'Last 12 months', intervals:['month','week']}};
+const USAGE_INTERVALS = {hour:{label:'Hourly', range:'24h', caption:'Hourly totals'}, day:{label:'Daily', range:'30d', caption:'Daily totals'}, week:{label:'Weekly', range:'90d', caption:'Weekly totals · Weeks start Monday'}, month:{label:'Monthly', range:'12m', caption:'Monthly totals'}};
+const usageInspect = {index:-1, visible:false};
+let usageGeometry = null, usageResize = null, usageRequest = 0;
+function usageZone() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } }
+// An interval the range can't draw readably moves the range to that interval's own default, never the other way round.
+function usageView({range, interval} = {}) {
+  if (!USAGE_RANGES[range]) range = USAGE_INTERVALS[interval]?.range || '30d';
+  if (!USAGE_RANGES[range].intervals.includes(interval)) interval = USAGE_RANGES[range].intervals[0];
+  return {range, interval};
+}
+function savedUsageView() {
+  const query = new URLSearchParams(location.search);
+  if (query.has('range') || query.has('interval')) return usageView({range:query.get('range'), interval:query.get('interval')});
+  try { return usageView(JSON.parse(localStorage.getItem('socialscrape-usage-view')) || {}); } catch { return usageView(); }
+}
+function usageFormats(timeZone) {
+  const make = options => new Intl.DateTimeFormat(undefined, {...options, timeZone});
+  return {hour:make({hour:'numeric'}), hour24:make({hour:'numeric', hourCycle:'h23'}), day:make({month:'short', day:'numeric'}), weekday:make({weekday:'short', month:'short', day:'numeric'}), month:make({month:'short'}), monthNumber:make({month:'numeric'}), monthYear:make({month:'short', year:'numeric'}), long:make({month:'long', year:'numeric'}), hourRange:make({weekday:'short', month:'short', day:'numeric', hour:'numeric'}), span:make({month:'short', day:'numeric', year:'numeric'}), spanHour:make({month:'short', day:'numeric', hour:'numeric'}), zone:make({timeZoneName:'short'})};
+}
+const datePart = (format, date, type) => Number(format.formatToParts(date).find(part => part.type === type)?.value);
+const formatSpan = (format, start, end) => format.formatRange ? format.formatRange(start, end) : `${format.format(start)} – ${format.format(end)}`;
+function usageBucketLabel(bucket, data, formats) {
+  const start = new Date(bucket.start * 1000), end = new Date(bucket.end * 1000);
+  const label = data.interval === 'hour' ? formatSpan(formats.hourRange, start, end) : data.interval === 'day' ? formats.weekday.format(start)
+    : data.interval === 'week' ? formatSpan(formats.day, start, new Date(bucket.end * 1000 - 1000)) : formats.long.format(start);
+  return bucket.end > data.now ? `${label} · so far` : label;
+}
+function usageTicks(data, formats, usable, narrow) {
+  const buckets = data.buckets, count = buckets.length, date = index => new Date(buckets[index].start * 1000);
+  // Hourly over several days reads best at each local midnight; everything else gets evenly spaced labels.
+  if (data.interval === 'hour' && count > 48) {
+    const midnights = buckets.map((_, index) => index).filter(index => datePart(formats.hour24, date(index), 'hour') === 0);
+    return midnights.filter((_, position) => !narrow || position % 2 === 0).map(index => [index, formats.day.format(date(index))]);
+  }
+  // A fixed step counted back from the latest bucket keeps labels evenly spaced and always labels the current period.
+  const labels = Math.max(2, Math.min(count, narrow ? 3 : Math.min(8, Math.floor(usable / 90)))), step = Math.max(1, Math.ceil((count - 1) / (labels - 1)));
+  const indices = [];
+  for (let index = count - 1; index >= 0; index -= step) indices.unshift(index);
+  return indices.map((index, position) => [index, data.interval === 'hour' ? formats.hour.format(date(index)) : data.interval === 'month'
+    ? (position === 0 || datePart(formats.monthNumber, date(index), 'month') === 1 ? formats.monthYear : formats.month).format(date(index)) : formats.day.format(date(index))]);
+}
+// Request counts need whole-number ticks: 0 and four clean steps (0 / 1K / 2K …), never 2.5 requests.
+function usageCeiling(maximum) {
+  const rough = Math.max(maximum, 1) / 4, magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = (magnitude >= 10 ? [1, 2, 2.5, 5, 10] : [1, 2, 5, 10]).find(value => value * magnitude >= rough) * magnitude;
+  return Math.max(1, step) * 4;
+}
+function usageFilters(view) {
+  return `<div class="usage-filters" role="group" aria-label="Usage period"><button type="button" class="usage-range" id="usage-range-trigger" popovertarget="usage-range-menu" aria-haspopup="listbox" aria-expanded="false" aria-controls="usage-range-menu">${icon('calendar-blank')}<span id="usage-range-label">${USAGE_RANGES[view.range].label}</span>${icon('caret-down')}</button><div id="usage-range-menu" class="platform-menu usage-range-menu" popover="auto" role="listbox" aria-label="Date range">${Object.entries(USAGE_RANGES).map(([key, range]) => `<button type="button" class="platform-option" role="option" data-usage-range="${key}" aria-selected="${key === view.range}" tabindex="-1"><span class="platform-label">${range.label}</span>${icon('check')}</button>`).join('')}</div><fieldset class="usage-intervals"><legend class="sr-only">Interval</legend>${Object.entries(USAGE_INTERVALS).map(([key, interval]) => `<label><input type="radio" name="usage-interval" value="${key}"${key === view.interval ? ' checked' : ''}>${interval.label}</label>`).join('')}</fieldset></div>`;
+}
 async function usage() {
-  const data = await loadUsage();
-  const total = data.daily.reduce((sum, day) => sum + day.total, 0), max = Math.max(...data.daily.map(day => day.total), 1);
-  const labels = data.daily.map((_, index) => { const date = new Date(); date.setDate(date.getDate() - 29 + index); return date.toLocaleDateString(undefined, {month:'short', day:'numeric'}); });
-  const series = [['instagram','Instagram'],['tiktok','TikTok'],['youtube','YouTube'],['facebook','Facebook'],['google','Google'],['other','Other']];
-  const legend = `<ul class="chart-legend" aria-label="Platforms">${series.map(([key,label]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${label}</li>`).join('')}</ul>`;
-  const chart = data.daily.map(day => `<div class="bar-stack" style="height:${Math.max(1,day.total/max*100)}%">${series.map(([key]) => day[key] ? `<span class="bar-segment ${key}" style="height:${day[key]/day.total*100}%"></span>` : '').join('')}</div>`).join('');
-  return layout('Usage', usageLede, `${pageTabs('usage')}
-    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${plural(total, 'request')} · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}</span></div></div>
-    ${total ? `${legend}<p class="sr-only">Stacked daily requests by platform. Use View daily data for exact Instagram, TikTok, YouTube, Facebook, Google, Other, and total counts.</p><div class="chart" aria-hidden="true">${chart}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
-    <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts by platform', `<table><thead><tr><th scope="col">Period ending</th>${series.map(([,label])=>`<th scope="col">${label}</th>`).join('')}<th scope="col">Total</th></tr></thead><tbody>${data.daily.map((day,index) => `<tr><td>${labels[index]}</td>${series.map(([key])=>`<td>${number(day[key])}</td>`).join('')}<td><strong>${number(day.total)}</strong></td></tr>`).join('')}</tbody></table>`)}</details></section>
-    <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param route-row"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code translate="no">${esc(route.path)}</code></strong><span>${plural(route.count, 'request')}</span></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
+  const view = savedUsageView(), data = await loadUsage(view);
+  state.usageView = view; state.usage = data; usageInspect.index = -1; usageInspect.visible = false;
+  const legend = `<ul class="chart-legend" aria-label="Platforms">${USAGE_SERIES.map(([key, label]) => `<li><span class="legend-swatch ${key}" aria-hidden="true"></span>${label}</li>`).join('')}</ul>`;
+  return layout('Usage', usageLede, `${pageTabs('usage')}${usageFilters(view)}
+    <section class="card usage-card" id="usage-card" aria-busy="false"><div class="usage-toolbar"><h2>Request volume</h2><span class="usage-zone" id="usage-zone"></span></div><div class="usage-context"><span id="usage-span"></span><span id="usage-summary"></span></div>
+    <div class="form-error usage-error" id="usage-error" role="alert" hidden><span></span> <button class="text-link" type="button" data-usage-retry>Try again</button></div>
+    <div id="usage-chart">${legend}<p class="sr-only" id="usage-chart-summary"></p><div class="usage-plot" id="usage-plot" tabindex="0" role="slider" aria-label="Explore request volume" aria-describedby="usage-keyboard-help" aria-valuemin="1"><svg aria-hidden="true"></svg><div class="usage-tooltip" id="usage-tooltip" hidden></div></div>
+    <div class="usage-footer"><span id="usage-caption"></span><span id="usage-keyboard-help">Hover or tap a bar to inspect · Arrow keys to explore</span></div></div>
+    <div id="usage-empty" hidden></div>
+    <details class="usage-data" id="usage-data"><summary>${icon('chart-bar')}View data table</summary><div id="usage-table"></div></details></section>
+    <section class="card" style="margin-top:24px" id="usage-routes"></section>`);
+}
+function usageTable(data) {
+  const formats = usageFormats(data.timezone);
+  return tableRegion('Requests by platform', `<table><caption class="sr-only">${USAGE_INTERVALS[data.interval].caption} by platform · ${USAGE_RANGES[data.range].label}</caption><thead><tr><th scope="col">Period</th>${USAGE_SERIES.map(([, label]) => `<th scope="col">${label}</th>`).join('')}<th scope="col">Total</th></tr></thead><tbody>${data.buckets.map(bucket => `<tr><th scope="row">${esc(usageBucketLabel(bucket, data, formats))}</th>${USAGE_SERIES.map(([key]) => `<td>${number(bucket[key])}</td>`).join('')}<td><strong>${number(bucket.total)}</strong></td></tr>`).join('')}</tbody></table>`);
+}
+// Everything a range or interval change touches, painted from state.usage so a refresh never rebuilds the controls.
+function paintUsage() {
+  const data = state.usage, formats = usageFormats(data.timezone), start = new Date(data.start * 1000), now = new Date(data.now * 1000);
+  const zone = formats.zone.formatToParts(now).find(part => part.type === 'timeZoneName')?.value || data.timezone;
+  $('#usage-zone').textContent = zone; $('#usage-zone').title = data.timezone;
+  $('#usage-span').textContent = `${formatSpan(data.interval === 'hour' ? formats.spanHour : formats.span, start, now)} · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}`;
+  $('#usage-summary').textContent = `${plural(data.range_total, 'request')}${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}`;
+  $('#usage-caption').textContent = `${USAGE_INTERVALS[data.interval].caption} · Times in ${zone}`;
+  const empty = !data.range_total, rangeLabel = USAGE_RANGES[data.range].label;
+  $('#usage-chart').hidden = empty; $('#usage-empty').hidden = !empty;
+  $('#usage-empty').innerHTML = empty ? emptyState('chart-bar', `No requests in the ${rangeLabel.toLowerCase()}`, 'Usage appears here when you call an API endpoint. Choose a longer range to see earlier activity.', '<a class="ghost" href="/app/playground">Make a request</a>') : '';
+  $('#usage-chart-summary').textContent = `Stacked ${USAGE_INTERVALS[data.interval].label.toLowerCase()} requests by platform for the ${rangeLabel.toLowerCase()}. Use View data table for exact counts.`;
+  $('#usage-plot').setAttribute('aria-valuemax', String(data.buckets.length));
+  $('#usage-data').hidden = empty;
+  if ($('#usage-data').open) $('#usage-table').innerHTML = usageTable(data); else $('#usage-table').innerHTML = '';
+  $('#usage-routes').innerHTML = `<h2>Most used endpoints</h2><p class="help">${rangeLabel} · Up to 10 routes</p>${data.routes.map(route => `<div class="param route-row"><strong class="route-identity">${platformIcon(platformFromPath(route.path))}<code translate="no">${esc(route.path)}</code></strong><span>${plural(route.count, 'request')}</span></div>`).join('') || emptyState('globe', 'No endpoint activity in this range', 'Run a request, or choose a longer range.')}`;
+  if (usageInspect.index < 0 || usageInspect.index >= data.buckets.length) usageInspect.index = data.buckets.length - 1;
+  drawUsage();
+}
+function drawUsage() {
+  const plot = $('#usage-plot'), data = state.usage;
+  if (!plot || !data || plot.closest('[hidden]')) return;
+  const svg = plot.querySelector('svg'), buckets = data.buckets, formats = usageFormats(data.timezone);
+  const width = Math.max(240, plot.clientWidth), narrow = width < 520, height = narrow ? 240 : 300;
+  const left = narrow ? 34 : 44, right = 4, top = 10, bottom = height - 28, usable = width - left - right;
+  const slot = usable / buckets.length, bar = Math.max(1, Math.min(24, slot - 2));
+  const ceiling = usageCeiling(Math.max(...buckets.map(bucket => bucket.total), 1)), scale = (bottom - top) / ceiling;
+  const compact = new Intl.NumberFormat(undefined, {notation:'compact', maximumFractionDigits:1});
+  usageGeometry = {left, slot, top, bottom, width};
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`); svg.style.height = `${height}px`;
+  const grid = [0, 1, 2, 3, 4].map(tick => { const at = bottom - tick / 4 * (bottom - top); return `<line class="usage-grid${tick ? '' : ' usage-baseline'}" x1="${left}" x2="${width - right}" y1="${at}" y2="${at}"/><text class="usage-axis" x="${left - 8}" y="${at + 4}" text-anchor="end">${compact.format(ceiling * tick / 4)}</text>`; }).join('');
+  // Stacks rise from one baseline: a 2px surface gap between segments, 4px rounding on the data end only.
+  const bars = buckets.map((bucket, index) => {
+    const x = left + slot * index + (slot - bar) / 2, parts = USAGE_SERIES.filter(([key]) => bucket[key]);
+    let cursor = bottom;
+    return `<g class="usage-bar${bucket.end > data.now ? ' usage-bar-partial' : ''}">${parts.map(([key], position) => {
+      const size = bucket[key] * scale, drawn = Math.max(1, size - (position ? 2 : 0)), y = cursor - size;
+      cursor -= size;
+      if (position < parts.length - 1) return `<rect class="usage-seg ${key}" x="${x}" y="${y}" width="${bar}" height="${drawn}"/>`;
+      const r = Math.min(4, bar / 2, drawn);
+      return `<path class="usage-seg ${key}" d="M${x} ${y + drawn}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + bar - r}Q${x + bar} ${y} ${x + bar} ${y + r}V${y + drawn}Z"/>`;
+    }).join('')}</g>`;
+  }).join('');
+  const ticks = usageTicks(data, formats, usable, narrow).map(([index, label]) => {
+    const anchor = index === 0 ? 'start' : index === buckets.length - 1 ? 'end' : 'middle';
+    const x = anchor === 'start' ? left + slot * index + (slot - bar) / 2 : anchor === 'end' ? left + slot * index + (slot + bar) / 2 : left + slot * (index + 0.5);
+    return `<text class="usage-axis" x="${x}" y="${height - 8}" text-anchor="${anchor}">${esc(label)}</text>`;
+  }).join('');
+  svg.innerHTML = `${grid}<g id="usage-inspector"></g>${bars}${ticks}`;
+  inspectUsage(usageInspect.index, usageInspect.visible);
+}
+function inspectUsage(index, visible = true) {
+  const data = state.usage, plot = $('#usage-plot'), tooltip = $('#usage-tooltip'), band = $('#usage-inspector');
+  if (!data || !plot || !band || !usageGeometry) return;
+  usageInspect.index = Math.max(0, Math.min(index, data.buckets.length - 1)); usageInspect.visible = visible;
+  const bucket = data.buckets[usageInspect.index], label = usageBucketLabel(bucket, data, usageFormats(data.timezone));
+  const breakdown = USAGE_SERIES.filter(([key]) => bucket[key]).map(([key, name]) => `${name} ${number(bucket[key])}`).join(', ');
+  plot.setAttribute('aria-valuenow', String(usageInspect.index + 1));
+  plot.setAttribute('aria-valuetext', `${label}: ${plural(bucket.total, 'request')}${breakdown ? ` (${breakdown})` : ''}`);
+  tooltip.hidden = !visible; band.innerHTML = '';
+  if (!visible) return;
+  const {left, slot, top, bottom, width} = usageGeometry;
+  band.innerHTML = `<rect class="usage-hover" x="${left + slot * usageInspect.index}" y="${top}" width="${slot}" height="${bottom - top}" rx="4"/>`;
+  tooltip.innerHTML = `<div class="usage-tooltip-date">${esc(label)}</div>${USAGE_SERIES.map(([key, name]) => `<div class="usage-tooltip-row${bucket[key] ? '' : ' is-zero'}"><span class="legend-swatch ${key}" aria-hidden="true"></span><span>${name}</span><strong>${number(bucket[key])}</strong></div>`).join('')}<div class="usage-tooltip-row usage-tooltip-total"><span>Total</span><strong>${number(bucket.total)}</strong></div>${bucket.fallback ? `<div class="usage-tooltip-note">${number(bucket.fallback)} via ScrapeCreators</div>` : ''}`;
+  const at = left + slot * (usageInspect.index + 0.5), room = tooltip.offsetWidth + 18;
+  tooltip.style.left = `${Math.max(4, Math.min(at + room > width ? at - room : at + 14, width - tooltip.offsetWidth - 4))}px`;
+}
+async function updateUsage(next) {
+  const view = usageView(next), card = $('#usage-card'), request = ++usageRequest;
+  state.usageView = view;
+  try { localStorage.setItem('socialscrape-usage-view', JSON.stringify(view)); } catch {}
+  const url = new URL(location.href); url.searchParams.set('range', view.range); url.searchParams.set('interval', view.interval);
+  if (url.href !== location.href) { history.replaceState(history.state, '', url.pathname + url.search + url.hash); committedUrl = location.href; }
+  syncUsageControls(view);
+  if (!card || (state.usage?.range === view.range && state.usage?.interval === view.interval && !next.retry)) return;
+  // A refetch keeps the current chart on screen, dimmed, rather than flashing a skeleton.
+  card.setAttribute('aria-busy','true'); card.classList.add('is-refreshing'); $('#usage-error').hidden = true;
+  try {
+    const data = await loadUsage(view);
+    if (request !== usageRequest || !$('#usage-card')) return;
+    state.usage = data; usageInspect.index = -1; usageInspect.visible = false; paintUsage();
+    $('#loading-status').textContent = `Showing ${USAGE_INTERVALS[data.interval].label.toLowerCase()} requests for the ${USAGE_RANGES[data.range].label.toLowerCase()}.`;
+  } catch (error) {
+    if (request !== usageRequest || !$('#usage-card')) return;
+    const note = $('#usage-error'); note.hidden = false; note.querySelector('span').textContent = `Could not load usage for the ${USAGE_RANGES[view.range].label.toLowerCase()}. ${error.message}`;
+  } finally {
+    if (request === usageRequest && $('#usage-card')) { card.setAttribute('aria-busy','false'); card.classList.remove('is-refreshing'); }
+  }
+}
+function syncUsageControls(view) {
+  $('#usage-range-label').textContent = USAGE_RANGES[view.range].label;
+  document.querySelectorAll('[data-usage-range]').forEach(option => option.setAttribute('aria-selected', String(option.dataset.usageRange === view.range)));
+  document.querySelectorAll('input[name="usage-interval"]').forEach(input => { input.checked = input.value === view.interval; });
+}
+function mountUsage() {
+  const plot = $('#usage-plot'), trigger = $('#usage-range-trigger'), menu = $('#usage-range-menu');
+  usageResize?.disconnect();
+  if (!plot || !state.usage) return;
+  updateUsage(state.usageView);
+  paintUsage();
+  let frame, openingEdge;
+  usageResize = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(drawUsage); });
+  usageResize.observe(plot);
+  const nearest = event => { const rect = plot.getBoundingClientRect(), {left, slot} = usageGeometry; return Math.floor(((event.clientX - rect.left) * usageGeometry.width / rect.width - left) / slot); };
+  plot.addEventListener('pointermove', event => { if (usageGeometry) inspectUsage(nearest(event)); });
+  plot.addEventListener('pointerdown', event => { if (!usageGeometry) return; inspectUsage(nearest(event)); plot.focus({preventScroll:true}); });
+  plot.addEventListener('pointerleave', () => { if (document.activeElement !== plot) inspectUsage(usageInspect.index, false); });
+  plot.addEventListener('focus', () => inspectUsage(usageInspect.index));
+  plot.addEventListener('blur', () => inspectUsage(usageInspect.index, false));
+  plot.addEventListener('keydown', event => {
+    const next = {ArrowRight:usageInspect.index + 1, ArrowUp:usageInspect.index + 1, ArrowLeft:usageInspect.index - 1, ArrowDown:usageInspect.index - 1, Home:0, End:state.usage.buckets.length - 1}[event.key];
+    if (next !== undefined) { event.preventDefault(); inspectUsage(next); }
+    if (event.key === 'Escape') inspectUsage(usageInspect.index, false);
+  });
+  $('#usage-error button').addEventListener('click', () => updateUsage({...state.usageView, retry:true}));
+  $('#usage-data').addEventListener('toggle', event => { $('#usage-table').innerHTML = event.target.open ? usageTable(state.usage) : ''; });
+  document.querySelector('.usage-intervals').addEventListener('change', event => {
+    const interval = event.target.value, range = USAGE_RANGES[state.usageView.range].intervals.includes(interval) ? state.usageView.range : USAGE_INTERVALS[interval].range;
+    updateUsage({range, interval});
+  });
+  menu.addEventListener('toggle', event => {
+    const open = event.newState === 'open';
+    trigger.setAttribute('aria-expanded', String(open));
+    if (!open) return;
+    positionPopup(menu, trigger, 'platform');
+    const choices = [...menu.querySelectorAll('[role=option]')];
+    (openingEdge === 'last' ? choices.at(-1) : openingEdge === 'first' ? choices[0] : menu.querySelector('[aria-selected=true]')).focus(); openingEdge = null;
+  });
+  trigger.addEventListener('keydown', event => {
+    if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
+    event.preventDefault(); openingEdge = event.key === 'ArrowUp' ? 'last' : 'first'; menu.showPopover();
+  });
+  menu.addEventListener('click', event => {
+    const choice = event.target.closest('[data-usage-range]');
+    if (!choice) return;
+    menu.hidePopover(); trigger.focus();
+    updateUsage({range:choice.dataset.usageRange, interval:state.usageView.interval});
+  });
+  menu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); menu.hidePopover(); trigger.focus(); return; }
+    if (event.key === 'Tab') { menu.hidePopover(); return; }
+    if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const choices = [...menu.querySelectorAll('[role=option]')];
+    let index = choices.indexOf(document.activeElement);
+    index = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+    choices[index].focus();
+  });
 }
 
 async function spec() {
@@ -1214,6 +1422,7 @@ async function render({retryFailedOnly = false} = {}) {
     if (current === 'playground') { fillEndpoints(); initPlatformPicker(); paintRequest(); watchTabRows(); }
     if (current === 'docs') { const linked = new URLSearchParams(location.search).get('q'); if (linked !== null) state.docSearch = linked; else if (state.docSearch) syncDocSearchUrl(state.docSearch); $('#doc-search').value = state.docSearch; filterDocs(state.docSearch); selectDoc(); }
     if (current === 'fallback') FallbackPage.mount?.();
+    if (current === 'usage') mountUsage();
     const title = viewTitle(view) || 'Social Scrape';
     document.title = `${title} · Social Scrape`;
     const count = [...(view.querySelector('.table-caption')?.children || [])].map(element => element.textContent.trim()).join('. ');

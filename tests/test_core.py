@@ -1978,9 +1978,11 @@ def test_usage_groups_daily_requests_by_platform(env, tmp_path, monkeypatch):
     for path in ("/v1/instagram/basic-profile", "/v1/tiktok/profile/region", "/v1/youtube/shorts/trending",
                  "/v1/facebook/adLibrary/search/companies", "/v1/google/adLibrary/advertisers/search"):
         c.get(path)
-    day = c.get("/portal/api/usage").json()["daily"][-1]
-    assert day == {"instagram": 1, "tiktok": 1, "youtube": 1, "facebook": 1, "google": 1,
-                   "other": 0, "total": 5}
+    usage = c.get("/portal/api/usage").json()
+    day = usage["buckets"][-1]
+    assert {key: day[key] for key in ("instagram", "tiktok", "youtube", "facebook", "google", "other", "total")} == {
+        "instagram": 1, "tiktok": 1, "youtube": 1, "facebook": 1, "google": 1, "other": 0, "total": 5}
+    assert (usage["range"], usage["interval"], len(usage["buckets"]), usage["range_total"]) == ("30d", "day", 30, 5)
 
 
 def test_request_history_records_post_json_as_replayable_query(env, tmp_path, monkeypatch):

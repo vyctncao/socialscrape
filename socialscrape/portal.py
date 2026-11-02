@@ -14,14 +14,16 @@ import secrets
 import sqlite3
 import threading
 import time
+from bisect import bisect_right
 from time import monotonic
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from cryptography.fernet import Fernet, InvalidToken
@@ -780,35 +782,93 @@ class PortalStore:
         return [{"base_endpoint": row["path"], "call_count": str(row["count"]), "total_credits": "0"}
                 for row in rows]
 
-    def usage(self, principal: Principal) -> dict[str, Any]:
+    def usage(self, principal: Principal, range_key: str = "30d", interval: str = "", tz: str = "UTC",
+              now: float | None = None) -> dict[str, Any]:
+        """Requests per platform in calendar buckets of the viewer's timezone, the last one holding now.
+        Unknown ranges, intervals and zones fall back to 30 days, the range's default interval and UTC."""
         clause, args = ("", ()) if principal.role == "owner" else ("AND member_id=?", (principal.id,))
-        now = time.time()
+        now = time.time() if now is None else now
+        range_key = range_key if range_key in USAGE_RANGES else "30d"
+        interval = interval if interval in USAGE_RANGES[range_key] else next(iter(USAGE_RANGES[range_key]))
+        zone = _usage_zone(tz)
+        starts, end = _usage_bounds(range_key, interval, zone, now)
+        buckets = [{"start": start, "end": following, **dict.fromkeys(USAGE_PLATFORMS, 0), "total": 0, "fallback": 0}
+                   for start, following in zip(starts, starts[1:] + [end])]
         with self._lock:
-            daily = self._conn.execute(
-                "SELECT CAST((created_at-?)/86400 AS INTEGER) bucket,"
+            # Every zone's hour and midnight fall on a quarter hour, so 15-minute slots land in exactly one bucket.
+            slots = self._conn.execute(
+                "SELECT CAST(created_at/900 AS INTEGER) slot,"
                 "CASE WHEN path LIKE '/v%/instagram/%' THEN 'instagram' "
                 "WHEN path LIKE '/v%/tiktok/%' THEN 'tiktok' "
                 "WHEN path LIKE '/v%/youtube/%' THEN 'youtube' "
                 "WHEN path LIKE '/v%/facebook/%' THEN 'facebook' "
-                "WHEN path LIKE '/v%/google/%' THEN 'google' ELSE 'other' END platform,COUNT(*) count "
-                f"FROM requests WHERE created_at>=? {clause} GROUP BY bucket,platform ORDER BY bucket,platform",
-                (now, now - 29 * 86400, *args),
+                "WHEN path LIKE '/v%/google/%' THEN 'google' ELSE 'other' END platform,"
+                f"COUNT(*) count,SUM(fallback) fallback FROM requests WHERE created_at>=? AND created_at<=? {clause} "
+                "GROUP BY slot,platform", (starts[0], now, *args),
             ).fetchall()
             routes = self._conn.execute(
-                f"SELECT path,COUNT(*) count FROM requests WHERE created_at>=? {clause} "
-                "GROUP BY path ORDER BY count DESC,path LIMIT 10", (now - 30 * 86400, *args)
+                f"SELECT path,COUNT(*) count FROM requests WHERE created_at>=? AND created_at<=? {clause} "
+                "GROUP BY path ORDER BY count DESC,path LIMIT 10", (starts[0], now, *args)
             ).fetchall()
             total = self._conn.execute(f"SELECT COUNT(*) count FROM requests WHERE 1=1 {clause}", args).fetchone()[0]
-            fallback_count = self._conn.execute(
-                f"SELECT COUNT(*) FROM requests WHERE created_at>=? AND fallback=1 {clause}", (now - 30 * 86400, *args)
-            ).fetchone()[0]
-        points = {(int(r["bucket"]), r["platform"]): r["count"] for r in daily}
-        days = [{platform: points.get((i - 29, platform), 0)
-                 for platform in ("instagram", "tiktok", "youtube", "facebook", "google", "other")}
-                for i in range(30)]
-        for day in days:
-            day["total"] = sum(day.values())
-        return {"total": total, "daily": days, "routes": [dict(r) for r in routes], "fallback_count": fallback_count}
+        for row in slots:
+            index = bisect_right(starts, row["slot"] * 900) - 1
+            if index >= 0:
+                bucket = buckets[index]
+                bucket[row["platform"]] += row["count"]
+                bucket["total"] += row["count"]
+                bucket["fallback"] += row["fallback"] or 0
+        return {"total": total, "range": range_key, "interval": interval, "intervals": list(USAGE_RANGES[range_key]),
+                "timezone": zone.key, "now": now, "start": starts[0], "buckets": buckets,
+                "range_total": sum(bucket["total"] for bucket in buckets),
+                "fallback_count": sum(bucket["fallback"] for bucket in buckets), "routes": [dict(r) for r in routes]}
+
+
+USAGE_PLATFORMS = ("instagram", "tiktok", "youtube", "facebook", "google", "other")
+# Each range lists the intervals that draw a readable number of bars (default first) and how many buckets each takes.
+USAGE_RANGES = {
+    "24h": {"hour": 24},
+    "7d": {"day": 7, "hour": 168},
+    "30d": {"day": 30, "week": 5},
+    "90d": {"week": 13, "day": 90},
+    "12m": {"month": 12, "week": 52},
+}
+
+
+def _usage_zone(name: str) -> ZoneInfo:
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_+\-]*(?:/[A-Za-z0-9_+\-]+){0,2}", name or "") and len(name) <= 64:
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return ZoneInfo("UTC")
+
+
+def _usage_bounds(range_key: str, interval: str, zone: ZoneInfo, now: float) -> tuple[list[float], float]:
+    """Bucket starts (oldest first) on the zone's calendar, plus where the last bucket ends. Hours step in absolute
+    time, so a daylight-saving change repeats or skips a wall-clock hour; days, weeks (from Monday) and months follow
+    wall-clock midnights, so those buckets can run 23 or 25 hours long."""
+    count = USAGE_RANGES[range_key][interval]
+    local = dt.datetime.fromtimestamp(now, zone)
+    if interval == "hour":
+        start = local.replace(minute=0, second=0, microsecond=0).timestamp()
+        return [start - 3600 * (count - 1 - index) for index in range(count)], start + 3600
+    day = local.date()
+    if interval == "week":
+        day -= dt.timedelta(days=day.weekday())
+    if interval == "month":
+        day = day.replace(day=1)
+
+    def shifted(steps: int) -> dt.date:
+        if interval == "month":
+            months = day.year * 12 + day.month - 1 + steps
+            return dt.date(months // 12, months % 12 + 1, 1)
+        return day + dt.timedelta(days=steps * (7 if interval == "week" else 1))
+
+    def midnight(date: dt.date) -> float:
+        return dt.datetime.combine(date, dt.time(), zone).timestamp()
+
+    return [midnight(shifted(-steps)) for steps in range(count - 1, -1, -1)], midnight(shifted(1))
 
 
 @cache
@@ -1434,8 +1494,9 @@ def install_portal(app, store: PortalStore) -> None:
         return detail
 
     @router.get("/portal/api/usage")
-    async def usage(request: Request):
-        return store.usage(_require(request))
+    async def usage(request: Request, interval: str = "", tz: str = "UTC",
+                    range_key: str = Query("30d", alias="range")):
+        return store.usage(_require(request), range_key, interval, tz)
 
     app.include_router(router)
     install_admin_api(app, store, _check_account)

@@ -12,6 +12,7 @@ dependencies = [
     "cryptography>=46",
     "beautifulsoup4>=4.13,<5",
     "curl-cffi>=0.13",
+    "tzdata>=2025.2",
 ]
 
 [project.optional-dependencies]
