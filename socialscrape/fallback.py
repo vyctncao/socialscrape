@@ -62,6 +62,7 @@ _ARRAY_RESPONSES = {entry["path"] for entry in CATALOG if entry.get("response_ki
 _CATALOG_METHODS["/v1/instagram/profile"] |= {"POST"}
 # The catalog's pagination params: the only ones that can carry our own cursors (cursor.PREFIX).
 _CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id", "paginationToken"})
+CURSOR_PARAMS = _CURSOR_PARAMS  # the paging params whose values may be this server's own cursor tokens
 _CURSOR_FIELDS = _CURSOR_PARAMS | {"next_cursor", "nextCursor", "end_cursor", "next_page_token"}
 _PAGE_PARAMS = _CURSOR_PARAMS | {"next_page_id", "page", "offset", CACHE_PARAM}
 _PATH_CURSOR_PARAMS = {entry["path"]: set(entry.get("params", ())) & _CURSOR_PARAMS

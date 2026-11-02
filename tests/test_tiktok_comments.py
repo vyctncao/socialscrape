@@ -95,3 +95,29 @@ def test_live_comments_and_replies_answer_without_an_account(client):
     parent = next(c for c in first["comments"] + second["comments"] if c.get("reply_comment_total"))
     replies = client.get("/v1/tiktok/video/comment/replies", params={"url": VIDEO, "comment_id": parent["cid"]}).json()
     assert replies["comments"] and replies["status_code"] == 0
+
+
+def test_mcp_takes_back_the_cursor_the_server_handed_out(monkeypatch, tiktok_web):
+    """With fallback on, a page's cursor comes back as this server's token (ss1.…): a cursor ScrapeCreators documents
+    as a number must still accept it, or page 2 is unreachable through MCP."""
+    from fastapi.testclient import TestClient
+
+    from socialscrape import mcp
+    from socialscrape.config import get_settings
+    from socialscrape.main import create_app
+
+    schema = {t["name"]: t for t in mcp._catalog()}["v1_tiktok_video_comments"]["inputSchema"]["properties"]["cursor"]
+    assert schema["type"] == ["number", "string"] and "as returned" in schema["description"]
+    monkeypatch.setenv("SOCIALSCRAPE_API_KEYS", "test-key")
+    get_settings.cache_clear()
+    try:
+        client = TestClient(create_app())
+        for cursor in ("40", 40):
+            result = client.post("/mcp", headers={"x-api-key": "test-key", "x-socialscrape-fallback": "off"},
+                                 json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                                     "name": "v1_tiktok_video_comments", "arguments": {"url": VIDEO, "cursor": cursor}}}
+                                 ).json()["result"]
+            assert not result.get("isError"), result
+            assert tiktok_web["api"][-1][1]["cursor"] == "40"
+    finally:
+        get_settings.cache_clear()

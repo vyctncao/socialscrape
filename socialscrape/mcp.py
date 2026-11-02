@@ -18,6 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from .catalog import CATALOG, UPSTREAM_OPERATIONS
+from .fallback import CURSOR_PARAMS
 
 SUPPORTED_VERSIONS = ("2025-06-18", "2025-03-26")
 ACCOUNT_PATHS = {
@@ -99,6 +100,13 @@ def _catalog() -> list[dict[str, Any]]:
         props = tool["inputSchema"].setdefault("properties", {})
         for param in entry["params"]:
             props.setdefault(param, parameters.get(param, {}).get("schema", {"type": "string"}))
+            # Where a page can come from either provider, the server hands back its own cursor token (ss1.…) in place
+            # of the provider's number; a cursor ScrapeCreators documents as a number has to take that token back.
+            schema = props[param]
+            if param in CURSOR_PARAMS and schema.get("type") in ("integer", "number"):
+                note = "Pass the cursor value the previous page returned, as returned (a number or a string)."
+                props[param] = {**schema, "type": [schema["type"], "string"],
+                                "description": f"{schema.get('description', '').rstrip()} {note}".strip()}
         if entry["required"]:
             tool["inputSchema"]["required"] = entry["required"]
     return sorted(by_name.values(), key=lambda tool: tool["name"])
