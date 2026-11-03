@@ -700,6 +700,14 @@ def test_deactivated_provider_profile_cannot_be_read_as_zero_metrics(make, upstr
     assert result.headers[fallback.HEADER] == fallback.PROVIDER
 
 
+def test_a_native_deactivated_profile_is_final_and_spends_no_credit(make, upstream, monkeypatch):
+    # ScrapeCreators can only repeat it (and charges a credit to): native's own account_deactivated 404 stands.
+    fail_profile(monkeypatch, NotFound("Account doesn't exist", handle="someone", account_deactivated=True))
+    result = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all").get(PROFILE, params={"handle": "someone"})
+    assert (result.status_code, result.json()["error"], result.json()["account_deactivated"]) == (404, "not_found", True)
+    assert fallback.HEADER not in result.headers and "fallback" not in result.json() and upstream.requests == []
+
+
 def test_slow_native_cursor_page_is_bounded_without_leaking_its_state(make, upstream, monkeypatch):
     async def slow(*args, **kwargs):
         await asyncio.sleep(10)

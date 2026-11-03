@@ -98,7 +98,7 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     assert video["params"] == selftest.PRESETS["/v1/youtube/video"].params and video["expect"]
     trending = by_path["/v1/youtube/shorts/trending"]
     assert trending["implemented"] is True and trending["reason"] is None
-    gated = by_path["/v1/tiktok/user/followers"]
+    gated = by_path["/v1/tiktok/search/suggestions"]
     assert gated["implemented"] is False and gated["needs_setup"] is True
     [chained] = [test for test in data["tests"] if test["path"] == "/v1/youtube/video/comment/replies"]
     assert chained["derive"] == [{"param": "continuationToken", "source": "/v1/youtube/video/comments",
@@ -116,7 +116,7 @@ def test_members_read_every_endpoint_with_its_preset(signed_in):
     assert set(re.findall(r'data-loading-test-group="(instagram|tiktok|youtube)"', initial)) == {"instagram", "tiktok", "youtube"}
     assert initial.count('class="table-wrap skeleton-table"') == 3
     assert "window.EndpointTests" in c.get(f"/assets/selftest.js?v={version}").text
-    gated = c.get("/v1/tiktok/user/followers", params={"handle": "x"}, headers={fallback.HEADER: "off"})
+    gated = c.get("/v1/tiktok/search/suggestions", params={"query": "x"}, headers={fallback.HEADER: "off"})
     assert gated.status_code == 501 and gated.json()["error"] == "platform_auth_required"
 
 
@@ -126,7 +126,7 @@ def test_the_page_learns_what_falls_back(signed_in):
     assert falls_back["provider"] == "scrapecreators" and falls_back["triggers"] == list(fallback.DEFAULT_TRIGGERS)
     assert sorted(falls_back["platforms"]) == sorted(fallback.PLATFORMS)
     # The page's requests skip it unless the member allows it.
-    r = c.get("/v1/tiktok/user/followers", params={"handle": "x"}, headers={fallback.HEADER: "OFF"})
+    r = c.get("/v1/tiktok/search/suggestions", params={"query": "x"}, headers={fallback.HEADER: "OFF"})
     assert r.status_code == 501 and r.json()["error"] == "platform_auth_required"
     assert fallback.HEADER not in r.headers and "fallback" not in r.json()
 

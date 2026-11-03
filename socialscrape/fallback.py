@@ -381,7 +381,7 @@ def _json_object(payload: bytes) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _trigger(status: int, code: str | None) -> str | None:
+def _trigger(status: int, code: str | None, final: bool = False) -> str | None:
     """The trigger (TRIGGERS) a local error falls under, or None: a caller's own mistake (400), a missing key (401),
     a wrong method (405), estimate_only (422) and paths outside the catalog never fall back."""
     if status == 501 or (status == 400 and code == "bad_cursor"):  # a token we can't read may be ScrapeCreators'
@@ -392,7 +392,7 @@ def _trigger(status: int, code: str | None) -> str | None:
         return "restricted"
     if status == 404:  # region_unavailable, ad_not_found and company_not_found also need the optional second source
         # ...but not an answer no second source could improve: an account with no posts has no region anywhere
-        return None if code in _FINAL_NOT_FOUND else "not_found"
+        return None if final or code in _FINAL_NOT_FOUND else "not_found"
     return None
 
 
@@ -647,7 +647,7 @@ class FallbackMiddleware:
             payload = response.body
             headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
             local = _json_object(payload)
-            if local is None or native_cursor or (not provider_page and _trigger(local_status, local.get("error")) not in c.triggers):
+            if local is None or native_cursor or (not provider_page and _trigger(local_status, local.get("error"), local.get("account_deactivated") is True) not in c.triggers):
                 return Response(payload, local_status, headers=headers)
             headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
         finally:

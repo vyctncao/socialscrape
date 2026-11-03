@@ -420,8 +420,13 @@ def _user_page(ydl: yt_dlp.YoutubeDL, ident: str) -> dict[str, Any]:
     status = detail.get("statusCode") or 0
     info = M.obj(detail.get("userInfo"))
     if not M.obj(info.get("user")):
-        raise _status_error(status) or NotFound(f"TikTok user not found (status {status})")
+        missing = _Gone if isinstance(status, int) and status in _GONE else NotFound  # (a list isn't hashable)
+        raise _status_error(status) or missing(f"TikTok user not found (status {status})")
     return {**info, "stats": M.exact_stats(info.get("stats"), info.get("statsV2")), "statusCode": status}
+
+
+class _Gone(NotFound):
+    """A user page's USER_NOT_EXIST or USER_BAN (_GONE): as far as this connection can tell, no such account."""
 
 
 def _live_page(ie: Any, name: str) -> dict[str, Any] | None:
@@ -900,15 +905,78 @@ async def comment_replies(comment_id: str = Query(...), url: str = Query(...),
     return await with_ydl(P, go, use_cookies=False)
 
 
+# The web app's follower and following lists (/api/user/list/, scene 67 and 21) answer anonymously when asked with
+# only these parameters plus both cursors (without maxCursor/minCursor: statusCode 10201 "err input"); 30 is the most
+# a page takes (100 gets 100002). Their users are web objects, re-keyed to the app objects ScrapeCreators returns;
+# the app-only fields (region, follow_status, ...) aren't there.
+_USER_LIST = "https://www.tiktok.com/api/user/list/"
+_GRAPH = {"followers": ("67", "followers"), "following": ("21", "followings")}
+_GRAPH_PAGE = "30"
+
+
+def _graph_page(ydl: yt_dlp.YoutubeDL, ident: str, kind: str, min_time: str | None) -> dict[str, Any]:
+    scene, key = _GRAPH[kind]
+    prof = _profile(ydl, ident)
+    if prof["private"]:
+        raise Forbidden("This account is private")
+    ie = ydl.get_info_extractor("TikTokUser")
+    data = M.obj(_web_api(ie, _USER_LIST, ident, f"Downloading {kind}",
+                          {"aid": "1988", "secUid": prof["secUid"], "scene": scene, "count": _GRAPH_PAGE,
+                           "maxCursor": "0", "minCursor": min_time or "0"}, kind))
+    status = data.get("statusCode") or data.get("status_code") or 0
+    if status:
+        raise _status_error(status) or UpstreamError(f"TikTok refused the {kind} list: "
+                                                     f"{data.get('statusMsg') or data.get('status_msg') or status}")
+    users = [M.author({"author": M.obj(entry.get("user")), "authorStats": entry.get("stats"),
+                       "authorStatsV2": entry.get("statsV2")}) for entry in M.objs(data.get("userList"))]
+    return {key: [user for user in users if user.get("uid")], "has_more": bool(data.get("hasMore")),
+            "min_time": max(M.to_int(data.get("minCursor")) or 0, 0), "total": M.to_int(data.get("total")),
+            "status_code": 0, "status_msg": "", "extra": M.obj(data.get("extra")), "log_pb": M.obj(data.get("log_pb"))}
+
+
+async def _graph(kind: str, handle: str | None, user_id: str | None, min_time: str | None) -> dict[str, Any]:
+    if not (handle or user_id):
+        raise BadRequest("handle is required")
+    if min_time is not None and not _OFFSET.fullmatch(min_time) and not _ID.fullmatch(min_time):
+        raise BadRequest("min_time must be the min_time of a previous page")
+    ident = _handle(handle) if handle else _numeric("user_id", user_id)
+    return compact(await with_ydl(P, lambda ydl: _graph_page(ydl, ident, kind, min_time), confirm_not_found=True,
+                                  use_cookies=False))
+
+
+@sc_get(router, "/v1/tiktok/user/followers", source="TikTok web /api/user/list/ scene 67 (anonymous, unsigned)",
+        notes="30 per page, newest followers first; pass the returned min_time for the next page. total is the "
+              "account's follower count. Users are app-shaped (uid, unique_id, nickname, avatars, counts) from web "
+              "data, so app-only fields such as region are absent. A private account is a 403. trim is ignored.")
+async def followers(handle: str | None = None, user_id: str | None = None,
+                    min_time: str | None = None, trim: str | None = None) -> dict[str, Any]:
+    return await _graph("followers", handle, user_id, min_time)
+
+
+@sc_get(router, "/v1/tiktok/user/following", source="TikTok web /api/user/list/ scene 21 (anonymous, unsigned)",
+        notes="Accounts the user follows, 30 per page; pass the returned min_time for the next page. Same user "
+              "shape as /v1/tiktok/user/followers, under followings. A private account is a 403. trim is ignored.")
+async def following(handle: str = Query(...), min_time: str | None = None, trim: str | None = None) -> dict[str, Any]:
+    return await _graph("following", handle, None, min_time)
+
+
 @sc_get(router, "/v1/tiktok/profile", source="yt-dlp TikTokUserIE (user page webapp.user-detail)",
         notes="TikTok's web userInfo as-is (user, stats, itemList — itemList is usually empty on the web page). "
               "user_id must be the numeric id; it is looked up through the same page (/@<id>). A profile-not-found "
               "answer is checked through the remaining configured connection profiles, because TikTok sometimes "
-              "reports a real public user as missing on one egress.")
+              "reports a real public user as missing on one egress. An account TikTok then still says doesn't exist "
+              "or is banned is a 404 with account_deactivated, as ScrapeCreators answers it; that 404 doesn't fall "
+              "back.")
 async def tiktok_profile(handle: str | None = None, user_id: str | None = None) -> dict[str, Any]:
     require_one(handle=handle, user_id=user_id)
     ident = _handle(handle) if handle else _numeric("user_id", user_id)
-    info = await with_ydl(P, lambda ydl: _user_page(ydl, ident), confirm_not_found=True)
+    try:
+        info = await with_ydl(P, lambda ydl: _user_page(ydl, ident), confirm_not_found=True)
+    except _Gone as gone:
+        # Every connection says so. ScrapeCreators answers these with an HTTP 200 account_deactivated "Account
+        # doesn't exist" (a credit each), which the fallback adapter turns into this same 404; flagged, it's final.
+        raise NotFound("Account doesn't exist", **{"handle" if handle else "user_id": ident},
+                       account_deactivated=True) from gone
     return compact({"user": info["user"], "stats": info.get("stats"), "itemList": info.get("itemList") or []})
 
 

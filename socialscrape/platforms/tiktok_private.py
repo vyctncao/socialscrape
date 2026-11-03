@@ -7,11 +7,11 @@ import yt_dlp
 from fastapi import APIRouter, Query
 
 from .. import sessions
-from ..errors import BadRequest, LoginRequired, UpstreamError
+from ..errors import LoginRequired, UpstreamError
 from ..registry import sc_get
 from ..ytdlp import with_ydl
 from . import _tiktok_map as M
-from .tiktok import _APP_API, SESSION_COOKIES, _handle, _profile
+from .tiktok import _APP_API, SESSION_COOKIES
 
 router = APIRouter()
 P = "tiktok"
@@ -45,33 +45,6 @@ def _app(path: str, item_id: str, query: dict[str, Any]):
 async def _require_account() -> None:
     """501 unless a usable signed-in TikTok account is configured (AccountRejected when TikTok rejected it)."""
     await with_ydl(P, _signed_in)
-
-
-async def _graph(kind: str, handle: str | None, user_id: str | None, cursor: str | None):
-    if not handle:
-        raise BadRequest("handle is required")
-    await _require_account()
-    name = _handle(handle)
-    prof = await with_ydl(P, lambda ydl: _profile(ydl, name))
-    uid = user_id or prof["id"]
-    data = await with_ydl(P, _app(f"user/{kind}/list", uid,
-                                  {"user_id": uid, "sec_user_id": prof["secUid"],
-                                   "max_time": cursor or "0", "count": "20"}), extractor_args=_APP_API)
-    users = M.objs(data.get("followers") or data.get("followings") or data.get("user_list"))
-    return {kind: users, "min_time": str(data.get("min_time") or data.get("max_time") or "0")}
-
-
-@sc_get(router, "/v1/tiktok/user/followers", source="TikTok mobile user/follower/list API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in TikTok cookie account configured in Platform settings.")
-async def followers(handle: str | None = None, user_id: str | None = None,
-                    min_time: str | None = None, trim: str | None = None):
-    return await _graph("followers", handle, user_id, min_time)
-
-
-@sc_get(router, "/v1/tiktok/user/following", source="TikTok mobile user/following/list API with saved cookies",
-        status="needs_setup", notes="Requires a signed-in TikTok cookie account configured in Platform settings.")
-async def following(handle: str = Query(...), min_time: str | None = None, trim: str | None = None):
-    return await _graph("followings", handle, None, min_time)
 
 
 @sc_get(router, "/v1/tiktok/search/suggestions", source="TikTok mobile search/sug API with saved cookies",

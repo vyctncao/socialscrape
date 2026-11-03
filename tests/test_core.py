@@ -1885,19 +1885,19 @@ def test_invite_only_portal_members_keys_and_usage(env, tmp_path, monkeypatch):
         if route == 'fallback':
             assert 'ScrapeCreators API key' in initial
     assert owner.get("/openapi.json").status_code == 200  # the signed-in docs/playground need it
-    assert owner.get("/v1/tiktok/user/followers", params={"handle": "x"}).status_code == 501
+    assert owner.get("/v1/tiktok/search/suggestions", params={"query": "x"}).status_code == 501
 
     me = owner.get("/portal/api/me").json()
     headers = {"x-csrf-token": me["csrf"]}
     created = owner.post("/portal/api/keys", headers=headers, json={"name": "Tests"}).json()
     assert created["key"].startswith("ss_") and created["key"] not in owner.get("/portal/api/keys").text
-    assert owner.get("/v1/tiktok/user/followers", params={"handle": "x"},
+    assert owner.get("/v1/tiktok/search/suggestions", params={"query": "x"},
                      headers={"x-portal-key-id": str(created["id"])}).status_code == 501
     assert owner.get("/portal/api/keys").json()["keys"][0]["last_used_at"] is not None
     assert TestClient(create_app(), base_url="https://testserver").get(
-        "/v1/tiktok/user/followers", params={"handle": "x"}, headers={"x-api-key": created["key"]}).status_code == 501
+        "/v1/tiktok/search/suggestions", params={"query": "x"}, headers={"x-api-key": created["key"]}).status_code == 501
     history = owner.get("/portal/api/history").json()["requests"]
-    assert history[0]["path"] == "/v1/tiktok/user/followers" and history[0]["has_response"] is True
+    assert history[0]["path"] == "/v1/tiktok/search/suggestions" and history[0]["has_response"] is True
     detail = owner.get(f"/portal/api/history/{history[0]['id']}").json()
     assert detail["status"] == 501 and detail["response_truncated"] == 0
     assert json.loads(detail["response"])["error"] == "platform_auth_required"

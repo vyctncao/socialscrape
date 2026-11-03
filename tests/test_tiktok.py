@@ -2213,8 +2213,6 @@ def test_user_live_doesnt_repeat_a_blocked_pass(client, monkeypatch):
 
 def test_private_tiktok_routes_need_saved_account_cookies(client):
     requests = [
-        ("/v1/tiktok/user/followers", {"handle": "stoolpresidente"}),
-        ("/v1/tiktok/user/following", {"handle": "stoolpresidente"}),
         ("/v1/tiktok/search/suggestions", {"query": "travel"}),
         ("/v1/tiktok/get-trending-feed", {"region": "US"}),
     ]
@@ -2226,8 +2224,6 @@ def test_private_tiktok_routes_need_saved_account_cookies(client):
 def test_all_credential_gated_tiktok_routes_are_registered(client):
     # search/keyword and /hashtag answer from TikTok's public keyword pages first (tests/test_tiktok_search.py)
     expected = {
-        "/v1/tiktok/user/followers": "platform_auth_required",
-        "/v1/tiktok/user/following": "platform_auth_required",
         "/v1/tiktok/search/suggestions": "platform_auth_required",
         "/v1/tiktok/search/top": "platform_auth_required",
         "/v1/tiktok/get-trending-feed": "platform_auth_required",
