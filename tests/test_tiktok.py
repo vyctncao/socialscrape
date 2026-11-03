@@ -855,10 +855,13 @@ def test_account_region(monkeypatch):
     reused = {"id": "3", "music": {"id": "777", "original": False, "authorName": "Some One"}}
     other = {"id": "4", "music": {"id": "666", "original": True, "authorName": "Someone Else"}}
     assert tiktok._account_region(None, prof, [reused, other, {"id": "5", **own}]) == "US"
-    assert pages == ["555"]  # only the creator's own sounds are looked up
+    assert pages == ["555"]  # the creator's own sounds are asked first
     pages.clear()
     failing = [{"id": "5", "music": {**own["music"], "id": i}} for i in ("1", "2", "555")]
-    assert tiktok._account_region(None, prof, failing) is None and pages == ["1", "2"]  # gives up after 2
+    assert tiktok._account_region(None, prof, failing) == "US" and pages == ["1", "2", "555"]
+    pages.clear()
+    assert tiktok._account_region(None, prof, failing, tries=2) is None and pages == ["1", "2"]  # at most `tries`
+    failing = failing[:2]
     # gap-tiktok-1: when no lookup got an answer, the last failure is raised, not a false "no own sound"
     def raising(**by_sound):
         def music_page(ydl, mid, cursor):
@@ -878,7 +881,27 @@ def test_account_region(monkeypatch):
     for s1, s2 in ((blocked, gone), (gone, proxy), (gone, gone)):
         monkeypatch.setattr(tiktok, "_music_page", raising(s1=s1, s2=s2))
         assert tiktok._account_region(None, prof, failing) is None
-    assert tiktok._account_region(None, prof, [reused, other]) is None  # no own-sound post: nothing looked up
+
+
+def test_account_region_reads_other_peoples_sounds_when_none_is_the_creators(monkeypatch):
+    """kimberly.loaiza posts only to other people's sounds; the app feeds of most of them still list her posts on
+    their first page (they rank by popularity), each with her author.region."""
+    prof = {"id": "42", "nickname": "Some One"}
+    asked = []
+
+    def music_page(ydl, mid, cursor):
+        asked.append(mid)
+        listed = {"30": [{"aweme_id": "3", "author": {"uid": "42", "region": "MX"}}]}
+        return {"aweme_list": [{"aweme_id": "901", "author": {"uid": "7", "region": "GB"}}, *listed.get(mid, [])]}
+
+    monkeypatch.setattr(tiktok, "_music_page", music_page)
+    trend = {"original": False, "authorName": "A Singer"}
+    posts = [{"id": "1", "music": {"id": "10", **trend}}, {"id": "2", "music": {"id": "10", **trend}},  # same sound
+             {"id": "9", "music": {"id": "bad"}}, {"id": "3", "music": {"id": "30", **trend}}]
+    assert tiktok._account_region(None, prof, posts) == "MX" and asked == ["10", "30"]  # each sound once
+    asked.clear()
+    many = [{"id": str(i), "music": {"id": str(100 + i), **trend}} for i in range(8)]
+    assert tiktok._account_region(None, prof, many) is None and len(asked) == tiktok._REGION_LOOKUPS
 
 
 def test_video_route_prefers_app_aweme(client, fake_ydl, monkeypatch):
@@ -951,9 +974,28 @@ def test_profile_region_route(client, fake_ydl, monkeypatch):
     assert body == {"success": True, "credits_charged": body["credits_charged"], "handle": "someone",
                     "profile_url": "https://www.tiktok.com/@someone", "region": "US"}
     assert calls[-1]["extractor_args"] == tiktok._APP_API
-    feed.extra = {"music": {**own["music"], "original": False}}
+    feed.extra = {"music": {**own["music"], "original": False}}  # someone else's sound: still asked, still listed
+    assert ok(client, "/v1/tiktok/profile/region", handle="someone")["region"] == "US"
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": []})
     r = client.get("/v1/tiktok/profile/region", params={"handle": "someone"})
     assert r.status_code == 404 and r.json()["error"] == "region_unavailable"
+
+
+def test_an_account_without_posts_has_no_region_and_does_not_fall_back(client, fake_ydl, monkeypatch):
+    """minjun.kim.kori has no posts: ScrapeCreators answers "No videos found for this profile", so asking it is a
+    wasted call. The 404 names the reason, is kept like any answer, and no fallback trigger covers it."""
+    from socialscrape.fallback import _trigger
+
+    monkeypatch.setattr(tiktok, "_profiles", {})
+    pages = []
+    monkeypatch.setattr(tiktok, "_user_page", lambda ydl, name: pages.append(name) or {
+        **_user_info(name), "stats": {"videoCount": 0}})
+    monkeypatch.setattr(tiktok, "_music_page", lambda *args: pytest.fail("no post, so no sound to ask"))
+    for _ in range(2):
+        r = client.get("/v1/tiktok/profile/region", params={"handle": "nobody.posts"})
+        assert (r.status_code, r.json()["error"]) == (404, "no_public_posts") and "no public posts" in r.json()["message"]
+    assert pages == ["nobody.posts"]  # the second answer is the kept one
+    assert _trigger(404, "no_public_posts") is None and _trigger(404, "region_unavailable") == "not_found"
 
 
 def test_profile_region_app_api_failure_is_retryable(client, monkeypatch):

@@ -669,35 +669,54 @@ def _own_sound(prof: dict[str, Any], it: dict[str, Any]) -> bool:
             and m.get("authorName") in (prof.get("nickname"), M.obj(it.get("author")).get("nickname")))
 
 
+_REGION_LOOKUPS = 5  # distinct sound feeds asked per region lookup, about half a second each
+
+
+class _NoPublicPosts(NotFound):
+    """TikTok's own count says the account has no public posts. Every source reads the region off a post (the
+    ScrapeCreators fallback answers "No videos found for this profile"), so this 404 is final: it never falls back."""
+
+    code = "no_public_posts"
+
+
 def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dict[str, Any]],
-                    tries: int = 2) -> str | None:
-    """App `author.region` of one of the creator's posts, found via the creator's own sound.
+                    tries: int = _REGION_LOOKUPS) -> str | None:
+    """App `author.region` of one of the creator's posts, read from the app feed of a sound one of them uses.
 
-    Web data has no account region; TikTokSoundIE's app feed does. A post with the creator's
-    own original sound is (almost always) on the first page of that sound's feed.
+    Web data has no account region: a post's locationCreated is where it was posted (khaby.lame's say US, his
+    account SN). TikTokSoundIE's app feed carries the author's. A post with the creator's own original sound is
+    (almost always) on the first page of that sound's feed, so those sounds are asked first. A creator who only
+    posts to other people's sounds is usually still on the first page of some of them, since the feed ranks by
+    popularity (kimberly.loaiza: 5 of her first 8 sounds list her), so their sounds are asked next. At most `tries`
+    distinct sounds are asked, newest posts first within each group.
 
-    None only when there is no own-sound post or the app API answered without the region (a
-    sound it reports as unavailable counts as an answer). If every lookup failed (proxy, network,
-    throttled empty body), the last failure is raised: the region may well be there.
+    None when every feed asked answered without the creator (a sound it reports as unavailable counts as an
+    answer). If no lookup got an answer (proxy, network, throttled empty body), the last failure is raised: the
+    region may well be there.
     """
-    own = [it for it in items if _own_sound(prof, it)]
+    sounds: list[str] = []
+    for it in sorted(items, key=lambda it: not _own_sound(prof, it)):  # stable: own sounds first, order kept
+        clip = str(M.obj(it.get("music")).get("id") or "")
+        if _ID.fullmatch(clip) and clip not in sounds:
+            sounds.append(clip)
+    ids = {str(it.get("id")) for it in items}
     failure: Exception | None = None
     answered = False
-    for it in own[:tries]:
+    for clip in sounds[:tries]:
         try:
-            resp = _music_page(ydl, str(it["music"]["id"]), 0)
+            resp = _music_page(ydl, clip, 0)
         except NotFound as exc:  # the app API answered: the sound is gone
-            log.info("tiktok: region lookup via sound %s: %s", it["music"]["id"], exc)
+            log.info("tiktok: region lookup via sound %s: %s", clip, exc)
             answered = True
             continue
         except (ApiError, ExtractorError) as exc:
-            log.info("tiktok: region lookup via sound %s failed: %s", it["music"]["id"], exc)
+            log.info("tiktok: region lookup via sound %s failed: %s", clip, exc)
             failure = exc
             continue
         answered = True
         for a in M.objs(resp.get("aweme_list")):
             au = M.obj(a.get("author"))
-            if (str(au.get("uid")) == prof["id"] or str(a.get("aweme_id")) == str(it.get("id"))) and au.get("region"):
+            if (str(au.get("uid")) == prof["id"] or str(a.get("aweme_id")) in ids) and au.get("region"):
                 return str(au["region"])
     if failure is not None and not answered:
         raise failure  # with_ydl turns a raw ExtractorError into 502 proxy_error/network_error, 503, ...
@@ -958,10 +977,13 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
 @sc_get(router, "/v1/tiktok/profile/region",
         source="yt-dlp TikTokUserIE (user page, /api/creator/item_list/ or the /embed/@handle page and TikTokIE "
                "post pages) + TikTokSoundIE app API (music/aweme author.region)",
-        notes="Web data has no account region, so it is read from the app API's author.region on one of the "
-              "creator's recent posts, found through the creator's own original sound (music/aweme). That costs "
-              "about 3-4 TikTok requests. 404 region_unavailable when none of the latest posts uses the "
-              "creator's own sound (or it isn't on that sound's first page). When the app API can't be reached "
+        notes="Web data has no account region (a post's locationCreated is where it was posted), so it is read "
+              "from the app API's author.region on one of the creator's recent posts, found in the first page of "
+              "the app feed (music/aweme) of a sound they used: the creator's own original sounds first, then the "
+              "other sounds of their recent posts, up to 5 distinct sounds. That usually costs 3-4 TikTok requests. "
+              "404 no_public_posts when the account has no public posts (final: it never falls back, since every "
+              "source reads the region off a post). 404 region_unavailable when no asked feed lists the creator's "
+              "posts. When the app API can't be reached "
               "for any of those sounds, the error is the retryable one /v1/tiktok/song gives (502 proxy_error/"
               "network_error, 503 when throttled), not a 404. When item_list is throttled or bot-checked (see "
               "/v3/tiktok/profile/videos), the creator's posts are found on its embed page and read from their own "
@@ -986,7 +1008,8 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
         if prof["private"]:
             raise Forbidden("This account is private")
         if prof["videoCount"] == 0:
-            return None
+            raise _NoPublicPosts("This account has no public posts, and TikTok shows an account's region only "
+                                 "through its posts")
         ie, cursor, items = ydl.get_info_extractor("TikTokUser"), int(time.time() * 1000), []
         try:
             for _ in range(2):  # a second round only for accounts idle for over _FEED_HOPS weeks
@@ -1007,12 +1030,12 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
 
     try:
         region = await with_ydl(P, go, extractor_args=_APP_API)
-    except UpstreamBlocked as exc:
+    except (UpstreamBlocked, _NoPublicPosts) as exc:
         remember(exc)
         raise
     if not region:
-        missing = NotFound("Could not read this account's region: none of its recent posts uses its own original "
-                           "sound, or the sound's app feed doesn't list the post", code="region_unavailable")
+        missing = NotFound("Could not read this account's region: the first page of each sound its recent posts "
+                           "use doesn't list them", code="region_unavailable")
         remember(missing)
         raise missing
     remember(region)
