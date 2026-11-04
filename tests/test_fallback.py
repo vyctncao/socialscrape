@@ -763,6 +763,37 @@ def test_tracking_quality_rejects_missing_counters_instead_of_creating_zero_metr
         assert response.json()["missing_fields"] == ["profile.followerCount"]
 
 
+@pytest.mark.parametrize("about_loaded", [True, False])
+def test_a_count_youtube_shows_nobody_is_not_paid_for(make, upstream, monkeypatch, about_loaded):
+    """ScrapeCreators answers a channel YouTube publishes no subscriber count for with the same null (all 36 such
+    fallbacks in a week were 502s anyway); without the about panel the count may just not have loaded."""
+    from socialscrape.platforms import youtube_listings
+    channel = {"channelId": "UCG0U63MW03if8_vvLcpJAhA", "channel": "http://www.youtube.com/@Hana.lee.kori2",
+               "handle": "@Hana.lee.kori2", "name": "Hana Lee", "subscriberCount": None, "subscriberCountText": None,
+               "isVerified": False, "videoCount": 0, "joinedDateText": "Joined Oct 18, 2026" if about_loaded else None}
+
+    async def run(fn):
+        return ""
+
+    monkeypatch.setattr(youtube_listings, "_run", run)
+    monkeypatch.setattr(youtube_listings.p, "channel_about", lambda data: dict(channel))
+    monkeypatch.setattr(quality, "issues", REAL_QUALITY_ISSUES)
+    upstream.reply(200, {"success": True, "name": "Hana Lee", "subscriberCount": None})
+    response = make().get("/v1/youtube/channel", params={"handle": "Hana.lee.kori2"})
+    assert (response.status_code, response.json()["error"]) == (502, "incomplete_response")
+    assert "profile.followers" in response.json()["missing_fields"]
+    assert len(upstream.requests) == (0 if about_loaded else 1)
+    assert (fallback.HEADER in response.headers) is not about_loaded
+
+
+def test_a_burst_of_fallbacks_is_not_queued_behind_the_extractor_worker_count(make):
+    make(SOCIALSCRAPE_MAX_WORKERS="8")
+    assert fallback._pool()._max_workers == 32
+    fallback.shutdown_pool()
+    make(SOCIALSCRAPE_MAX_WORKERS="16")
+    assert fallback._pool()._max_workers == 64
+
+
 def test_an_old_partial_cache_entry_cannot_bypass_tracking_quality(make, upstream, monkeypatch, tmp_path):
     from socialscrape.cache import ResponseCache
     complete = {"success": True, "user": {"id": "1", "uniqueId": "someone", "verified": False,

@@ -231,6 +231,31 @@ def prepare(path: str, answer: dict) -> dict:
     return answer
 
 
+_SHORT_COUNT = re.compile(r"feed\[(\d+)\]\.(likes|comments)")
+
+
+def unfillable(path: str, answer: dict, missing: list[str]) -> bool:
+    """Whether every missing field is a count YouTube shows nobody, which ScrapeCreators, reading the same pages,
+    answers with the same null: a channel whose about panel loaded (it has a joined date) without a subscriber count,
+    or a short read in full (its date and views) without its like or comment count. From Oct 26 to Nov 3 every one
+    of the 54 YouTube channel and shorts fallbacks ended incomplete too, a credit each."""
+    if not missing:
+        return False
+    if path == "/v1/youtube/channel":
+        return (missing == ["profile.followers"] and bool(answer.get("joinedDateText"))
+                and not answer.get("subscriberCountText"))
+    if path == "/v1/youtube/channel/shorts":
+        shorts = answer.get("shorts")
+        for field in missing:
+            match = _SHORT_COUNT.fullmatch(field)
+            index = int(match.group(1)) if match else -1
+            item = shorts[index] if isinstance(shorts, list) and 0 <= index < len(shorts) else None
+            if not (isinstance(item, dict) and stamp(item.get("publishDate")) and number(item.get("viewCountInt"))):
+                return False
+        return True
+    return False
+
+
 def issues(path: str, params: dict, answer: dict) -> list[str]:
     operation = OPERATIONS.get(path)
     if operation is None:

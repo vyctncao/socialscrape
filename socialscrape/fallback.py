@@ -293,10 +293,15 @@ def install_routes(app, store: PortalStore) -> None:
 
 def _pool() -> ThreadPoolExecutor:
     """Requests to ScrapeCreators run here, not in asyncio's default pool: one that outlives its timeout (a thread
-    can't be stopped) holds a thread of its own until its deadline, never one of anything else's."""
+    can't be stopped) holds a thread of its own until its deadline, never one of anything else's.
+
+    These threads only wait on ScrapeCreators, and the requests a burst keeps past their native budget fall back
+    together: on Nov 3 a tracking batch sent 195 in two minutes, 77 ran out of native time, and with 8 threads here
+    the last 25 waited past the total budget. So this pool is sized for a burst, not like the extractor workers."""
     global _executor
     if _executor is None:
-        _executor = ThreadPoolExecutor(max_workers=get_settings().max_workers, thread_name_prefix="fallback")
+        _executor = ThreadPoolExecutor(max_workers=max(32, 4 * get_settings().max_workers),
+                                       thread_name_prefix="fallback")
     return _executor
 
 
@@ -635,6 +640,8 @@ class FallbackMiddleware:
                     if missing:
                         response = LenientJSONResponse({"success": False, "error": "incomplete_response",
                             "message": "Required tracking fields were not exposed by the source", "missing_fields": missing}, 502)
+                        if quality.unfillable(path, prepared, missing):  # ScrapeCreators would only repeat the gaps
+                            return response
                     else:
                         wrapped = _wrap_cursors(prepared, path, identity, "native", binding)
                         if wrapped != answer:
