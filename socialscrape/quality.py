@@ -256,6 +256,16 @@ def unfillable(path: str, answer: dict, missing: list[str]) -> bool:
     return False
 
 
+def page_level(path: str, missing: list[str]) -> list[str]:
+    """The issues that leave a feed page unusable as a page: no item list, repeated ids or a lost cursor. A gap
+    inside one item (a hidden count, an unread date) leaves every other post on the page trackable, so on a feed it
+    is not one: ScrapeCreators returns such pages as they are, and a page refused is every post on it never tracked.
+    Profiles and single posts keep every issue, so an unknown counter still can't overwrite a stored one."""
+    if OPERATIONS.get(path, ("",))[0] != "feed":
+        return list(missing)
+    return [field for field in missing if not field.startswith("feed[")]
+
+
 def issues(path: str, params: dict, answer: dict) -> list[str]:
     operation = OPERATIONS.get(path)
     if operation is None:

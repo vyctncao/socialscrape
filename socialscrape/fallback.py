@@ -48,6 +48,9 @@ DEFAULT_URL = "https://api.scrapecreators.com"
 # On every response ScrapeCreators served (cache hits of one too): HEADER: PROVIDER. A request with HEADER: off is
 # never sent there, nor answered from the cache with something it served.
 HEADER = "x-socialscrape-fallback"
+# Names the tracking fields a served feed page lacks (a count the source hides, a date it didn't read). The body
+# stays exactly what the source returned; the header is the only place the gap is told.
+MISSING_HEADER = "x-socialscrape-missing"
 TRIGGERS = ("unsupported", "errors", "restricted", "not_found")
 DEFAULT_TRIGGERS = ("unsupported", "errors")
 MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -448,6 +451,17 @@ def _binding(request: Request, body_params: dict) -> dict:
             "body": {k: v for k, v in body_params.items() if k not in _PAGE_PARAMS}}
 
 
+def _gaps(missing: list[str]) -> str:
+    """A header-safe summary of a page's missing fields: the count, then as many names as fit in 400 bytes."""
+    names, size = [], 0
+    for field in missing:
+        if size + len(field) + 1 > 400:
+            break
+        names.append(field)
+        size += len(field) + 1
+    return f"{len(missing)}: {','.join(names)}"
+
+
 def _wrap_cursors(answer: dict, path: str, identity: str, provider: str = PROVIDER, binding: dict | None = None) -> dict:
     """Bind every subsequent page to the provider that produced its continuation."""
     allowed = _PATH_CURSOR_PARAMS.get(path, set())
@@ -609,6 +623,7 @@ class FallbackMiddleware:
         native_seconds = (total if native_cursor else total * 2 / 3 if path.endswith("/transcript")
                           else min(self.env.native_timeout, total * 0.4))
         token = budget.deadline.set(time.monotonic() + native_seconds) if "errors" in c.triggers else None
+        partial = None  # the native page, when only some of its items lack fields
         try:
             if provider_page:
                 response = LenientJSONResponse({"success": False, "error": "bad_cursor"}, 400)
@@ -638,10 +653,14 @@ class FallbackMiddleware:
                     prepared = quality.prepare(path, answer)
                     missing = quality.issues(path, params, prepared) if "errors" in c.triggers else []
                     if missing:
+                        if not quality.page_level(path, missing):  # a whole page, short of some items' fields
+                            partial = (prepared, missing, response.status_code,
+                                       {k: v for k, v in response.headers.items()
+                                        if k.lower() not in ("content-length", "content-type")})
                         response = LenientJSONResponse({"success": False, "error": "incomplete_response",
                             "message": "Required tracking fields were not exposed by the source", "missing_fields": missing}, 502)
                         if quality.unfillable(path, prepared, missing):  # ScrapeCreators would only repeat the gaps
-                            return response
+                            return self._native_page(partial, path, identity, binding) if partial else response
                     else:
                         wrapped = _wrap_cursors(prepared, path, identity, "native", binding)
                         if wrapped != answer:
@@ -655,6 +674,8 @@ class FallbackMiddleware:
             headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
             local = _json_object(payload)
             if local is None or native_cursor or (not provider_page and _trigger(local_status, local.get("error"), local.get("account_deactivated") is True) not in c.triggers):
+                if partial:  # a native continuation can't be asked of the provider: serve the page it has
+                    return self._native_page(partial, path, identity, binding)
                 return Response(payload, local_status, headers=headers)
             headers = {k: v for k, v in headers.items() if k.lower() != "content-type"}
         finally:
@@ -684,11 +705,22 @@ class FallbackMiddleware:
         if answer is not None and status is not None and 200 <= status < 300:
             answer = quality.prepare(path, answer)
             if missing := quality.issues(path, params, answer):
+                if not quality.page_level(path, missing):
+                    # ScrapeCreators' own page with the same kind of gaps: serve whichever page knows more.
+                    if partial and len(partial[1]) < len(missing):
+                        return self._native_page(partial, path, identity, binding)
+                    answer = _wrap_cursors(answer, path, identity, binding=binding)
+                    return LenientJSONResponse(answer, status, headers={HEADER: PROVIDER, MISSING_HEADER: _gaps(missing)})
+                if partial:
+                    return self._native_page(partial, path, identity, binding)
                 return LenientJSONResponse({"success": False, "error": "incomplete_response",
                     "message": "Required tracking fields were not exposed by either source", "missing_fields": missing,
                     "fallback": {"provider": PROVIDER, "status": status, "error": "incomplete_response"}}, 502,
                     headers={HEADER: PROVIDER})
         no_local_answer = local_status == 501 or code == "bad_cursor"
+        if partial and not (answer is not None and status is not None and 200 <= status < 300):
+            log.info("%s: native page with %d missing fields, ScrapeCreators answered %s", path, len(partial[1]), status)
+            return self._native_page(partial, path, identity, binding)
         if answer is not None and status is not None and (
                 200 <= status < 300 or (no_local_answer and answer is not None)
                 or (no_local_answer and status in (400, 403, 404, 422))):
@@ -704,6 +736,13 @@ class FallbackMiddleware:
             return LenientJSONResponse({"success": False, "error": "fallback_unavailable",
                                         "message": detail["message"], "fallback": detail}, 502, headers=headers)
         return LenientJSONResponse({**local, "fallback": detail}, local_status, headers=headers)
+
+    @staticmethod
+    def _native_page(partial: tuple, path: str, identity: str, binding: dict | None) -> Response:
+        """Serve the native feed page as it is, cursors bound to native, its gaps named in MISSING_HEADER."""
+        answer, missing, status, headers = partial
+        return LenientJSONResponse(_wrap_cursors(answer, path, identity, "native", binding), status,
+                                   headers={**headers, MISSING_HEADER: _gaps(missing)})
 
     async def _ask(self, request: Request, api_key: str, body: bytes | None = None, *,
                    query: list[tuple[str, str]] | None = None, deadline: float | None = None

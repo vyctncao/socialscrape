@@ -55,3 +55,12 @@ def test_only_counts_youtube_shows_nobody_are_unfillable():
     assert not quality.unfillable("/v1/youtube/channel/shorts", shorts, ["feed[7].likes"])
     assert not quality.unfillable("/v1/instagram/user/reels", {"items": []}, ["feed[0].likes"])
     assert not quality.unfillable("/v1/youtube/channel", channel, [])
+
+
+def test_only_page_level_issues_fail_a_feed_while_lookups_keep_every_issue():
+    missing = ["feed[0].likes", "feed[3].date", "feed.duplicate_ids", "feed.next_cursor"]
+    assert quality.page_level("/v1/youtube/channel/shorts", missing) == ["feed.duplicate_ids", "feed.next_cursor"]
+    assert quality.page_level("/v2/instagram/user/posts", ["feed[4].views"]) == []
+    assert quality.page_level("/v3/tiktok/profile/videos", ["feed.items"]) == ["feed.items"]
+    assert quality.page_level("/v1/youtube/video", ["post.likeCountInt"]) == ["post.likeCountInt"]
+    assert quality.page_level("/v1/tiktok/profile", ["profile.followerCount"]) == ["profile.followerCount"]

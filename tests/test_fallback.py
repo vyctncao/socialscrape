@@ -956,3 +956,85 @@ def test_mcp_native_only_request_does_not_spend_fallback_credits(make, upstream)
     result = c.post("/mcp", json=call).json()["result"]
     assert "isError" not in result and json.loads(result["content"][0]["text"]) == SC_OK
     assert len(upstream.requests) == 1
+
+
+# A short's like and comment counts are often hidden, and its date is sometimes unread. ScrapeCreators returns those
+# pages as they are. Refusing the whole page (a 502) lost every post on it: Kori's discovery read seven channels'
+# Shorts as failures for days while ScrapeCreators served them.
+SHORT = {"id": "s1", "title": "comment kori", "publishDate": "2026-11-04T10:00:00-08:00", "viewCountInt": 900,
+         "likeCountInt": 12, "commentCountInt": 1}
+SHORTS_PATH = "/v1/youtube/channel/shorts"
+
+
+def _native_shorts(monkeypatch, shorts, cursor=None):
+    from socialscrape.platforms import youtube_listings
+
+    async def channel_tab(*args, **kwargs):
+        return [("shortsLockupViewModel", short) for short in shorts], cursor, None
+
+    async def extras(ids):
+        return {}
+
+    monkeypatch.setattr(youtube_listings, "_channel_tab", channel_tab)
+    monkeypatch.setattr(youtube_listings, "_video_extras", extras)
+    monkeypatch.setattr(youtube_listings.p, "shorts_lockup", lambda node: dict(node))
+    monkeypatch.setattr(youtube_listings.p, "sc_short", lambda short, extra: short)
+    monkeypatch.setattr(quality, "issues", REAL_QUALITY_ISSUES)
+
+
+def test_a_shorts_page_with_hidden_counts_is_served_without_paying(make, upstream, monkeypatch):
+    hidden = {**SHORT, "id": "s2", "likeCountInt": None, "commentCountInt": None}
+    _native_shorts(monkeypatch, [SHORT, hidden])
+    response = make().get(SHORTS_PATH, params={"handle": "learnwbushra", "sort": "newest"})
+    assert response.status_code == 200
+    assert [s["id"] for s in response.json()["shorts"]] == ["s1", "s2"]
+    assert response.headers[fallback.MISSING_HEADER] == "2: feed[1].likes,feed[1].comments"
+    assert fallback.HEADER not in response.headers and upstream.requests == []
+
+
+@pytest.mark.parametrize("provider_gaps,served", [(0, "provider"), (1, "provider"), (3, "native")])
+def test_a_page_with_unread_dates_is_served_from_whichever_source_knows_more(
+        make, upstream, monkeypatch, provider_gaps, served):
+    unread = {**SHORT, "id": "s2", "publishDate": None, "likeCountInt": None}  # 2 gaps natively
+    _native_shorts(monkeypatch, [SHORT, unread])
+    theirs = [dict(SHORT), {**SHORT, "id": "s2"}]
+    for field in ("publishDate", "likeCountInt", "commentCountInt")[:provider_gaps]:
+        theirs[1][field] = None
+    upstream.reply(200, {"success": True, "shorts": theirs})
+    response = make().get(SHORTS_PATH, params={"handle": "someone"})
+    assert response.status_code == 200 and len(upstream.requests) == 1
+    assert [s["id"] for s in response.json()["shorts"]] == ["s1", "s2"]
+    if served == "provider":
+        assert response.headers[fallback.HEADER] == fallback.PROVIDER
+        assert (fallback.MISSING_HEADER in response.headers) is bool(provider_gaps)
+    else:
+        assert fallback.HEADER not in response.headers
+        assert response.headers[fallback.MISSING_HEADER].startswith("2: ")
+
+
+@pytest.mark.parametrize("reply", [(500, {"success": False}), (402, {"success": False}), (404, {"success": False})])
+def test_the_native_page_is_served_when_the_provider_cannot_help(make, upstream, monkeypatch, reply):
+    _native_shorts(monkeypatch, [SHORT, {**SHORT, "id": "s2", "publishDate": None}])
+    upstream.reply(*reply)
+    response = make().get(SHORTS_PATH, params={"handle": "someone"})
+    assert response.status_code == 200 and [s["id"] for s in response.json()["shorts"]] == ["s1", "s2"]
+    assert response.headers[fallback.MISSING_HEADER] == "1: feed[1].date"
+
+
+def test_a_page_level_problem_still_asks_the_provider_and_fails_when_it_cannot(make, upstream, monkeypatch):
+    _native_shorts(monkeypatch, [SHORT, dict(SHORT)])  # the same short twice: feed.duplicate_ids
+    upstream.reply(200, {"success": True, "shorts": [SHORT, dict(SHORT)]})
+    response = make().get(SHORTS_PATH, params={"handle": "someone"})
+    assert (response.status_code, response.json()["error"]) == (502, "incomplete_response")
+    assert response.json()["missing_fields"] == ["feed.duplicate_ids"]
+
+
+def test_a_native_continuation_page_with_gaps_is_served(make, upstream, monkeypatch):
+    _native_shorts(monkeypatch, [{**SHORT, "commentCountInt": None}], cursor="next-native-page")
+    c = make()
+    first = c.get(SHORTS_PATH, params={"handle": "someone"})
+    token = first.json()["continuationToken"]
+    assert first.status_code == 200 and token.startswith("ss1.")
+    second = c.get(SHORTS_PATH, params={"handle": "someone", "continuationToken": token})
+    assert second.status_code == 200 and second.json()["shorts"][0]["id"] == "s1"
+    assert second.headers[fallback.MISSING_HEADER] == "1: feed[0].comments" and upstream.requests == []
