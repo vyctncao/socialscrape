@@ -78,7 +78,10 @@ def _link(value: str) -> str | None:
     """`value` as an address to open: http(s), with a host, nothing a link could hide."""
     if not _LINK.fullmatch(value):
         return None
-    return value if urllib.parse.urlsplit(value).hostname else None
+    try:
+        return value if urllib.parse.urlsplit(value).hostname else None
+    except ValueError:  # 'https://[::1': urllib won't read a broken IPv6 host
+        return None
 
 
 def _fill(template: str | None, value: str, pattern: re.Pattern[str] = _ID) -> str | None:
@@ -97,7 +100,7 @@ def _youtube_channel(params: dict[str, str]) -> dict[str, Any] | None:
     from .platforms.youtube_listings import channel_base
     try:
         base = channel_base(channel_id or None, None if channel_id else handle)
-    except ApiError:
+    except (ApiError, ValueError):
         base = None
     shown = channel_id or (handle if _link(handle) else "@" + handle.lstrip("@＠﹫"))
     return _target("Channel", shown, f"https://www.youtube.com/{base}" if base else None)
@@ -114,7 +117,15 @@ def describe(path: str, query: str | None) -> dict[str, Any] | None:
     """{label, value, url} for the request's subject, or None for a request without one (credit balance, ...).
 
     `value` is what was sent, decoded ("https://www.instagram.com/p/…", "@handle", "#tag", a search's words).
-    `url` is where it lives on the platform, or None when that can't be told from the request alone."""
+    `url` is where it lives on the platform, or None when that can't be told from the request alone. Any stored
+    request can be described: whatever a client sent, this never raises, since one row must not fail the history."""
+    try:
+        return _describe(path, query)
+    except (ApiError, ValueError):
+        return None
+
+
+def _describe(path: str, query: str | None) -> dict[str, Any] | None:
     params = {key: value.strip() for key, value in urllib.parse.parse_qsl(query or "") if value.strip()}
     parts = path.split("/")
     platform = parts[2] if len(parts) > 2 else ""
@@ -137,7 +148,7 @@ def describe(path: str, query: str | None) -> dict[str, Any] | None:
             from .platforms.instagram import clean_highlight_id
             try:
                 return _target(label, ident, _fill(template, clean_highlight_id(ident)))
-            except ApiError:
+            except (ApiError, ValueError):
                 return _target(label, ident, None)
         return _target(label, ident, _link(ident) or _fill(template, ident))
     if page := params.get("pageId"):

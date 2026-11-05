@@ -70,6 +70,21 @@ def test_requests_without_a_subject_have_none():
     assert describe("/v1/tiktok/profile", "handle=+") is None  # blank values name nothing
 
 
+@pytest.mark.parametrize("path,query", [
+    ("/v1/instagram/post", "url=https%3A%2F%2F%5B%3A%3A1"),  # urllib raises on a broken IPv6 host
+    ("/v1/tiktok/profile", "handle=https%3A%2F%2F%5Bx"),
+    ("/v1/youtube/channel", "handle=https%3A%2F%2F%5Bx"),
+    ("/v1/youtube/channel", "channelId=https%3A%2F%2Fwww.youtube.com%2F%5Bx"),
+    ("/v1/instagram/user/highlight/detail", "id=https%3A%2F%2F%5Bx"),
+    ("/v1/spotify/track", "id=https%3A%2F%2F%5Bx"),
+    ("/v1/youtube/channel", "handle=%00%01"),
+    ("", ""), ("/", "%"), ("/v1/tiktok/profile", "handle"),
+])
+def test_whatever_a_client_sent_is_described_without_raising(path, query):
+    target = describe(path, query)
+    assert target is None or (target["url"] is None and isinstance(target["value"], str))
+
+
 def test_history_api_carries_each_requests_target(tmp_path, monkeypatch):
     from socialscrape.config import get_settings
     from socialscrape.main import create_app
