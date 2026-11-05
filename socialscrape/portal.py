@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from cryptography.fernet import Fernet, InvalidToken
 
+from . import targets
 from .config import PLATFORMS, ConfigError, validate_proxy
 
 SESSION_COOKIE = "socialscrape_session"
@@ -1497,14 +1498,17 @@ def install_portal(app, store: PortalStore) -> None:
     @router.get("/portal/api/history")
     async def history(request: Request, limit: int = 100, fallback: bool | None = None):
         principal = _require(request)
-        return {"requests": store.history(principal, limit, fallback), "counts": store.history_counts(principal)}
+        rows = store.history(principal, limit, fallback)
+        for row in rows:  # what each request was about: the link it sent, the profile it named, ...
+            row["target"] = targets.describe(row["path"], row["query"])
+        return {"requests": rows, "counts": store.history_counts(principal)}
 
     @router.get("/portal/api/history/{request_id}")
     async def history_detail(request: Request, request_id: int):
         detail = store.history_detail(_require(request), request_id)
         if not detail:
             raise HTTPException(404, "Request history entry not found")
-        return detail
+        return {**detail, "target": targets.describe(detail["path"], detail["query"])}
 
     @router.get("/portal/api/usage")
     async def usage(request: Request, interval: str = "", tz: str = "UTC",

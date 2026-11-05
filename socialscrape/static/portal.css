@@ -162,6 +162,11 @@ td code{font-size:11px;white-space:normal;min-width:200px;display:block}
 .legend-swatch.other{background:var(--text-3)}
 .history-row .route-identity>span{display:grid;gap:var(--space-1);min-width:0}
 .history-query{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;color:var(--text-2);font-size:var(--fs-xs)}
+.history-target{display:block;overflow:hidden;text-overflow:ellipsis;color:var(--text-2);font-size:var(--fs-xs)}
+.history-target .history-link{display:inline-flex;align-items:center;gap:var(--space-1);max-width:100%;vertical-align:top}
+.history-target .history-link>span{overflow:hidden;text-overflow:ellipsis}
+.history-link .icon{display:inline-block;width:13px;height:13px;vertical-align:-2px}
+.history-facts .history-link .icon{margin-left:var(--space-1)}
 .history-action{position:sticky;right:0;background:var(--surface-1);text-align:right}
 .history-more{display:flex;justify-content:center;margin-top:var(--space-4)}
 .history-dialog{display:flex;flex-direction:column;overflow:hidden;width:min(920px,calc(100% - 32px))}
@@ -446,6 +451,7 @@ button.text-link{background:none;border:0;color:var(--text-1);font:inherit;min-h
 .history-facts div{min-width:0}
 .history-facts dt{font-size:11px;color:var(--text-2)}
 .history-facts dd{margin:4px 0 0;overflow-wrap:anywhere}
+.history-facts .history-fact-wide{grid-column:1/-1}
 .history-response{max-height:60vh;min-height:220px;margin:0;white-space:pre-wrap;overflow:auto}
 .modal-body:has(.history-response){position:relative}
 .history-detail-loading .history-response{padding:var(--space-5);border-radius:var(--r-md);background:var(--surface-0)}
