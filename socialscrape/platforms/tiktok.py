@@ -95,7 +95,7 @@ _profiles: dict[str, tuple[float, dict[str, Any]]] = {}
 _profiles_lock = threading.Lock()
 _cooling: dict[str, tuple[float, float]] = {}  # egress -> (monotonic end of its item_list window, window length)
 _cooling_lock = threading.Lock()
-_regions: dict[str, tuple[float, str | ApiError]] = {}  # handle -> (expiry, region or the error it answered)
+_regions: dict[str, tuple[float, str | dict[str, Any] | ApiError]] = {}  # handle -> (expiry, region or the error it answered)
 _regions_lock = threading.Lock()
 
 
@@ -640,14 +640,14 @@ def _embed_feed_page(ydl: yt_dlp.YoutubeDL, name: str, cursor: int, video_count:
 
 def _embed_own_sound_posts(ydl: yt_dlp.YoutubeDL, name: str, prof: dict[str, Any], tries: int = 2,
                            deadline: float | None = None) -> list[dict[str, Any]] | None:
-    """The first `tries` posts on the creator's embed page that use its own sound (each read from its own page, until
-    `deadline`), for _account_region when item_list is blocked. A post answering 10204 is passed over (nothing pages
-    past it here); None when the embed lists no post, or none was found while some went unread."""
+    """Read embed posts until `tries` own sounds are found or the deadline expires, keeping borrowed sounds too.
+    Both can identify the account in a music feed. None when no post could be read; unreadable posts are skipped."""
     ids = _embed_ids(ydl, name)
     if not ids:
         return None
     found: list[dict[str, Any]] = []
     unread = False
+    others: list[dict[str, Any]] = []
     for aweme_id in ids:
         if len(found) >= tries:
             break
@@ -662,9 +662,12 @@ def _embed_own_sound_posts(ydl: yt_dlp.YoutubeDL, name: str, prof: dict[str, Any
             log.info("tiktok: embed post %s of %s skipped: %s", aweme_id, name, exc.message)
             unread = True
             continue
-        if item is not None and _own_sound(prof, item):
-            found.append(item)
-    return None if unread and not found else found  # posts it couldn't read may be the own-sound ones: a 503
+        if item is not None:
+            if _own_sound(prof, item):
+                found.append(item)
+            else:
+                others.append(item)
+    return None if unread and not (found or others) else found + others
 
 
 def _own_sound(prof: dict[str, Any], it: dict[str, Any]) -> bool:
@@ -675,13 +678,6 @@ def _own_sound(prof: dict[str, Any], it: dict[str, Any]) -> bool:
 
 
 _REGION_LOOKUPS = 5  # distinct sound feeds asked per region lookup, about half a second each
-
-
-class _NoPublicPosts(NotFound):
-    """TikTok's own count says the account has no public posts. Every source reads the region off a post (the
-    ScrapeCreators fallback answers "No videos found for this profile"), so this 404 is final: it never falls back."""
-
-    code = "no_public_posts"
 
 
 def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dict[str, Any]],
@@ -1049,13 +1045,13 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
               "from the app API's author.region on one of the creator's recent posts, found in the first page of "
               "the app feed (music/aweme) of a sound they used: the creator's own original sounds first, then the "
               "other sounds of their recent posts, up to 5 distinct sounds. That usually costs 3-4 TikTok requests. "
-              "404 no_public_posts when the account has no public posts (final: it never falls back, since every "
-              "source reads the region off a post). 404 region_unavailable when no asked feed lists the creator's "
+              "200 with region:null, region_available:false and reason:no_public_posts for an existing account with "
+              "no public posts (not a missing account; no paid fallback). 404 region_unavailable when no asked feed lists the creator's "
               "posts. When the app API can't be reached "
               "for any of those sounds, the error is the retryable one /v1/tiktok/song gives (502 proxy_error/"
               "network_error, 503 when throttled), not a 404. When item_list is throttled or bot-checked (see "
               "/v3/tiktok/profile/videos), the creator's posts are found on its embed page and read from their own "
-              "pages until two use its own sound. Also at /v1/tiktok/profile-region. A handle's answer (its region, "
+              "pages until two use its own sound, keeping borrowed sounds as candidates too. Also at /v1/tiktok/profile-region. A handle's answer (its region, "
               "the 404 or the 503) is reused for 90 s, so a retry at once or through the alias asks TikTok nothing. "
               "TikTokSoundIE is marked broken in yt-dlp, so this may stop working without notice.")
 async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
@@ -1068,16 +1064,19 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
         if isinstance(hit[1], ApiError):  # a fresh copy: raising the kept one again would grow its traceback
             err = hit[1]
             raise type(err)(err.message, code=err.code, retry_after=math.ceil(left) if err.status == 503 else None)
+        if isinstance(hit[1], dict):
+            return {**hit[1], "handle": name}
         return {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": hit[1]}
 
-    def go(ydl: yt_dlp.YoutubeDL) -> str | None:
+    def go(ydl: yt_dlp.YoutubeDL) -> str | dict[str, Any] | None:
         deadline = time.monotonic() + _EMBED_SECONDS
         prof = _profile(ydl, name)
         if prof["private"]:
             raise Forbidden("This account is private")
         if prof["videoCount"] == 0:
-            raise _NoPublicPosts("This account has no public posts, and TikTok shows an account's region only "
-                                 "through its posts")
+            return {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": None,
+                    "region_available": False, "reason": "no_public_posts",
+                    "message": "This account has no public posts; TikTok does not expose its account region."}
         ie, cursor, items = ydl.get_info_extractor("TikTokUser"), int(time.time() * 1000), []
         try:
             for _ in range(2):  # a second round only for accounts idle for over _FEED_HOPS weeks
@@ -1089,7 +1088,7 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
                                                                                        deadline=deadline))
         return _account_region(ydl, prof, items)
 
-    def remember(outcome: str | ApiError) -> None:
+    def remember(outcome: str | dict[str, Any] | ApiError) -> None:
         with _regions_lock:
             _regions.pop(key, None)
             while len(_regions) >= _PROFILE_MAX:
@@ -1097,10 +1096,13 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
             _regions[key] = (time.monotonic() + _REGION_TTL, outcome)
 
     try:
-        region = await with_ydl(P, go, extractor_args=_APP_API)
-    except (UpstreamBlocked, _NoPublicPosts) as exc:
+        region = await with_ydl(P, go, extractor_args=_APP_API, confirm_not_found=True, use_cookies=False)
+    except UpstreamBlocked as exc:
         remember(exc)
         raise
+    if isinstance(region, dict):
+        remember(region)
+        return region
     if not region:
         missing = NotFound("Could not read this account's region: the first page of each sound its recent posts "
                            "use doesn't list them", code="region_unavailable")

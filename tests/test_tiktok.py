@@ -983,7 +983,7 @@ def test_profile_region_route(client, fake_ydl, monkeypatch):
 
 def test_an_account_without_posts_has_no_region_and_does_not_fall_back(client, fake_ydl, monkeypatch):
     """minjun.kim.kori has no posts: ScrapeCreators answers "No videos found for this profile", so asking it is a
-    wasted call. The 404 names the reason, is kept like any answer, and no fallback trigger covers it."""
+    wasted call. An existing account returns a successful unknown-region result, cached like any answer."""
     from socialscrape.fallback import _trigger
 
     monkeypatch.setattr(tiktok, "_profiles", {})
@@ -993,7 +993,8 @@ def test_an_account_without_posts_has_no_region_and_does_not_fall_back(client, f
     monkeypatch.setattr(tiktok, "_music_page", lambda *args: pytest.fail("no post, so no sound to ask"))
     for _ in range(2):
         r = client.get("/v1/tiktok/profile/region", params={"handle": "nobody.posts"})
-        assert (r.status_code, r.json()["error"]) == (404, "no_public_posts") and "no public posts" in r.json()["message"]
+        assert r.status_code == 200 and r.json()["region"] is None
+        assert r.json()["region_available"] is False and r.json()["reason"] == "no_public_posts"
     assert pages == ["nobody.posts"]  # the second answer is the kept one
     assert _trigger(404, "no_public_posts") is None and _trigger(404, "region_unavailable") == "not_found"
 
@@ -2254,3 +2255,32 @@ def test_tiktok_api_tokens_stay_out_of_settings_repr(monkeypatch):
         assert "research-secret" not in shown and "shop-secret" not in shown
     finally:
         get_settings.cache_clear()
+
+
+def test_region_embed_keeps_borrowed_sounds(monkeypatch):
+    """When item_list blocks, creators using only other people's music still have region candidates."""
+    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: ["1", "2"])
+    posts = {"1": {"id": "1", "music": {"id": "555", "original": False}},
+             "2": {"id": "2", "music": {"id": "556", "original": False}}}
+    monkeypatch.setattr(tiktok, "_embed_post", lambda ydl, name, ident: posts[ident])
+    found = tiktok._embed_own_sound_posts(None, "creator", {"id": "42", "nickname": "Creator"})
+    assert found == list(posts.values())
+    monkeypatch.setattr(tiktok, "_music_page", lambda *args: {
+        "aweme_list": [{"aweme_id": "1", "author": {"uid": "42", "region": "CA"}}]})
+    assert tiktok._account_region(None, {"id": "42", "nickname": "Creator"}, found) == "CA"
+
+
+def test_empty_region_alias_keeps_unknown_and_anonymous_lookup(client, monkeypatch):
+    calls = []
+
+    async def run(platform, fn, **options):
+        calls.append(options)
+        return fn(None)
+
+    monkeypatch.setattr(tiktok, "with_ydl", run)
+    monkeypatch.setattr(tiktok, "_profile", lambda *args: {"private": False, "videoCount": 0})
+    first = client.get("/v1/tiktok/profile/region", params={"handle": "olivia.le634"})
+    again = client.get("/v1/tiktok/profile-region", params={"handle": "OLIVIA.LE634"})
+    assert first.status_code == again.status_code == 200
+    assert first.json()["region"] is None and again.json()["reason"] == "no_public_posts"
+    assert len(calls) == 1 and calls[0]["use_cookies"] is False and calls[0]["confirm_not_found"] is True

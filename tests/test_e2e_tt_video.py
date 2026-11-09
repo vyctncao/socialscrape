@@ -522,7 +522,8 @@ def test_region_without_own_sound_is_404(client):
 @pytest.mark.live
 def test_region_errors(client):
     err(client, REGION, 403, "forbidden", handle=PRIVATE_USER)
-    err(client, REGION, 404, "region_unavailable", handle=EMPTY_USER)
+    empty = ok(client, REGION, handle=EMPTY_USER)
+    assert empty["region"] is None and empty["reason"] == "no_public_posts"
     err(client, REGION, 404, "not_found", handle=MISSING_USER)
     err(client, REGION, 400, "bad_request", handle="@")
     assert err(client, REGION, 400, "bad_request")["message"] == "handle: Field required"
