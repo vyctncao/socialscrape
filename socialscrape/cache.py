@@ -165,6 +165,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
 
         key = cache_key(request)
         hit = self.cache.get(key, max_age) if max_age is not None else None
+        missing_fields: list[str] = []
         if (hit and getattr(request.app.state, "fallback_env", None) is not None
                 and request.headers.get("x-socialscrape-fallback", "").strip().lower() != "off"):
             from . import fallback, quality
@@ -173,8 +174,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     and request.url.path in quality.OPERATIONS):
                 body, stored_at, paid = hit
                 prepared = quality.prepare(request.url.path, body)
-                if quality.issues(request.url.path, dict(request.query_params), prepared):
-                    hit = None  # do not let a pre-upgrade partial cache entry bypass the tracking contract
+                missing_fields = quality.issues(request.url.path, dict(request.query_params), prepared)
+                if quality.page_level(request.url.path, missing_fields):
+                    hit = None  # invalid pages and incomplete profiles/posts must still be fetched live
                 else:
                     hit = (fallback._wrap_cursors(prepared, request.url.path, fallback._request_identity(request, {}),
                                                   fallback.PROVIDER if paid else "native", fallback._binding(request, {})), stored_at, paid)
@@ -184,6 +186,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
             body["cached"] = True
             body["cached_at"] = stored_at.isoformat().replace("+00:00", "Z")
             headers = {"x-cache": "hit"}
+            if missing_fields:
+                from .fallback import MISSING_HEADER, _gaps
+                headers[MISSING_HEADER] = _gaps(missing_fields)
             if fallback:  # fallback.HEADER and PROVIDER (that module imports this one)
                 headers["x-socialscrape-fallback"] = "scrapecreators"
             # Lenient: a row put() didn't write can hold what JSON can't write (a NaN, half an emoji)

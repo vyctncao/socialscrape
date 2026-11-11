@@ -1038,3 +1038,34 @@ def test_a_native_continuation_page_with_gaps_is_served(make, upstream, monkeypa
     second = c.get(SHORTS_PATH, params={"handle": "someone", "continuationToken": token})
     assert second.status_code == 200 and second.json()["shorts"][0]["id"] == "s1"
     assert second.headers[fallback.MISSING_HEADER] == "1: feed[0].comments" and upstream.requests == []
+
+
+@pytest.mark.parametrize("paid", [False, True])
+def test_cached_partial_feed_does_not_repeat_scrapes_or_lose_gap_metadata(make, upstream, monkeypatch, tmp_path, paid):
+    from socialscrape.cache import ResponseCache
+    hidden = {**SHORT, "commentCountInt": None}
+    path = str(tmp_path / "partial.sqlite3")
+    cache = ResponseCache(path)
+    cache.put(SHORTS_PATH + "?handle=someone", json.dumps({"success": True, "shorts": [hidden]}), fallback=paid)
+    cache.close()
+    _native_shorts(monkeypatch, [SHORT])
+    client = make(SOCIALSCRAPE_CACHE_PATH=path)
+    result = client.get(SHORTS_PATH, params={"handle": "someone", "cache_max_age": "1d"})
+    assert result.status_code == 200 and result.headers["x-cache"] == "hit"
+    assert result.json()["shorts"][0]["commentCountInt"] is None
+    assert result.headers[fallback.MISSING_HEADER] == "1: feed[0].comments"
+    assert (fallback.HEADER in result.headers) is paid
+    assert not upstream.requests
+
+
+def test_cached_duplicate_feed_still_refetches_instead_of_accepting_invalid_page(make, upstream, monkeypatch, tmp_path):
+    from socialscrape.cache import ResponseCache
+    path = str(tmp_path / "duplicate.sqlite3")
+    cache = ResponseCache(path)
+    cache.put(SHORTS_PATH + "?handle=someone", json.dumps({"success": True, "shorts": [SHORT, SHORT]}))
+    cache.close()
+    _native_shorts(monkeypatch, [SHORT])
+    client = make(SOCIALSCRAPE_CACHE_PATH=path)
+    result = client.get(SHORTS_PATH, params={"handle": "someone", "cache_max_age": "1d"})
+    assert result.status_code == 200 and result.headers["x-cache"] == "miss"
+    assert len(result.json()["shorts"]) == 1 and not upstream.requests
