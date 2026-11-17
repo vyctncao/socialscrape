@@ -33,6 +33,7 @@ import yt_dlp
 
 from . import account, fallback, platforms, selftest, sessions, transcribe, ytdlp
 from .cache import CacheMiddleware, ResponseCache
+from .coalesce import CoalesceMiddleware
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
                      validation_error_handler)
@@ -191,11 +192,14 @@ def create_app() -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, http_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_error_handler)
     app.state.fallback_env = fallback_env
-    # Starlette runs the last-added middleware first: auth, usage, cache, then the ScrapeCreators fallback, so only
-    # authenticated requests spend credits and its answers are cached. The cache is opened here because Starlette
-    # builds middleware on the first request, too late to stop startup on an unusable SOCIALSCRAPE_CACHE_PATH.
+    # Starlette runs the last-added middleware first: auth, usage, sharing, cache, then the ScrapeCreators fallback,
+    # so only authenticated requests spend credits, its answers are cached, and identical requests made at the same
+    # time share one answer (and one paid call) while each is still recorded. The cache is opened here because
+    # Starlette builds middleware on the first request, too late to stop startup on an unusable
+    # SOCIALSCRAPE_CACHE_PATH.
     app.add_middleware(fallback.FallbackMiddleware, env=fallback_env)
     app.add_middleware(CacheMiddleware, cache=ResponseCache(settings.cache_path) if settings.cache_path else None)
+    app.add_middleware(CoalesceMiddleware)
     app.add_middleware(UsageMiddleware)
     app.add_middleware(ApiKeyMiddleware)
 

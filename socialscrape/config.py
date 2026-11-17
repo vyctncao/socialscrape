@@ -138,7 +138,9 @@ def get_settings() -> Settings:
         api_keys=frozenset(k.strip() for k in keys.split(",") if k.strip()),
         public_url=(_env("SOCIALSCRAPE_PUBLIC_URL", "") or "").rstrip("/"),
         cache_path=DEFAULT_CACHE_PATH if raw_cache is None else _path(raw_cache.strip()),
-        max_workers=int(_number("SOCIALSCRAPE_MAX_WORKERS", "8", int, minimum=1)),
+        # The workers mostly wait on the network. 8 couldn't keep up with a tracking batch (~4 requests a second,
+        # ~3.5 s each): the batch queued past its 20 s native budget and fell back to ScrapeCreators.
+        max_workers=int(_number("SOCIALSCRAPE_MAX_WORKERS", "24", int, minimum=1)),
         request_timeout=_number("SOCIALSCRAPE_REQUEST_TIMEOUT", "180", float, minimum=0, inclusive=False),
         socket_timeout=_socket_timeout(),
         proxy=_proxy(),
