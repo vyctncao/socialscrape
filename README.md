@@ -181,7 +181,7 @@ With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fail
   |---|---|---|
   | `unsupported` | `501` (an endpoint or option this server can't serve: TikTok Shop, Instagram pagination, ...), or `400 bad_cursor` (a token from an earlier ScrapeCreators page) | on |
   | `errors` | `500`, `502`, `503`: blocks, rate limits, timeouts, network failures, a server bug | on |
-  | `restricted` | `403`: login-gated, age- or geo-restricted content. Not a private account or post: no source sees more of it, so its `403` (with `"private": true`) stays | off |
+  | `restricted` | `403`: login-gated, age- or geo-restricted content. Not a private account or post (its `403` has `"private": true`), nor a profile Instagram hides from logged-out visitors (`restricted_profile`): no source answered those, so their `403` stays | off |
   | `not_found` | `404`, including typed native misses such as `ad_not_found` (not `/v1/tiktok/profile`'s `account_deactivated` 404 for an account that doesn't exist, which is what ScrapeCreators answers too) | off |
 
   Other errors (a bad param, a missing key, a wrong method, `422 estimate_only`) never fall back. Native `ss1.` continuation state is never sent to ScrapeCreators. Requests with `x-socialscrape-fallback: off` stay native (the dashboard's endpoint tests send it unless you allow fallback; a cached paid response is bypassed too).

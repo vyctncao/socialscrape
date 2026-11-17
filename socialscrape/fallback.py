@@ -67,6 +67,9 @@ _CATALOG_METHODS["/v1/instagram/profile"] |= {"POST"}
 _CURSOR_PARAMS = frozenset({"continuationToken", "cursor", "max_cursor", "max_id", "next_max_id", "paginationToken"})
 CURSOR_PARAMS = _CURSOR_PARAMS  # the paging params whose values may be this server's own cursor tokens
 _FINAL_NOT_FOUND = frozenset({"no_public_posts"})  # 404s ScrapeCreators would only repeat
+# 403s it can't improve either: a profile Instagram hides from logged-out visitors. None of the 36 Instagram 403s in a
+# week of production history (Nov 11-17) was answered by ScrapeCreators; dancewdee's came back as a 502 fallback.
+_FINAL_FORBIDDEN = frozenset({"restricted_profile"})
 _CURSOR_FIELDS = _CURSOR_PARAMS | {"next_cursor", "nextCursor", "end_cursor", "next_page_token"}
 _PAGE_PARAMS = _CURSOR_PARAMS | {"next_page_id", "page", "offset", CACHE_PARAM}
 _PATH_CURSOR_PARAMS = {entry["path"]: set(entry.get("params", ())) & _CURSOR_PARAMS
@@ -399,7 +402,7 @@ def _trigger(status: int, code: str | None, final: bool = False) -> str | None:
     if status == 403:
         # Not private content (`private` in the error): ScrapeCreators sees no more of it. yapwithbushra's private
         # account came back from it as an unusable page, a 502 counted as a fallback in place of the native 403.
-        return None if final else "restricted"
+        return None if final or code in _FINAL_FORBIDDEN else "restricted"
     if status == 404:  # region_unavailable, ad_not_found and company_not_found also need the optional second source
         # ...but not an answer no second source could improve: an account with no posts has no region anywhere
         return None if final or code in _FINAL_NOT_FOUND else "not_found"

@@ -709,6 +709,13 @@ def test_private_content_is_final_and_other_restrictions_still_fall_back(make, u
     result = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all").get(PROFILE, params={"handle": "someone"})
     assert result.status_code == 200 and result.headers[fallback.HEADER] == fallback.PROVIDER
     assert fallback._trigger(403, "forbidden", final=True) is None and fallback._trigger(403, "forbidden") == "restricted"
+    # a profile Instagram hides from logged-out visitors: ScrapeCreators answered none in a week
+    fail_profile(monkeypatch, Forbidden("Instagram hides this profile from logged-out visitors",
+                                        code="restricted_profile"))
+    before = len(upstream.requests)
+    result = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all").get(PROFILE, params={"handle": "someone"})
+    assert (result.status_code, result.json()["error"]) == (403, "restricted_profile")
+    assert len(upstream.requests) == before and fallback.HEADER not in result.headers
 
 
 def test_a_native_deactivated_profile_is_final_and_spends_no_credit(make, upstream, monkeypatch):
