@@ -686,7 +686,7 @@ _REGION_LOOKUPS = 5  # distinct sound feeds asked per region lookup, about half 
 _BUDGET_UNSET = 3600.0
 _SOUND_RESERVE = 8.0  # s still left before another sound feed is asked once one has answered
 _PAGE_RESERVE = 3.0  # s still left before a post page is read for its location
-_LOOKUP_RESERVE = 6.0  # s still left before another follower is looked up for an audience
+_LOOKUP_RESERVE = 8.0  # s still left before another follower is looked up for an audience (one takes 2-5 s)
 
 
 def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dict[str, Any]],
