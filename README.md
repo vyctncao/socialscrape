@@ -44,21 +44,49 @@ retryable block or network/login failure, the service advances to the next proxy
 jars. Use only dedicated throwaway accounts; the dashboard accepts Netscape `cookies.txt` exports and never stores
 platform passwords.
 
-Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
+### Email: invitations and password resets
+
+With [Resend](https://resend.com) set up, the dashboard emails invitations, password reset links and a notice whenever
+a password changes. Set `SOCIALSCRAPE_RESEND_API_KEY`, `SOCIALSCRAPE_EMAIL_FROM` (an address on a domain verified in
+Resend, e.g. `SocialScrape <noreply@example.com>`) and `SOCIALSCRAPE_PUBLIC_URL` (the dashboard's public address), or
+save the same three on the **Team** page, where the key is encrypted like platform settings and **Send test email**
+checks them. Without email, everything still works by link: the owner copies invitation and reset links to share
+privately.
+
+- **Invitations.** One pending invitation per address, valid for 7 days. Resending one issues a new link and ends the
+  old one; the Team page lists pending invitations to resend or revoke.
+- **Forgot password.** `/forgot` answers the same whether or not an account exists, sends at most three links per
+  account per hour, and the link works once within an hour. Setting a new password signs that account out everywhere
+  and ends every other reset link.
+- **Owner-sent resets.** The owner can send any member a reset link (valid 24 hours); the member's current password
+  keeps working until they choose a new one.
+- **Account page.** Signed-in members change their own password at `/app/account`, which signs out their other
+  sessions.
+
+Emailed links always use the configured public URL, never the request's `Host` header, so a forged host can't redirect
+a reset link. Pages that carry an invitation or reset token are sent with `Referrer-Policy: no-referrer` and
+`Cache-Control: no-store`, and the access log shows those paths as `/invite/[redacted]` and `/reset/[redacted]`.
+
+Configuration is through environment variables (the `socialscrape` command takes no arguments besides `--help` and `--version`); see [`.env.example`](.env.example). A blank value means the default (except `SOCIALSCRAPE_CACHE_PATH`, where blank turns the cache off). A value that can't be used, such as `SOCIALSCRAPE_MAX_WORKERS=0`, an unknown `SOCIALSCRAPE_TRANSCRIBE`, a proxy with an unsupported scheme, a cache path that isn't a writable SQLite file, a Resend key without a from address and public URL or a `HOST` that doesn't resolve, stops startup with a one-line message naming the variable. The ones you're most likely to want:
 
 | Variable | Purpose |
 |---|---|
 | `SOCIALSCRAPE_PORTAL_PATH` | Persistent SQLite database for invite-only sign-in, member API keys, history, usage, playground and docs. Empty disables the dashboard. |
+| `SOCIALSCRAPE_RESEND_API_KEY`, `SOCIALSCRAPE_EMAIL_FROM`, `SOCIALSCRAPE_PUBLIC_URL` | Resend email for dashboard invitations and password resets (all three together; or set them on the Team page). Empty means links are shared by hand. |
 | `SOCIALSCRAPE_API_KEYS` | Comma-separated accepted `x-api-key` values. Empty means auth is off; set it before exposing the server. ASCII only: a non-ASCII key stops startup. |
 | `SOCIALSCRAPE_PROXY` | Outbound proxy URL (`http`, `https`, `socks4(a)` or `socks5(h)`). Platforms throttle datacenter IPs quickly. |
 | `SOCIALSCRAPE_COOKIES_{YOUTUBE,TIKTOK,INSTAGRAM}` | Netscape `cookies.txt` per platform. Use throwaway accounts. An unusable file makes that platform answer `500 cookies_error`. |
 | `SOCIALSCRAPE_TRANSCRIBE` | `none` (default), `faster-whisper` or `mlx-whisper` enables AI transcription (`uv sync --extra whisper` / `--extra mlx`). Without the package, transcription answers `501 transcription_unavailable`. |
 | `SOCIALSCRAPE_CACHE_PATH` | SQLite file backing `cache_max_age` (default `.cache/socialscrape.sqlite3`). Blank disables the cache. |
+| `SOCIALSCRAPE_SCRAPECREATORS_API_KEY` | ScrapeCreators key for the [fallback](#scrapecreators-fallback). Empty disables it unless an owner saves one in the dashboard. Ignored without `SOCIALSCRAPE_API_KEYS` or the portal. |
+| `SOCIALSCRAPE_SCRAPECREATORS_FALLBACK` | When it falls back: `unsupported`, `errors`, `restricted`, `not_found`, comma separated, or `all` or `none` (default `unsupported,errors`). |
+| `SOCIALSCRAPE_SCRAPECREATORS_PLATFORMS` | The platforms it falls back for, comma separated (default all three). |
+| `SOCIALSCRAPE_SCRAPECREATORS_URL` | Where it asks (default `https://api.scrapecreators.com`): a relay's base URL, or a test server. |
 | `HOST` / `PORT` | Bind address and port (default `127.0.0.1:8000`). |
 
 ## Compatibility with ScrapeCreators
 
-- **Envelope.** Responses look like `{"success": true, "credits_charged": 0, ...}`. There are no credits, so `credits_remaining` is never sent.
+- **Envelope.** Local responses look like `{"success": true, "credits_charged": 0, ...}` and omit `credits_remaining`; fallback responses preserve ScrapeCreators' own envelope unchanged.
 - **Errors.** Every error, including unknown paths and server bugs, returns `{"success": false, "error": "<code>", "message": "..."}` with these statuses:
 
   | Status | Meaning |
@@ -80,6 +108,24 @@ Configuration is through environment variables (the `socialscrape` command takes
 - **Pagination.** Pagination uses each endpoint's ScrapeCreators parameter name (`continuationToken`, `cursor`, `max_cursor`, ...). The tokens are the platform's own where yt-dlp's machinery exposes them, otherwise opaque `ss1.` tokens.
 - **Params.** A value is read without the whitespace and invisible characters (a byte order mark, zero-width spaces, bidi marks) a copy carries along at either end, and a link without the angle brackets plain text puts around it (`<https://youtu.be/...>`). A value of only those counts as left out, like an empty one.
 - **Response fidelity.** Every implemented endpoint is contract-tested against the key paths and JSON types of ScrapeCreators' example responses. Fields the source can't provide truthfully are left out or null; they are never invented.
+
+## ScrapeCreators fallback
+
+With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fails here can be answered by ScrapeCreators instead: the same path and params are sent to `https://api.scrapecreators.com` with your ScrapeCreators key, and its answer comes back. Owners set the key and choose when it applies on the dashboard's **Fallback** page (`/app/fallback`), or with the `SOCIALSCRAPE_SCRAPECREATORS_*` variables; a saved dashboard value takes the place of its variable, and changes apply to the next request.
+
+- **When.** Each trigger can be turned on or off, and the fallback limited to some platforms:
+
+  | Trigger | Local answer | Default |
+  |---|---|---|
+  | `unsupported` | `501` (an endpoint or option this server can't serve: TikTok comments, Instagram pagination, ...), or `400 bad_cursor` (a token from an earlier ScrapeCreators page) | on |
+  | `errors` | `500`, `502`, `503`: blocks, rate limits, timeouts, network failures, a server bug | on |
+  | `restricted` | `403`: private, login-gated, age- or geo-restricted content | off |
+  | `not_found` | `404 not_found` | off |
+
+  Other errors (a bad param, a missing key, a wrong method, `422 estimate_only`) never fall back, and neither do requests carrying this server's own `ss1.` cursors.
+- **What you get.** ScrapeCreators' success, unchanged, with an `x-socialscrape-fallback: scrapecreators` header. When this server had no answer of its own (`501`, `bad_cursor`), its `400`, `403`, `404` or `422` too. Otherwise (its key is refused, its credits ran out, it fails or doesn't answer in time) the local error, with a `fallback` object saying what ScrapeCreators answered: `{"provider": "scrapecreators", "status": 401, "error": "unauthorized", "message": "..."}`.
+- **Credits.** Fallback requests spend ScrapeCreators credits (its errors cost none; a request that timed out may still have been charged). Its answers are cached like any other response, so `cache_max_age` avoids paying twice. ScrapeCreators is always asked live, without `cache_max_age`: an answer from its cache would otherwise be stored here as new. Request history marks the requests it served, and Usage counts them.
+- **Safety.** The fallback runs only behind authentication (`SOCIALSCRAPE_API_KEYS` or the dashboard): with neither, the key is ignored, since anyone could spend the credits. Only the ScrapeCreators key is sent, never the caller's headers or key, and redirects aren't followed. A dashboard key is encrypted with `SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY` and never shown again. Requests carry `Via: 1.1 socialscrape`, and one that arrives with it doesn't fall back, so an upstream URL pointed back at a socialscrape server can't loop.
 
 ## What "powered by yt-dlp" means here
 

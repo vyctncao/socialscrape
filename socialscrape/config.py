@@ -11,7 +11,7 @@ import math
 import os
 import re
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable
 from urllib.parse import urlsplit
@@ -92,6 +92,49 @@ def _proxy() -> str | None:
     return validate_proxy(_env("SOCIALSCRAPE_PROXY"))
 
 
+def validate_public_url(value: str | None, *, name: str = "SOCIALSCRAPE_PUBLIC_URL") -> str | None:
+    """'https://scrape.example.com/' -> 'https://scrape.example.com': the origin every emailed link points to."""
+    value = value.strip().rstrip("/") if value and value.strip() else None
+    if not value:
+        return None
+    try:
+        url = urlsplit(value)
+        # Only an origin: the dashboard's routes (/invite/..., /reset/...) are at the root, so a path would make
+        # every emailed link a 404.
+        unusable = (url.scheme.lower() not in ("http", "https") or not url.hostname or url.port == 0
+                    or url.username is not None or url.path or url.query or url.fragment)
+    except ValueError:  # 'Invalid IPv6 URL', a port that isn't a number or is out of range
+        unusable = True
+    if unusable or any(c.isspace() or not c.isprintable() for c in value):
+        raise ConfigError(f"{name} must be the dashboard's public address without a path, such as "
+                          "https://scrape.example.com")
+    return value
+
+
+# 'noreply@example.com' or 'Display Name <noreply@example.com>', the two forms Resend's `from` takes.
+_SENDER = re.compile(r"(?:[^<>\r\n]*<(?P<bracketed>[^<>\s]+)>|(?P<bare>[^<>\s]+))")
+_DOMAIN = re.compile(r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,63}")
+
+
+def validate_sender(value: str | None, *, name: str = "SOCIALSCRAPE_EMAIL_FROM") -> str | None:
+    value = value.strip() if value and value.strip() else None
+    if not value:
+        return None
+    m = _SENDER.fullmatch(value)
+    local, _, domain = (m["bracketed"] or m["bare"]).rpartition("@") if m else ("", "", "")
+    if not local or "@" in local or not _DOMAIN.fullmatch(domain) or len(value) > 320 or not value.isprintable():
+        raise ConfigError(f"{name} must be an email address such as SocialScrape <noreply@example.com>")
+    return value
+
+
+def validate_resend_key(value: str | None, *, name: str = "SOCIALSCRAPE_RESEND_API_KEY") -> str | None:
+    value = value.strip() if value and value.strip() else None
+    # Sent as an HTTP header: anything else would fail every email, possibly with the key in the error text.
+    if value and (not value.isascii() or any(c.isspace() or not c.isprintable() for c in value)):
+        raise ConfigError(f"{name} must be a Resend API key (re_…) without spaces")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     # Accepted values for the `x-api-key` header (ASCII). Empty means auth is disabled.
@@ -115,6 +158,12 @@ class Settings:
     # none | faster-whisper | mlx-whisper
     transcribe_backend: str
     whisper_model: str
+    # Resend API key for invitation and password emails; None turns email off (owners share links by hand).
+    resend_api_key: str | None = field(repr=False)
+    # Resend `from`, e.g. "SocialScrape <noreply@example.com>". Set whenever resend_api_key is.
+    email_from: str | None
+    # The dashboard's public origin, without a trailing slash. Emailed links use it, never the request's Host.
+    public_url: str | None
 
     def cookie_file(self, platform: str) -> str | None:
         return self.cookie_files.get(platform)
@@ -129,6 +178,11 @@ def get_settings() -> Settings:
     backend = (_env("SOCIALSCRAPE_TRANSCRIBE", "none") or "none").lower()
     if backend not in TRANSCRIBE_BACKENDS:
         raise ConfigError(f"SOCIALSCRAPE_TRANSCRIBE must be one of {', '.join(TRANSCRIBE_BACKENDS)}, got {backend!r}")
+    resend_api_key = validate_resend_key(_env("SOCIALSCRAPE_RESEND_API_KEY"))
+    email_from = validate_sender(_env("SOCIALSCRAPE_EMAIL_FROM"))
+    public_url = validate_public_url(_env("SOCIALSCRAPE_PUBLIC_URL"))
+    if resend_api_key and not (email_from and public_url):
+        raise ConfigError("SOCIALSCRAPE_RESEND_API_KEY needs SOCIALSCRAPE_EMAIL_FROM and SOCIALSCRAPE_PUBLIC_URL")
     return Settings(
         api_keys=frozenset(k.strip() for k in keys.split(",") if k.strip()),
         cache_path=DEFAULT_CACHE_PATH if raw_cache is None else _path(raw_cache.strip()),
@@ -143,4 +197,7 @@ def get_settings() -> Settings:
         cookies_from_browser=_env("SOCIALSCRAPE_COOKIES_FROM_BROWSER"),
         transcribe_backend=backend,
         whisper_model=_env("SOCIALSCRAPE_WHISPER_MODEL", "small") or "small",
+        resend_api_key=resend_api_key,
+        email_from=email_from,
+        public_url=public_url,
     )

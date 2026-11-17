@@ -9,6 +9,7 @@
   <link rel="preload" href="/assets/brand/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/brand/tokens.css">
   <link rel="stylesheet" href="/assets/portal.css">
+  <link rel="stylesheet" href="/assets/fallback.css">
   <script src="/assets/appearance.js"></script>
 </head>
 <body>
@@ -28,9 +29,10 @@
         <a data-page="usage" href="/app/usage"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#chart-bar"></use></svg><span>Usage</span></a>
         <a data-page="docs" href="/app/docs"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#file-text"></use></svg><span>Documentation</span></a>
         <a data-page="settings" href="/app/settings"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#globe"></use></svg><span>Platform settings</span></a>
+        <a data-page="fallback" href="/app/fallback"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#arrows-clockwise"></use></svg><span>Fallback</span></a>
       </nav>
       <div class="sidebar-foot"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#shield-check"></use></svg><div>Built for your team<small>Private, invite-only access.</small></div></div>
-      <div class="account-row"><span class="person-avatar" id="user-initial" aria-hidden="true"></span><div class="account-copy"><strong id="user-role">Workspace member</strong><span>__USER_EMAIL_HTML__</span></div><form action="/logout" method="post"><button class="icon-button" aria-label="Sign out" title="Sign out"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#arrow-right"></use></svg></button></form></div>
+      <div class="account-row"><a class="account-link" href="/app/account"><span class="sr-only">Account settings: </span><span class="person-avatar" id="user-initial" aria-hidden="true"></span><div class="account-copy"><strong id="user-role">Workspace member</strong><span>__USER_EMAIL_HTML__</span></div></a><form action="/logout" method="post"><button class="icon-button" aria-label="Sign out" title="Sign out"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#arrow-right"></use></svg></button></form></div>
     </aside>
     <div class="main">
       <header class="topbar">
@@ -46,10 +48,11 @@
       <footer class="content-foot"><span>SocialScrape</span><span>YouTube · TikTok · Instagram</span></footer>
     </div>
   </div>
-  <dialog class="nav-drawer" id="nav-dialog" aria-label="Workspace navigation"><div class="drawer-head"><a class="brand" href="/app"><span class="brand-mark" aria-hidden="true"></span><span>SocialScrape<small>by Mimic</small></span></a><button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><span>__USER_EMAIL_HTML__</span><form action="/logout" method="post"><button class="ghost">Sign out</button></form></div></dialog>
+  <dialog class="nav-drawer" id="nav-dialog" aria-label="Workspace navigation"><div class="drawer-head"><a class="brand" href="/app"><span class="brand-mark" aria-hidden="true"></span><span>SocialScrape<small>by Mimic</small></span></a><button class="icon-button" onclick="document.getElementById('nav-dialog').close()" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="/assets/brand/icons.svg#x"></use></svg></button></div><div id="mobile-nav"></div><div class="drawer-foot"><a href="/app/account"><span class="sr-only">Account settings: </span>__USER_EMAIL_HTML__</a><form action="/logout" method="post"><button class="ghost">Sign out</button></form></div></dialog>
   <dialog class="modal" id="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"></dialog>
   <div class="toast-region" id="toasts" role="status" aria-live="polite"></div>
   <script>window.PORTAL=__PORTAL__</script>
+  <script src="/assets/fallback.js"></script>
   <script src="/assets/portal.js"></script>
 </body>
 </html>

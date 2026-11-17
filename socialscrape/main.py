@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hmac
 import importlib
 import ipaddress
@@ -19,12 +20,13 @@ from time import perf_counter
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 import yt_dlp
 
-from . import platforms, transcribe, ytdlp
+from . import fallback, platforms, transcribe, ytdlp
 from .cache import CacheMiddleware, ResponseCache
 from .config import ConfigError, _env, get_settings
 from .errors import (ApiError, Unauthorized, api_error_handler, http_error_handler, unhandled_error_handler,
@@ -36,7 +38,7 @@ log = logging.getLogger("socialscrape")
 
 PUBLIC_PATHS = {"/health", "/redoc", "/meta/coverage"}
 LEGACY_PUBLIC_PATHS = PUBLIC_PATHS | {"/docs", "/openapi.json"}
-PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/assets/", "/app", "/docs")
+PORTAL_PUBLIC_PREFIXES = ("/login", "/setup", "/invite/", "/forgot", "/reset/", "/assets/", "/app", "/docs")
 
 
 class ApiKeyMiddleware(BaseHTTPMiddleware):
@@ -79,10 +81,16 @@ class UsageMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         portal = getattr(request.app.state, "portal", None)
         if portal and request.url.path.startswith("/v"):
+            chunks = [chunk async for chunk in response.body_iterator]  # type: ignore[attr-defined]
+            payload = b"".join(chunk if isinstance(chunk, bytes) else chunk.encode() for chunk in chunks)
             portal.record_request(getattr(request.state, "principal", None),
                                   getattr(request.state, "api_key_id", None), request.method,
                                   request.url.path, request.url.query, response.status_code,
-                                  round((perf_counter() - started) * 1000), response.headers.get("x-cache") == "hit")
+                                  round((perf_counter() - started) * 1000), response.headers.get("x-cache") == "hit",
+                                  response.headers.get(fallback.HEADER) == fallback.PROVIDER, payload)
+            headers = {key: value for key, value in response.headers.items() if key.lower() != "content-length"}
+            return Response(payload, status_code=response.status_code, headers=headers,
+                            media_type=response.media_type, background=response.background)
         return response
 
 
@@ -100,6 +108,12 @@ def load_platform_modules(app: FastAPI) -> None:
 def create_app() -> FastAPI:
     # Read now: a bad setting raises ConfigError here, at startup, instead of a 500 on every request.
     settings = get_settings()
+    fallback_env = fallback.env_config()
+    if fallback_env.api_key and not (settings.api_keys or settings.portal_path):
+        # Anyone who could reach the server would spend the credits. (A dashboard key implies the portal's auth.)
+        log.warning("SOCIALSCRAPE_SCRAPECREATORS_API_KEY is ignored: the ScrapeCreators fallback needs "
+                    "SOCIALSCRAPE_API_KEYS or SOCIALSCRAPE_PORTAL_PATH, so that only known callers spend its credits")
+        fallback_env = dataclasses.replace(fallback_env, api_key=None)
     transcribe.check_model()
     if settings.transcribe_backend != "none" and not transcribe.enabled():
         log.warning("SOCIALSCRAPE_TRANSCRIBE=%s but its package is not installed: AI transcription answers 501 "
@@ -115,8 +129,11 @@ def create_app() -> FastAPI:
     app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(StarletteHTTPException, http_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_error_handler)
-    # Starlette runs the last-added middleware first: auth before cache. The cache is opened here because Starlette
+    app.state.fallback_env = fallback_env
+    # Starlette runs the last-added middleware first: auth, usage, cache, then the ScrapeCreators fallback, so only
+    # authenticated requests spend credits and its answers are cached. The cache is opened here because Starlette
     # builds middleware on the first request, too late to stop startup on an unusable SOCIALSCRAPE_CACHE_PATH.
+    app.add_middleware(fallback.FallbackMiddleware, env=fallback_env)
     app.add_middleware(CacheMiddleware, cache=ResponseCache(settings.cache_path) if settings.cache_path else None)
     app.add_middleware(UsageMiddleware)
     app.add_middleware(ApiKeyMiddleware)
@@ -129,6 +146,7 @@ def create_app() -> FastAPI:
         portal.bootstrap_owner(os.environ.get("SOCIALSCRAPE_OWNER_EMAIL"),
                                os.environ.get("SOCIALSCRAPE_OWNER_PASSWORD"))
         install_portal(app, portal)
+        fallback.install_routes(app, portal)
 
     # HEAD for uptime probes (curl -I). Not on the data routes: there it would still run the scrape.
     @app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)
@@ -146,6 +164,7 @@ def create_app() -> FastAPI:
             "cookies": [p for p in sorted(s.cookie_files) if p not in cookie_errors]
                        + (["browser"] if s.cookies_from_browser else []),
             "cookie_errors": cookie_errors,
+            "fallback": fallback.describe(app),
             "implemented_endpoints": len(IMPLEMENTED),
         }
 
@@ -199,9 +218,9 @@ def _parse_args(argv: list[str] | None) -> None:
 
 
 def _stop_workers(grace: float = 1.0) -> int:
-    """After uvicorn has stopped, stop the yt-dlp and Whisper threads; how many are still busy after `grace`
-    seconds. Those run calls whose requests are gone (SOCIALSCRAPE_REQUEST_TIMEOUT, or a forced quit)."""
-    workers = ytdlp.shutdown_pool() + transcribe.shutdown_pool()
+    """After uvicorn has stopped, stop the yt-dlp, Whisper and ScrapeCreators threads; how many are still busy after
+    `grace` seconds. Those run calls whose requests are gone (SOCIALSCRAPE_REQUEST_TIMEOUT, or a forced quit)."""
+    workers = ytdlp.shutdown_pool() + transcribe.shutdown_pool() + fallback.shutdown_pool()
     deadline = time.monotonic() + grace
     for thread in workers:
         thread.join(max(0.0, deadline - time.monotonic()))

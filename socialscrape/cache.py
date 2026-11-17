@@ -55,6 +55,9 @@ class ResponseCache:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("CREATE TABLE IF NOT EXISTS responses "
                                "(key TEXT PRIMARY KEY, stored_at REAL NOT NULL, body TEXT NOT NULL)")
+            # Which stored responses ScrapeCreators served (FallbackMiddleware), so that a hit on one says so too.
+            self._conn.execute("CREATE TABLE IF NOT EXISTS response_provenance "
+                               "(key TEXT PRIMARY KEY, fallback INTEGER NOT NULL DEFAULT 0)")
             # One that was there already may be another program's (requests-cache names its table responses too),
             # which every read and write would fail on.
             self._conn.execute("SELECT key, stored_at, body FROM responses LIMIT 0")
@@ -70,10 +73,12 @@ class ResponseCache:
 
     # A cache that fails after startup (disk full, I/O error) is skipped with a warning: the request is served live
     # and its response is still sent.
-    def get(self, key: str, max_age: float) -> tuple[dict[str, Any], datetime] | None:
+    def get(self, key: str, max_age: float) -> tuple[dict[str, Any], datetime, bool] | None:
         try:
             with self._lock:
-                row = self._conn.execute("SELECT body, stored_at FROM responses WHERE key = ?", (key,)).fetchone()
+                row = self._conn.execute("SELECT r.body, r.stored_at, COALESCE(p.fallback, 0) FROM responses r "
+                                         "LEFT JOIN response_provenance p ON p.key = r.key WHERE r.key = ?",
+                                         (key,)).fetchone()
         except sqlite3.Error as exc:
             log.warning("cache read failed (%s): %s", self.path, exc)
             return None
@@ -90,14 +95,16 @@ class ResponseCache:
             # stored_at that isn't a time) is skipped too: the request is served live, and its response replaces it.
             log.warning("cache read failed (%s): the row for %s isn't a stored response", self.path, key)
             return None
-        return body, stored_at
+        return body, stored_at, bool(row[2])
 
-    def put(self, key: str, body: str) -> None:
+    def put(self, key: str, body: str, *, fallback: bool = False) -> None:
         try:
             with self._lock:
                 self._conn.execute(
                     "INSERT OR REPLACE INTO responses (key, stored_at, body) VALUES (?, ?, ?)", (key, time.time(), body)
                 )
+                self._conn.execute("INSERT OR REPLACE INTO response_provenance (key, fallback) VALUES (?, ?)",
+                                   (key, int(fallback)))
                 self._conn.commit()
         except sqlite3.Error as exc:
             log.warning("cache write failed (%s): %s", self.path, exc)
@@ -129,11 +136,14 @@ class CacheMiddleware(BaseHTTPMiddleware):
 
         key = cache_key(request)
         if max_age is not None and (hit := self.cache.get(key, max_age)):
-            body, stored_at = hit
+            body, stored_at, fallback = hit
             body["cached"] = True
             body["cached_at"] = stored_at.isoformat().replace("+00:00", "Z")
+            headers = {"x-cache": "hit"}
+            if fallback:  # fallback.HEADER and PROVIDER (that module imports this one)
+                headers["x-socialscrape-fallback"] = "scrapecreators"
             # Lenient: a row put() didn't write can hold what JSON can't write (a NaN, half an emoji)
-            return LenientJSONResponse(body, headers={"x-cache": "hit"})
+            return LenientJSONResponse(body, headers=headers)
 
         response = await call_next(request)
         if response.status_code != 200 or "application/json" not in response.headers.get("content-type", ""):
@@ -142,7 +152,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
         chunks = [chunk async for chunk in response.body_iterator]  # type: ignore[attr-defined]
         payload = b"".join(c if isinstance(c, bytes) else c.encode() for c in chunks)
         if len(payload) <= MAX_BODY_BYTES:
-            self.cache.put(key, payload.decode())
+            self.cache.put(key, payload.decode(),
+                           fallback=response.headers.get("x-socialscrape-fallback") == "scrapecreators")
         headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
         headers["x-cache"] = "miss"
         return Response(payload, status_code=200, headers=headers, media_type="application/json")

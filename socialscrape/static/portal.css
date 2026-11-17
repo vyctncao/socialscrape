@@ -58,6 +58,7 @@ small,.small{font-size:var(--fs-xs)}
 .account-copy strong{font-weight:500;font-size:12px}
 .account-copy span{color:var(--text-2);overflow-wrap:anywhere}
 .account-row .icon-button{width:32px;min-height:40px;padding:6px}
+.account-link{display:flex;align-items:center;gap:var(--space-2);min-width:0;flex:1;border-radius:var(--r-md)}
 .main{min-width:0;min-height:calc(100dvh - 16px);background:var(--surface-0);border:1px solid var(--shell-panel-border);border-radius:var(--r-lg);display:flex;flex-direction:column}
 .topbar{height:64px;padding:0 var(--space-8);display:flex;align-items:center;gap:var(--space-4);position:sticky;top:0;z-index:8;background:var(--surface-0);border-radius:var(--r-lg) var(--r-lg) 0 0}
 .top-workspace{display:flex;gap:var(--space-2);align-items:center;color:var(--text-2);font-size:var(--fs-xs)}
@@ -251,3 +252,23 @@ details>summary{display:flex;gap:var(--space-2);align-items:center;min-height:40
 .empty.compact{padding:var(--space-4);margin-top:var(--space-3);font-size:var(--fs-xs)}
 .pool-actions{display:flex;align-items:center;gap:var(--space-2)}
 .pool-actions .ghost{min-width:40px;padding:0 var(--space-2)}
+.history-row{cursor:pointer}
+.history-row:hover,.history-row:focus-visible{background:var(--hover)}
+.history-row:focus-visible{outline:2px solid var(--border-focus);outline-offset:-2px}
+.modal:has(.history-response){width:min(920px,calc(100% - 32px))}
+.history-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);margin:0 0 var(--space-5)}
+.history-facts div{min-width:0}
+.history-facts dt{font-size:11px;color:var(--text-2)}
+.history-facts dd{margin:4px 0 0;overflow-wrap:anywhere}
+.history-response{max-height:60vh;min-height:220px;margin:0;white-space:pre-wrap;overflow:auto}
+@media(max-width:760px){.history-facts{grid-template-columns:1fr}.modal:has(.history-response){width:calc(100% - 20px)}}
+.email-card{margin-top:var(--space-5)}
+.email-details{display:grid;gap:var(--space-3)}
+.email-details p{display:grid;grid-template-columns:minmax(120px,.4fr) minmax(0,1fr);gap:var(--space-4);margin:0;font-size:var(--fs-sm)}
+.email-details strong{font-weight:500;overflow-wrap:anywhere}
+.email-actions{align-items:center;flex-wrap:wrap;margin-top:var(--space-5)}
+.table-actions{display:flex;align-items:center;gap:var(--space-2)}
+.text-button{padding:0;border:0;background:none;color:var(--text-1);font:inherit;text-decoration:underline;text-underline-offset:3px}
+.secret-warning{margin-bottom:var(--space-4)}
+.account-stack{max-width:680px}
+@media(max-width:760px){.email-details p{grid-template-columns:1fr;gap:var(--space-1)}.email-actions>*{width:100%}.table-actions{align-items:stretch;flex-direction:column}}

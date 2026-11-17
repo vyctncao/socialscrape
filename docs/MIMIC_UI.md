@@ -36,3 +36,7 @@ language survive in-app navigation. A workspace session can run requests without
 an API key, while exported snippets use an integration credential placeholder.
 Responses, usage totals, and request history come from the existing server APIs.
 Proxy settings retain owner permissions and the server’s encrypted storage contract.
+Email delivery, pending invitations and member reset links live on the Team page; the
+account page holds the password change. Forgot-password and reset screens reuse the
+authentication shell in `portal.py`. Emails (`mailer.py`) use the light workspace palette
+with inline styles, since mail clients ignore external stylesheets and custom fonts.

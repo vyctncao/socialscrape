@@ -83,11 +83,19 @@ async function keysPage() {
 
 async function team() {
   if (PORTAL.role !== 'owner') return layout('Team', 'A private workspace, shared by invitation.', `<section class="card">${emptyState('users-three', 'You’re part of the team', 'Ask your workspace owner to invite or manage members.')}</section>`);
-  const data = await api('/portal/api/team');
+  const [teamData, email, inviteData] = await Promise.all([api('/portal/api/team'), api('/portal/api/settings/email'), api('/portal/api/invites')]);
+  const emailStatus = email.error ? 'Needs attention' : email.configured ? `Connected · ${email.source === 'dashboard' ? 'dashboard' : 'server environment'}` : 'Off';
+  const inviteHelp = email.configured ? `We’ll email the invitation from ${esc(email.sender)}. Links expire after 7 days.` : 'Email delivery is off, so you’ll get a link to share privately. Links expire after 7 days.';
   return layout('Team', 'Give your team a private place to work with social data.', `
-    <section class="card"><form class="row" id="invite-form"><label class="field">Email address<input id="invite-email" name="email" type="email" placeholder="teammate@company.com" required autocomplete="email" aria-describedby="invite-hint"></label><button class="primary" type="submit">${icon('plus')}Create invitation</button></form><p class="help" id="invite-hint" style="margin-top:12px">Invitation links expire after 7 days. Share the generated link privately.</p><div class="field-error" id="action-error" role="alert" hidden></div></section>
-    <div class="table-caption"><h2>Workspace members</h2><span>${number(data.members.length)} ${data.members.length === 1 ? 'member' : 'members'}</span></div>
-    ${tableRegion('Workspace members', `<table><thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">API keys</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${data.members.map(member => `<tr><td>${esc(member.email)}</td><td><span class="badge">${member.role === 'owner' ? 'Owner' : 'Member'}</span></td><td>${number(member.key_count)}</td><td>${fmt(member.created_at)}</td><td>${fmt(member.last_login_at)}</td><td>${member.role === 'member' ? `<button class="danger" data-remove="${member.id}" aria-label="Remove ${esc(member.email)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table>`)}`);
+    <section class="card"><form class="row" id="invite-form"><label class="field">Email address<input id="invite-email" name="email" type="email" placeholder="teammate@company.com" required autocomplete="email" aria-describedby="invite-hint"></label><button class="primary" type="submit">${icon('plus')}Create invitation</button></form><p class="help" id="invite-hint" style="margin-top:12px">${inviteHelp}${email.configured ? '' : ' <button class="text-button" type="button" data-email-settings>Set up email</button>'}</p><div class="field-error" id="action-error" role="alert" hidden></div></section>
+    <section class="card email-card"><div class="card-head"><div><div class="eyebrow">Resend</div><h2>Email delivery</h2></div><span class="badge ${email.error ? 'warn' : email.configured ? 'good' : ''}">${emailStatus}</span></div>${email.error ? `<div class="form-error" role="alert">${esc(email.error)}. Save the settings again or remove them.</div>` : ''}${email.error ? '' : email.configured ? `<div class="email-details"><p><span class="muted">From</span><strong>${esc(email.sender)}</strong></p><p><span class="muted">Dashboard URL</span><strong>${esc(email.public_url)}</strong></p>${email.source === 'dashboard' ? `<p><span class="muted">Last updated</span><strong>${esc(fmt(email.updated_at))}</strong></p>` : ''}</div>` : '<p class="muted">Invitations and password reset links must be copied and shared manually.</p>'}<div class="field-error" id="email-action-error" role="alert" hidden></div><div class="row email-actions"><button class="ghost" type="button" data-email-settings>${email.configured ? 'Change settings' : 'Set up email'}</button>${email.configured ? '<button class="ghost" type="button" data-email-test>Send test email</button>' : ''}${email.source === 'dashboard' ? '<button class="danger" type="button" data-email-remove>Remove</button>' : ''}</div></section>
+    ${inviteData.invites.length ? `<div class="table-caption"><h2>Pending invitations</h2><span>${number(inviteData.invites.length)} pending</span></div>${tableRegion('Pending invitations', `<table><thead><tr><th scope="col">Email</th><th scope="col">Invited by</th><th scope="col">Sent</th><th scope="col">Expires</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${inviteData.invites.map(invite => `<tr><td>${esc(invite.email)}</td><td>${esc(invite.invited_by || '—')}</td><td>${esc(fmt(invite.sent_at))}</td><td>${invite.expired ? '<span class="badge warn">Expired</span>' : esc(fmt(invite.expires_at))}</td><td><div class="table-actions"><button class="ghost" type="button" data-resend-invite="${esc(invite.email)}" aria-label="Resend invitation to ${esc(invite.email)}">Resend</button><button class="danger" type="button" data-revoke-invite="${esc(invite.email)}" aria-label="Revoke invitation for ${esc(invite.email)}">Revoke</button></div></td></tr>`).join('')}</tbody></table>`)}` : ''}
+    <div class="table-caption"><h2>Workspace members</h2><span>${number(teamData.members.length)} ${teamData.members.length === 1 ? 'member' : 'members'}</span></div>
+    ${tableRegion('Workspace members', `<table><thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">API keys</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${teamData.members.map(member => `<tr><td>${esc(member.email)}</td><td><span class="badge">${member.role === 'owner' ? 'Owner' : 'Member'}</span></td><td>${number(member.key_count)}</td><td>${esc(fmt(member.created_at))}</td><td>${esc(fmt(member.last_login_at))}</td><td>${member.role === 'member' ? `<div class="table-actions"><button class="ghost" type="button" data-reset-member="${esc(member.id)}" data-member-email="${esc(member.email)}" aria-label="Send password reset link to ${esc(member.email)}">Send reset link</button><button class="danger" data-remove="${esc(member.id)}" aria-label="Remove ${esc(member.email)}">Remove</button></div>` : ''}</td></tr>`).join('')}</tbody></table>`)}`);
+}
+
+function account() {
+  return layout('Account', 'Manage your sign-in details and account security.', `<div class="stack account-stack"><section class="card"><div class="card-head"><h2>Account details</h2>${icon('user-circle')}</div><div class="email-details"><p><span class="muted">Email</span><strong>${esc(PORTAL.email)}</strong></p><p><span class="muted">Role</span><strong>${PORTAL.role === 'owner' ? 'Workspace owner' : 'Team member'}</strong></p></div></section><section class="card"><h2>Change password</h2><form class="form-stack" id="password-form"><label class="field">Current password<input name="current_password" type="password" required autocomplete="current-password"></label><label class="field">New password<input name="new_password" type="password" required minlength="12" autocomplete="new-password" aria-describedby="new-password-help"><span class="help" id="new-password-help">Use at least 12 characters. Other devices will be signed out.</span></label><div class="field-error" id="action-error" role="alert" hidden></div><button class="primary" type="submit">Change password</button></form></section></div>`);
 }
 
 async function settingsPage() {
@@ -108,7 +116,16 @@ async function requestHistory() {
   const data = await api('/portal/api/history?limit=200');
   return layout('Request history', 'Inspect API activity, response status, and timing.', `
     <div class="table-caption"><span>Latest ${number(data.requests.length)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'}</span><span>Times shown in ${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}</span></div>
-    ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span></td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
+    ${data.requests.length ? tableRegion('API request history', `<table><thead><tr><th scope="col">Time</th><th scope="col">API key</th><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Duration</th><th scope="col">Cache</th></tr></thead><tbody>${data.requests.map(request => `<tr class="history-row" tabindex="0" data-history-id="${request.id}" aria-label="Open response from ${esc(fmt(request.created_at))}"><td>${fmt(request.created_at)}</td><td>${esc(request.prefix || 'Workspace session')}</td><td><code>${esc(request.method)} ${esc(request.path)}${request.query ? '?' + esc(request.query) : ''}</code></td><td><span class="badge ${request.status < 400 ? 'good' : 'bad'}">${request.status} ${request.status < 400 ? 'OK' : 'Error'}</span>${request.fallback ? ' <span class="badge">via ScrapeCreators</span>' : ''}</td><td>${number(request.duration_ms)} ms</td><td>${request.cached ? 'Hit' : 'Miss'}</td></tr>`).join('')}</tbody></table>`) : `<section class="card">${emptyState('clock', 'Your requests will appear here', 'Send a request in the playground to inspect its response and timing.', '<a class="primary" href="/app/playground">Open playground</a>')}</section>`}`);
+}
+
+async function showHistoryDetail(id) {
+  const detail = await api(`/portal/api/history/${id}`);
+  let formatted = detail.response || '';
+  try { formatted = JSON.stringify(JSON.parse(formatted), null, 2); } catch {}
+  const route = detail.path + (detail.query ? `?${detail.query}` : '');
+  openDialog({title:`${detail.method} ${detail.path}`, description:`${detail.status} · ${number(detail.duration_ms)} ms · ${detail.cached ? 'Cache hit' : 'Live'}${detail.fallback ? ' · ScrapeCreators fallback' : ''}`, body:`<dl class="history-facts"><div><dt>Time</dt><dd>${esc(fmt(detail.created_at))}</dd></div><div><dt>API key</dt><dd>${esc(detail.prefix || 'Workspace session')}</dd></div><div><dt>Request</dt><dd><code>${esc(route)}</code></dd></div></dl>${detail.response_truncated ? '<div class="inline-note">The stored response was capped at 2 MiB.</div>' : ''}<pre class="code history-response" id="history-response" tabindex="0"></pre>`, footer:`<button class="ghost" data-dialog-close>Close</button><button class="primary" data-copy="history-response">${icon('copy')}Copy response</button>`});
+  $('#history-response').textContent = formatted || 'No response body was stored for this request.';
 }
 
 async function usage() {
@@ -116,7 +133,7 @@ async function usage() {
   const max = Math.max(...data.daily, 1), total = data.daily.reduce((sum, count) => sum + count, 0);
   const labels = data.daily.map((_, index) => { const date = new Date(); date.setDate(date.getDate() - 29 + index); return date.toLocaleDateString(undefined, {month:'short', day:'numeric'}); });
   return layout('Usage', 'Understand your API traffic over the last 30 days.', `
-    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${number(total)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days</span></div><span class="badge">30 days</span></div>
+    <section class="card"><div class="card-head"><div><h2>Request volume</h2><span class="chart-summary">${number(total)} requests · ${PORTAL.role === 'owner' ? 'Workspace' : 'Your account'} · Last 30 days${data.fallback_count > 0 ? ` · ${number(data.fallback_count)} via ScrapeCreators` : ''}</span></div><span class="badge">30 days</span></div>
     ${total ? `<div class="chart" role="img" aria-label="${number(total)} requests in the last 30 days. Exact counts are in the daily data table below.">${data.daily.map(count => `<div class="bar" style="height:${Math.max(1, count / max * 100)}%" aria-hidden="true"></div>`).join('')}</div><div class="chart-labels"><span>${labels[0]}</span><span>${labels[14]}</span><span>${labels[29]}</span></div>` : emptyState('chart-bar', 'No requests in this period', 'Usage appears here when you call an API endpoint.', '<a class="ghost" href="/app/playground">Make your first request</a>')}
     <details><summary>${icon('chart-bar')}View daily data</summary><p class="help">Rolling 24-hour periods ending now. Date labels use your local timezone.</p>${tableRegion('Daily request counts', `<table><thead><tr><th scope="col">Period ending</th><th scope="col">Requests</th></tr></thead><tbody>${data.daily.map((count, index) => `<tr><td>${labels[index]}</td><td>${number(count)}</td></tr>`).join('')}</tbody></table>`)}</details></section>
     <section class="card" style="margin-top:24px"><h2>Most used endpoints</h2><p class="help">Last 30 days · Up to 10 routes</p>${data.routes.map(route => `<div class="param"><strong><code>${esc(route.path)}</code></strong><small>${number(route.count)} requests</small></div>`).join('') || emptyState('globe', 'No endpoint activity yet', 'Run a request to see your most used routes.')}</section>`);
@@ -266,16 +283,18 @@ function openDialog({title, description, body, footer}) {
   dialogTrigger = document.activeElement;
   dialog.innerHTML = `<header class="modal-head"><div><h2 id="dialog-title">${esc(title)}</h2><p id="dialog-description">${esc(description)}</p></div><button class="icon-button" data-dialog-close aria-label="Close dialog">${icon('x')}</button></header><div class="modal-body">${body}<div class="field-error" id="dialog-error" role="alert" hidden></div></div><footer class="modal-foot">${footer}</footer>`;
   dialog.showModal();
+  (dialog.querySelector('[autofocus]') || dialog.querySelector('.modal-body :is(input:not([type=hidden]), textarea, select)'))?.focus();
 }
-function showSecret(title, description, value, isSecret) {
-  openDialog({title, description, body:`<label class="field">${isSecret ? 'API key' : 'Invitation link'}<textarea class="secret" id="new-secret" readonly spellcheck="false">${esc(value)}</textarea></label><p class="help" id="copy-feedback" style="margin-top:12px">${isSecret ? 'Keep this key private. It will not be shown again.' : 'Share this link privately with the invited person.'}</p>`, footer:`<button class="ghost" data-dialog-close>Done</button><button class="primary" data-copy="new-secret">${icon('copy')}Copy ${isSecret ? 'API key' : 'link'}</button>`});
+function showSecret(title, description, value, options = {}) {
+  const settings = typeof options === 'boolean' ? (options ? {label:'API key', help:'Keep this key private. It will not be shown again.', copyLabel:'Copy API key'} : {label:'Invitation link', help:'Share this link privately with the invited person.', copyLabel:'Copy link'}) : options;
+  openDialog({title, description, body:`${settings.warning ? `<div class="form-error secret-warning" role="alert">${esc(settings.warning)}</div>` : ''}<label class="field">${esc(settings.label || 'Link')}<textarea class="secret" id="new-secret" readonly spellcheck="false">${esc(value)}</textarea></label><p class="help" id="copy-feedback" style="margin-top:12px">${esc(settings.help || 'Share this link privately.')}</p>`, footer:`<button class="ghost" data-dialog-close>Done</button><button class="primary" data-copy="new-secret">${icon('copy')}${esc(settings.copyLabel || 'Copy link')}</button>`});
 }
 function confirmAction(title, description, confirmLabel, action) {
   openDialog({title, description, body:'<p class="help">This takes effect immediately for the selected account or credential.</p>', footer:`<button class="ghost" data-dialog-close autofocus>Cancel</button><button class="danger" id="confirm-action">${esc(confirmLabel)}</button>`});
   $('#confirm-action').addEventListener('click', async event => {
     const button = event.currentTarget;
     button.disabled = true; button.textContent = 'Please wait…';
-    try { await action(); closeDialog(); await render(); toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.'})[confirmLabel] || 'Change saved.'); }
+    try { const result = await action(); closeDialog(); await render(); if (confirmLabel === 'Send reset link') handleLinkResult(result, 'Password reset', 'Password reset link emailed to'); else toast(({'Revoke key':'API key revoked.', 'Remove member':'Member removed.', 'Remove proxy':'Saved proxy removed.', 'Revoke invitation':'Invitation revoked.', 'Remove email settings':'Email settings removed.'})[confirmLabel] || 'Change saved.'); }
     catch (error) { showError(error, '#dialog-error'); }
     finally { button.disabled = false; button.textContent = confirmLabel; }
   });
@@ -296,6 +315,12 @@ async function copyElement(id) {
     }
   }
 }
+function handleLinkResult(data, kind, successCopy) {
+  if (data.emailed) { toast(`${successCopy} ${data.email}.`); return false; }
+  const warning = data.email_error ? `The email could not be sent: ${data.email_error}. Share this link instead.` : '';
+  showSecret(kind === 'Invitation' ? 'Invitation created' : 'Password reset link created', kind === 'Invitation' ? 'This invitation link expires in 7 days.' : 'This link works once and expires in 24 hours.', data.url, {label:kind === 'Invitation' ? 'Invitation link' : 'Reset link', help:kind === 'Invitation' ? 'Share this link privately with the invited person.' : 'Share this link privately with the member.', copyLabel:'Copy link', warning});
+  return true;
+}
 async function submitCreation(form) {
   const button = form.querySelector('button[type=submit]');
   if (button.disabled) return;
@@ -308,13 +333,31 @@ async function submitCreation(form) {
       showSecret('Your API key is ready', 'Save this secret now. It is only shown once.', data.key, true);
     } else {
       const data = await api('/portal/api/invites', {method:'POST', body:{email:$('#invite-email').value.trim()}});
-      showSecret('Invitation created', 'This invitation link expires in 7 days.', data.url, false);
-      form.reset();
+      form.reset(); await render(); handleLinkResult(data, 'Invitation', 'Invitation emailed to');
     }
   } catch (error) { showError(error); }
   finally { button.disabled = false; button.innerHTML = label; }
 }
 
+function openEmailSettings(trigger) {
+  const label = trigger?.textContent;
+  if (trigger) { trigger.disabled = true; trigger.textContent = 'Loading…'; }
+  api('/portal/api/settings/email').then(email => { const keep = email.source === 'dashboard' && email.configured; openDialog({title:email.configured ? 'Change email settings' : 'Set up email', description:'Connect Resend to send invitations and password reset links.', body:`<form class="form-stack" id="email-settings-form"><label class="field">${keep ? 'Replace API key' : 'Resend API key'}<input name="api_key" type="password" ${keep ? '' : 'required'} autocomplete="off" spellcheck="false" placeholder="re_…">${keep ? '<span class="help">Leave blank to keep the saved key.</span>' : ''}</label><label class="field">From address<input name="sender" required value="${esc(email.sender || '')}" placeholder="SocialScrape &lt;noreply@yourdomain.com&gt;"><span class="help">Use an address on a domain you’ve verified in Resend.</span></label><label class="field">Dashboard URL<input name="public_url" type="url" required value="${esc(email.public_url || location.origin)}"><span class="help">Links in emails point here.</span></label><div class="inline-note">${icon('shield-check')}<span>The API key is encrypted and never shown again.</span></div></form>`, footer:'<button class="ghost" data-dialog-close>Cancel</button><button class="primary" type="submit" form="email-settings-form">Save settings</button>'}); }).catch(error => showError(error, '#email-action-error')).finally(() => { if (trigger?.isConnected) { trigger.disabled = false; trigger.textContent = label; } });
+}
+async function saveEmailSettings(form) {
+  const button = $(`button[form="${form.id}"]`), label = button.textContent;
+  button.disabled = true; button.textContent = 'Saving…'; $('#dialog-error').hidden = true;
+  try { await api('/portal/api/settings/email', {method:'PUT', body:{api_key:form.elements.api_key.value.trim(), sender:form.elements.sender.value.trim(), public_url:form.elements.public_url.value.trim()}}); closeDialog(); await render(); toast('Email settings saved.'); }
+  catch (error) { showError(error, '#dialog-error'); }
+  finally { button.disabled = false; button.textContent = label; }
+}
+async function changePassword(form) {
+  const button = form.querySelector('button[type=submit]'), label = button.textContent;
+  button.disabled = true; button.textContent = 'Changing…'; $('#action-error').hidden = true;
+  try { const data = await api('/portal/api/account/password', {method:'POST', body:{current_password:form.elements.current_password.value, new_password:form.elements.new_password.value}}); form.reset(); toast(data.signed_out_sessions ? 'Password changed. Other sessions were signed out.' : 'Password changed.'); }
+  catch (error) { showError(error); }
+  finally { button.disabled = false; button.textContent = label; }
+}
 async function savePlatformSetting(form) {
   const button = form.querySelector('button[type=submit]'), error = form.querySelector('.field-error');
   if (button.disabled) return;
@@ -336,7 +379,7 @@ async function savePlatformSetting(form) {
 
 function page() {
   const route = location.pathname.split('/')[2] || 'overview';
-  return ['playground','keys','team','history','usage','docs','settings'].includes(route) ? route : 'overview';
+  return ['playground','keys','team','history','usage','docs','settings','fallback','account'].includes(route) ? route : 'overview';
 }
 async function render() {
   const renderId = ++state.renderId, current = page(), view = $('#view');
@@ -344,7 +387,7 @@ async function render() {
   document.querySelectorAll('.nav a').forEach(link => {
     if (link.dataset.page === current) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');
   });
-  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage};
+  const views = {overview, playground, keys:keysPage, team, history:requestHistory, usage, docs, settings:settingsPage, fallback:FallbackPage.render, account};
   try {
     const html = await views[current]();
     if (renderId !== state.renderId) return;
@@ -371,7 +414,7 @@ async function go(path) {
 $('#user-initial').textContent = PORTAL.email.slice(0,1).toUpperCase();
 $('#user-role').textContent = PORTAL.role === 'owner' ? 'Workspace owner' : 'Team member';
 const mobileNav = $('#nav').cloneNode(true); mobileNav.removeAttribute('id'); $('#mobile-nav').append(mobileNav);
-if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"]').forEach(link => link.remove());
+if (PORTAL.role !== 'owner') document.querySelectorAll('[data-page="settings"], [data-page="fallback"]').forEach(link => link.remove());
 $('#mobile-menu').addEventListener('click', () => $('#nav-dialog').showModal());
 $('#dialog').addEventListener('close', () => {
   $('#dialog').replaceChildren();
@@ -390,10 +433,18 @@ document.addEventListener('click', event => {
   if (language) { state.language = language.dataset.language; updateSnippet(); }
   const copy = event.target.closest('[data-copy]'); if (copy) copyElement(copy.dataset.copy);
   if (event.target.closest('[data-dialog-close]')) closeDialog();
+  const historyRow = event.target.closest('[data-history-id]');
+  if (historyRow) { dialogTrigger = historyRow; showHistoryDetail(historyRow.dataset.historyId).catch(error => toast(error.message)); return; }
   const revoke = event.target.closest('[data-revoke]');
   if (revoke) { const key = state.keys.find(item => String(item.id) === revoke.dataset.revoke); confirmAction('Revoke this API key?', `“${key?.name || 'This key'}” will stop working. Integrations using it will lose access.`, 'Revoke key', () => api(`/portal/api/keys/${revoke.dataset.revoke}`, {method:'DELETE'})); }
   const remove = event.target.closest('[data-remove]');
   if (remove) confirmAction('Remove this team member?', `${remove.closest('tr').firstElementChild.textContent} will lose workspace access. Their sessions and API keys will stop working.`, 'Remove member', () => api(`/portal/api/team/${remove.dataset.remove}`, {method:'DELETE'}));
+  const emailSettings = event.target.closest('[data-email-settings]'); if (emailSettings) openEmailSettings(emailSettings);
+  const emailTest = event.target.closest('[data-email-test]'); if (emailTest) { const label=emailTest.textContent; emailTest.disabled=true; emailTest.textContent='Sending…'; $('#email-action-error').hidden=true; api('/portal/api/settings/email/test',{method:'POST'}).then(data => toast(`Test email sent to ${data.to}.`)).catch(error => showError(error,'#email-action-error')).finally(() => { emailTest.disabled=false; emailTest.textContent=label; }); }
+  const emailRemove = event.target.closest('[data-email-remove]'); if (emailRemove) confirmAction('Remove email settings?', 'Saved dashboard settings will be removed. Email falls back to server environment settings if they exist; otherwise email delivery turns off.', 'Remove email settings', () => api('/portal/api/settings/email',{method:'DELETE'}));
+  const resend = event.target.closest('[data-resend-invite]'); if (resend) { const label=resend.textContent; resend.disabled=true; resend.textContent='Resending…'; api('/portal/api/invites',{method:'POST',body:{email:resend.dataset.resendInvite}}).then(async data => { await render(); handleLinkResult(data,'Invitation','Invitation resent to'); }).catch(error => showError(error)).finally(() => { if (resend.isConnected) { resend.disabled=false; resend.textContent=label; } }); }
+  const revokeInvite = event.target.closest('[data-revoke-invite]'); if (revokeInvite) confirmAction('Revoke this invitation?', `${revokeInvite.dataset.revokeInvite} won’t be able to join with the current link.`, 'Revoke invitation', () => api(`/portal/api/invites?email=${encodeURIComponent(revokeInvite.dataset.revokeInvite)}`,{method:'DELETE'}));
+  const reset = event.target.closest('[data-reset-member]'); if (reset) confirmAction('Send a password reset link?', `The link for ${reset.dataset.memberEmail} works once for 24 hours. Their current password keeps working until they set a new one. If email delivery is off, you’ll get a link to share.`, 'Send reset link', () => api(`/portal/api/team/${encodeURIComponent(reset.dataset.resetMember)}/password-reset`,{method:'POST'}));
   if (event.target.closest('#retry-page')) render();
   const moveSetting = event.target.closest('[data-move-setting]');
   if (moveSetting) { api(`/portal/api/settings/platforms/${moveSetting.dataset.platform}/${moveSetting.dataset.moveSetting}/${moveSetting.dataset.entry}/move`, {method:'POST', body:{direction:moveSetting.dataset.direction}}).then(render).catch(error => toast(error.message)); }
@@ -401,9 +452,11 @@ document.addEventListener('click', event => {
   if (removeSetting) { const kind=removeSetting.dataset.removeSetting, platform=removeSetting.dataset.platform, entry=removeSetting.dataset.entry; confirmAction(`Remove this ${platformName(platform)} ${kind === 'proxy' ? 'proxy' : 'cookie account'}?`, 'The remaining entries keep their current order.', `Remove ${kind === 'proxy' ? 'proxy' : 'account'}`, () => api(`/portal/api/settings/platforms/${platform}/${kind}/${entry}`, {method:'DELETE'})); }
 });
 document.addEventListener('submit', event => {
-  if (['key-form','invite-form','request-form'].includes(event.target.id) || event.target.matches('.platform-setting-form')) {
+  if (['key-form','invite-form','request-form','email-settings-form','password-form'].includes(event.target.id) || event.target.matches('.platform-setting-form')) {
     event.preventDefault();
     if (event.target.id === 'request-form') runRequest();
+    else if (event.target.id === 'email-settings-form') saveEmailSettings(event.target);
+    else if (event.target.id === 'password-form') changePassword(event.target);
     else if (event.target.matches('.platform-setting-form')) savePlatformSetting(event.target);
     else submitCreation(event.target);
   }
@@ -419,6 +472,8 @@ document.addEventListener('change', event => {
   if (event.target.matches('[data-param]')) updateSnippet();
 });
 document.addEventListener('keydown', event => {
+  const historyRow = event.target.closest('[data-history-id]');
+  if (historyRow && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dialogTrigger = historyRow; showHistoryDetail(historyRow.dataset.historyId).catch(error => toast(error.message)); return; }
   if (!event.target.matches('[data-language]') || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
   event.preventDefault();
   const tabs = [...document.querySelectorAll('[data-language]')];

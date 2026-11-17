@@ -14,13 +14,24 @@ resources:
       SOCIALSCRAPE_CACHE_PATH: /data/cache.sqlite3
       SOCIALSCRAPE_PORTAL_PATH: /data/portal.sqlite3
       SOCIALSCRAPE_LOG_LEVEL: INFO
+      SOCIALSCRAPE_EMAIL_FROM: SocialScrape <noreply@mimic.host>
+      SOCIALSCRAPE_PUBLIC_URL: https://scrape.mimic.host
     secrets:
       socialscrape-portal-encryption:
         SOCIALSCRAPE_PORTAL_ENCRYPTION_KEY: fernet_key
+      socialscrape-resend:
+        SOCIALSCRAPE_RESEND_API_KEY: api_key
     volumes:
       - name: data
         path: /data
     ports:
+      # The saved stack serves this port at https://scrape.mimic.host: its
+      # `custom_domain` (with `tls: true`) was set with PUT …/resources/api,
+      # and the Stackfile schema has no field for it. Deploying this file
+      # would clear the domain, so ship code with
+      # `stackdome create release --stack socialscrape-app --wait` instead.
+      # A live hostname changes only across two releases (port private, then
+      # public under the new name); Stackdome blocks it in one.
       - name: http
         port: 8000
         protocol: HTTP
