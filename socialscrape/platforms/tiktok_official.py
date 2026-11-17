@@ -16,9 +16,6 @@ from ..errors import NotSupported, UpstreamError
 from ..ytdlp import base_options
 
 router = APIRouter()
-UNSUPPORTED = {"/v1/tiktok/user/audience": "TikTok audience analytics has no native implementation. "
-               "The public Research User Info API does not expose audience demographics; a Research API token "
-               "does not provide this capability. An authorized creator analytics integration is still required."}
 _FIELDS = ("ad.id,ad.first_shown_date,ad.last_shown_date,ad.status,ad.status_statement,ad.videos,"
            "ad.image_urls,ad.reach,ad.title,ad.external_url,ad.download_url,ad.call_to_action,"
            "ad.advertising_objective,advertiser.country_code,advertiser.business_id,advertiser.business_name,"

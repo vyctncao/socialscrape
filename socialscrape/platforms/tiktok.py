@@ -30,6 +30,8 @@ import math
 import re
 import threading
 import time
+from collections import Counter
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 import yt_dlp
@@ -954,6 +956,89 @@ async def followers(handle: str | None = None, user_id: str | None = None,
               "shape as /v1/tiktok/user/followers, under followings. A private account is a 403. trim is ignored.")
 async def following(handle: str = Query(...), min_time: str | None = None, trim: str | None = None) -> dict[str, Any]:
     return await _graph("following", handle, None, min_time)
+
+
+# An audience's countries, read as ScrapeCreators reads them: the account regions of a sample of its followers,
+# counted. ScrapeCreators takes about 100 followers from TikTok's signed app follower list, whose users carry their
+# region (their followers answer has it: followers[].region); the anonymous app list answers with an empty body, and
+# the web list has no region. So here a follower's region comes from the app feed of their newest own original sound,
+# as /v1/tiktok/profile/region reads an account's, and only followers who have posted can be placed: on 6 accounts
+# with ScrapeCreators' answers cached, 30 sampled followers placed 2-13, and from 6 up the top country agreed.
+_AUDIENCE_PAGES = 2  # follower pages sampled, 30 followers each
+_AUDIENCE_MIN = 10  # placed followers needed before the sample says anything: 2 placed read 100% NG for 83% US
+_AUDIENCE_MAX = 30  # placed followers after which no more are looked up
+_AUDIENCE_PARALLEL = 6  # followers looked up at once
+_AUDIENCE_SECONDS = 12.0  # no lookup starts later than this into the call
+_REGION_NAMES: dict[str, str] = json.loads((Path(__file__).parent.parent / "data" / "regions.json").read_text())
+
+
+def _follower_region(ydl: yt_dlp.YoutubeDL, user: dict[str, Any]) -> str | None:
+    """A follower's account region: the app feed of their newest post with their own original sound lists it, or None
+    (no such post on their first page). Needs extractor_args=_APP_API."""
+    prof = {"id": str(user.get("uid") or ""), "secUid": user.get("sec_uid"), "nickname": user.get("nickname")}
+    ie = ydl.get_info_extractor("TikTokUser")
+    items, _ = _feed_page(ie, prof["secUid"], user.get("unique_id") or prof["id"], int(time.time() * 1000), "US")
+    own = [item for item in items if _own_sound(prof, item)][:1]
+    return _account_region(ydl, prof, own, tries=1) if own else None
+
+
+@sc_get(router, "/v1/tiktok/user/audience",
+        source="TikTok web /api/user/list/ (followers) + each follower's /api/creator/item_list/ and TikTokSoundIE "
+               "app feed (music/aweme author.region)",
+        notes="audienceLocations counts the account regions of up to 60 sampled followers (their newest 2 pages), "
+              "as ScrapeCreators counts about 100, with each country's share of those placed. ScrapeCreators reads a "
+              "follower's region from TikTok's signed app follower list; anonymously it can only be read off a "
+              "follower's own posts (the app feed of their own original sound, as /v1/tiktok/profile/region reads "
+              "it), so followers who never posted aren't counted and the shares are those of the followers who post. "
+              "sampledFollowers and resolvedFollowers say how many were sampled and placed. Fewer than 10 placed is "
+              "a 501 (the sample would say too little), which the ScrapeCreators fallback answers when enabled. An "
+              "account without followers is an empty list. A private account is a 403.")
+async def audience(handle: str = Query(...)) -> dict[str, Any]:
+    name = _handle(handle)
+    followers: list[dict[str, Any]] = []
+    min_time: str | None = None
+    for _ in range(_AUDIENCE_PAGES):
+        page = await with_ydl(P, lambda ydl, cursor=min_time: _graph_page(ydl, name, "followers", cursor),
+                              confirm_not_found=True, use_cookies=False)
+        followers += page.get("followers") or []
+        if not page.get("has_more") or not page.get("min_time"):
+            break
+        min_time = str(page["min_time"])
+    if not followers:
+        return {"audienceLocations": [], "sampledFollowers": 0, "resolvedFollowers": 0}
+    posting = [user for user in followers if (M.to_int(user.get("aweme_count")) or 0) > 0 and user.get("sec_uid")]
+
+    def too_few(placed: int) -> NotSupported:
+        return NotSupported(f"Only {placed} of the {len(followers)} sampled followers could be placed: TikTok shows a "
+                            "follower's region only on their own posts, and too few of them have one to read an "
+                            f"audience from (at least {_AUDIENCE_MIN} are needed)", sampled_followers=len(followers),
+                            resolved_followers=placed)
+
+    if len(posting) < _AUDIENCE_MIN:
+        raise too_few(0)  # can't reach the minimum: no lookups
+    started, gate, regions = time.monotonic(), asyncio.Semaphore(_AUDIENCE_PARALLEL), Counter()
+
+    async def place(user: dict[str, Any]) -> None:
+        async with gate:
+            if time.monotonic() - started > _AUDIENCE_SECONDS or sum(regions.values()) >= _AUDIENCE_MAX:
+                return
+            try:
+                region = await with_ydl(P, lambda ydl: _follower_region(ydl, user), extractor_args=_APP_API,
+                                        use_cookies=False)
+            except ApiError as exc:  # blocked, gone or private since the list was read: this one isn't placed
+                log.info("tiktok: audience of %s: follower %s not placed: %s", name, user.get("unique_id"), exc.message)
+                return
+            if region:
+                regions[region.upper()] += 1
+
+    await asyncio.gather(*(place(user) for user in posting))
+    placed = sum(regions.values())
+    if placed < _AUDIENCE_MIN:
+        raise too_few(placed)
+    return {"audienceLocations": [{"country": _REGION_NAMES.get(code, code), "countryCode": code, "count": count,
+                                   "percentage": f"{100 * count / placed:.2f}%"}
+                                  for code, count in regions.most_common()],
+            "sampledFollowers": len(followers), "resolvedFollowers": placed}
 
 
 @sc_get(router, "/v1/tiktok/profile", source="yt-dlp TikTokUserIE (user page webapp.user-detail)",

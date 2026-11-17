@@ -26,7 +26,7 @@ import pytest
 
 from socialscrape.catalog import CATALOG
 from socialscrape.errors import UpstreamBlocked, UpstreamUnreachable
-from socialscrape.platforms import tiktok, tiktok_official, tiktok_shop
+from socialscrape.platforms import tiktok, tiktok_shop
 from tests.e2e import LEAKS, app_with, free_port, skip_if_blocked, spaced_get
 
 STOOL = "stoolpresidente"
@@ -101,9 +101,8 @@ def _tiktok_rows(c) -> dict[str, str]:
 
 def test_every_tiktok_catalog_route_has_a_direct_or_setup_handler(client):
     rows = _tiktok_rows(client)
-    # Research does not provide audience analytics, and Shop request signing is not implemented.
-    assert {path for path, status in rows.items() if status == "not_supported"} == (
-        set(tiktok_official.UNSUPPORTED) | set(tiktok_shop.UNSUPPORTED))
+    # Shop request signing is not implemented (audience is read from followers' public posts).
+    assert {path for path, status in rows.items() if status == "not_supported"} == set(tiktok_shop.UNSUPPORTED)
     spec = client.get("/openapi.json").json()["paths"]
     catalog = {entry["path"]: entry for entry in CATALOG if entry["path"].split("/")[2] == "tiktok"}
     assert set(rows) == set(catalog)

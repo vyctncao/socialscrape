@@ -179,7 +179,7 @@ With a [ScrapeCreators](https://scrapecreators.com) API key, a request that fail
 
   | Trigger | Local answer | Default |
   |---|---|---|
-  | `unsupported` | `501` (an endpoint or option this server can't serve: TikTok audience, Instagram pagination, ...), or `400 bad_cursor` (a token from an earlier ScrapeCreators page) | on |
+  | `unsupported` | `501` (an endpoint or option this server can't serve: TikTok Shop, Instagram pagination, ...), or `400 bad_cursor` (a token from an earlier ScrapeCreators page) | on |
   | `errors` | `500`, `502`, `503`: blocks, rate limits, timeouts, network failures, a server bug | on |
   | `restricted` | `403`: private, login-gated, age- or geo-restricted content | off |
   | `not_found` | `404`, including typed native misses such as `region_unavailable` and `ad_not_found` (not `no_public_posts`: an account with no posts has no region anywhere; nor `/v1/tiktok/profile`'s `account_deactivated` 404 for an account that doesn't exist, which is what ScrapeCreators answers too) | off |
@@ -212,7 +212,7 @@ count is used, including an explicit `0`; a missing or hidden count remains `nul
 Sign-in-gated Shorts can still expose public like/comment buttons. Those counts are kept only when the action
 bar's entity key matches the requested video; dates and other player-only fields remain `null` when unavailable.
 
-Endpoints without a native data source stay as `501`. TikTok audience demographics remain unsupported: its Research User Info API does not provide audience country analytics, so adding a Research token does not enable that feature. TikTok Shop also remains unsupported: its request-signing and product/search integrations are not implemented, so storing credentials alone does not enable those routes. Coverage notes distinguish missing implementation from account or service setup.
+Endpoints without a native data source stay as `501`. TikTok audience demographics come from public data instead (the account regions of followers who post, see the TikTok table): the Research User Info API has no audience analytics, so a Research token isn't used for them. TikTok Shop remains unsupported: its request-signing and product/search integrations are not implemented, so storing credentials alone does not enable those routes. Coverage notes distinguish missing implementation from account or service setup.
 
 ## Coverage
 
@@ -240,7 +240,7 @@ The tables below describe the original video-platform routes. `/meta/coverage` a
 
 When YouTube rate-limits the server's IP, it answers a video's watch page and player requests with HTTP 429 or empty bodies, and its InnerTube API with a web page or nothing where JSON belongs: `video`, `video/transcript`, `video/sponsors` and the InnerTube listings return a retryable `503 upstream_blocked` (the next proxy in the pool is tried), not a 500 "Failed to extract any player response" or "Failed to parse JSON".
 
-### TikTok: 17 / 29
+### TikTok: 18 / 29
 
 | Endpoint | Notes |
 |---|---|
@@ -255,9 +255,10 @@ When YouTube rate-limits the server's IP, it answers a video's watch page and pl
 | `/v1/tiktok/search/keyword`, `/v1/tiktok/search/hashtag` | Logged out, from TikTok's public keyword pages (`tiktok.com/discover/<keyword>`, their `/api/seo/kap/video_list/`): TikTok's own web and app search answer an anonymous request with an empty body (they want request signatures). The query is spelled as those pages are (`Skincare routine` → `skincare-routine`); posts are TikTok web items in the app shape (web-rounded counts, `author.follower_count`, `music.play_url`), 30 per request and ~60–90 per keyword, ranked for `region` (default US). `cursor` is an offset, omitted on the last page. Hashtag search keeps only posts carrying the tag. A keyword TikTok made no page for (`fitness`, `skincare`; TikTok answers status_code 4), and `date_posted`/`sort_by` other than `all-time`/`relevance`, are `501 platform_auth_required`: only the signed-in app API (TikTok account cookies) searches those. Comment counts and verification badges as on `/v3/tiktok/profile/videos`. An empty body, a challenge page, a cut-off body or HTTP 403/429/5xx is asked once more, then is a retryable `503 upstream_blocked`. |
 | `/v1/tiktok/search/users` | An exact-handle lookup: the matching public profile, not TikTok's ranked user search. |
 | `/v1/tiktok/user/followers`, `/v1/tiktok/user/following` | Logged out, from the web app's `/api/user/list/` (scene 67 and 21), asked with only `aid`, `secUid`, `count`, `maxCursor` and `minCursor`: without both cursors TikTok answers 10201 "err input", and 30 is the largest page it takes. 30 app-shaped users per page with the list's `total`; `min_time` (the previous page's) pages on, newest first. No account cookies are sent. A private account is a 403. Also served at `/v1/tiktok/followers` and `/v1/tiktok/following` (redirects). |
+| `/v1/tiktok/user/audience` | `audienceLocations` counts the account regions of up to 60 sampled followers (their newest 2 pages), as ScrapeCreators counts about 100, with each country's share of those placed (`"percentage": "75.00%"`, country names as ScrapeCreators gives them). ScrapeCreators reads a follower's region from TikTok's signed app follower list. Anonymously that list is an empty body and the web list has no region, so here a follower's region is read off their own posts: the app feed of their newest own original sound, as for `/profile/region`. Followers who never posted aren't counted, so the shares are those of the followers who post. `sampledFollowers` and `resolvedFollowers` say how many were sampled and placed. Fewer than 10 placed is a `501` (the sample would say too little; one account's 2 placed followers read 100% NG where ScrapeCreators counted 83% US), which the fallback answers when enabled. An account without followers is an empty list. Also served at `/v1/tiktok/profile/audience-demographics` (a redirect). |
 | `/v1/tiktok/video/comments`, `/v1/tiktok/video/comment/replies` | Logged out, from the web app's `/api/comment/list/` and `/api/comment/list/reply/`, asked with only `aid`, the ids, `count` and `cursor` (the web app's full parameter set needs a signature). TikTok's page as-is, which is ScrapeCreators' shape: 20 per page, `cursor` paging. No account cookies are sent. A post with comments turned off returns an empty list. |
 
-The other 10 return 501: audience, top search and suggestions, trending, popular creators, Shop, and showcase. Audience (the followers' countries) is in no public TikTok surface: the follower lists carry no region. Popular creators ranks the creators in TikTok's regional recommended feed, which TikTok serves only to a signed-in account (Creative Center's creator chart now needs a TikTok One login), so it works with TikTok account cookies in Platform settings and is otherwise `501 platform_auth_required`. The TikTok Ad Library search and detail operations (counted here) use TikTok's public Commercial Content Library and Creative Center surfaces.
+The other 9 return 501: top search and suggestions, trending, popular creators, Shop, and showcase. Popular creators ranks the creators in TikTok's regional recommended feed, which TikTok serves only to a signed-in account (Creative Center's creator chart now needs a TikTok One login), so it works with TikTok account cookies in Platform settings and is otherwise `501 platform_auth_required`. The TikTok Ad Library search and detail operations (counted here) use TikTok's public Commercial Content Library and Creative Center surfaces.
 
 ### Instagram: 14 public routes and 6 account routes
 
