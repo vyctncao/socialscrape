@@ -397,7 +397,9 @@ def _trigger(status: int, code: str | None, final: bool = False) -> str | None:
     if status in (500, 502, 503):
         return "errors"
     if status == 403:
-        return "restricted"
+        # Not private content (`private` in the error): ScrapeCreators sees no more of it. yapwithbushra's private
+        # account came back from it as an unusable page, a 502 counted as a fallback in place of the native 403.
+        return None if final else "restricted"
     if status == 404:  # region_unavailable, ad_not_found and company_not_found also need the optional second source
         # ...but not an answer no second source could improve: an account with no posts has no region anywhere
         return None if final or code in _FINAL_NOT_FOUND else "not_found"
@@ -460,6 +462,13 @@ def _gaps(missing: list[str]) -> str:
         names.append(field)
         size += len(field) + 1
     return f"{len(missing)}: {','.join(names)}"
+
+
+def _fewer_items(path: str, paid: dict, native: dict) -> bool:
+    """Whether a paid feed page lists fewer of the posts than the native page does."""
+    platform = quality.OPERATIONS.get(path, ("", ""))[1]
+    return platform in ("instagram", "tiktok", "youtube") and len(quality.feed_ids(platform, paid)) < len(
+        quality.feed_ids(platform, native))
 
 
 def _wrap_cursors(answer: dict, path: str, identity: str, provider: str = PROVIDER, binding: dict | None = None) -> dict:
@@ -673,7 +682,7 @@ class FallbackMiddleware:
             payload = response.body
             headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
             local = _json_object(payload)
-            if local is None or native_cursor or (not provider_page and _trigger(local_status, local.get("error"), local.get("account_deactivated") is True) not in c.triggers):
+            if local is None or native_cursor or (not provider_page and _trigger(local_status, local.get("error"), local.get("account_deactivated") is True or local.get("private") is True) not in c.triggers):
                 if partial:  # a native continuation can't be asked of the provider: serve the page it has
                     return self._native_page(partial, path, identity, binding)
                 return Response(payload, local_status, headers=headers)
@@ -704,10 +713,15 @@ class FallbackMiddleware:
                                        headers={HEADER: PROVIDER})
         if answer is not None and status is not None and 200 <= status < 300:
             answer = quality.prepare(path, answer)
+            if partial and _fewer_items(path, answer, partial[0]):
+                # A paid page listing fewer posts knows less however few gaps it has: chloeoylee's reels tab came
+                # back empty from ScrapeCreators and replaced 8 native reels, one with a hidden like count.
+                return self._native_page(partial, path, identity, binding)
             if missing := quality.issues(path, params, answer):
                 if not quality.page_level(path, missing):
-                    # ScrapeCreators' own page with the same kind of gaps: serve whichever page knows more.
-                    if partial and len(partial[1]) < len(missing):
+                    # ScrapeCreators' own page with the same kind of gaps: serve whichever page knows more (on a tie
+                    # the native one: the same data).
+                    if partial and len(partial[1]) <= len(missing):
                         return self._native_page(partial, path, identity, binding)
                     answer = _wrap_cursors(answer, path, identity, binding=binding)
                     return LenientJSONResponse(answer, status, headers={HEADER: PROVIDER, MISSING_HEADER: _gaps(missing)})

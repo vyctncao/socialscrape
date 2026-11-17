@@ -151,3 +151,10 @@ def test_post_location_reads_the_newest_post_pages_and_passes_over_failures(monk
     assert tiktok._post_location(None, "someone", [{"id": "9", "locationCreated": "US"}]) == "US" and loaded == []
     assert tiktok._post_location(None, "someone", [{"id": "3"}]) is None  # not a country code
     assert tiktok._post_location(None, "someone", [{"id": "1"}, {"id": "2"}], tries=1) is None
+
+
+
+def test_private_tiktok_content_is_flagged_so_it_is_never_sent_to_the_fallback():
+    for status, message in ((10222, "This account is private"), (10216, "This post is private")):
+        assert tiktok._status_error(status).body() == {"success": False, "error": "forbidden", "message": message,
+                                                       "private": True}

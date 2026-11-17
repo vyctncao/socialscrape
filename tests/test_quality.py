@@ -64,3 +64,22 @@ def test_only_page_level_issues_fail_a_feed_while_lookups_keep_every_issue():
     assert quality.page_level("/v3/tiktok/profile/videos", ["feed.items"]) == ["feed.items"]
     assert quality.page_level("/v1/youtube/video", ["post.likeCountInt"]) == ["post.likeCountInt"]
     assert quality.page_level("/v1/tiktok/profile", ["profile.followerCount"]) == ["profile.followerCount"]
+
+
+
+def test_instagram_counts_no_source_can_read_are_unfillable():
+    """A count the creator hid (Instagram answers a placeholder: 3, or 0) and the plays of a video that isn't a reel."""
+    post = {"code": "C1", "media_type": 1, "product_type": "feed", "taken_at": 1762000000, "caption": None,
+            "like_count": 5, "comment_count": 0}
+    hidden = {**post, "code": "C2", "like_count": None, "like_and_view_counts_disabled": True}
+    old_video = {**post, "code": "C3", "media_type": 2, "product_type": "feed"}
+    reel = {**post, "code": "C4", "media_type": 2, "product_type": "clips"}
+    for path in ("/v2/instagram/user/posts", "/v1/instagram/user/reels"):
+        page = {"items": [post, hidden, old_video, {"media": reel}]}
+        missing = quality.issues(path, {}, page)
+        assert missing == ["feed[1].likes", "feed[2].views", "feed[3].views"]
+        assert not quality.unfillable(path, page, missing)  # a reel's plays: another source may have them
+        assert quality.unfillable(path, page, missing[:2])
+        assert not quality.unfillable(path, page, ["feed[0].likes"])  # not hidden: just unread
+        assert not quality.unfillable(path, page, ["feed[1].date"]) and not quality.unfillable(path, page, ["feed[9].likes"])
+    assert not quality.unfillable("/v1/instagram/post", {"items": [hidden]}, ["feed[0].likes"])

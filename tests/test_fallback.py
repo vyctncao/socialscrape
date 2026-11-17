@@ -700,6 +700,17 @@ def test_deactivated_provider_profile_cannot_be_read_as_zero_metrics(make, upstr
     assert result.headers[fallback.HEADER] == fallback.PROVIDER
 
 
+def test_private_content_is_final_and_other_restrictions_still_fall_back(make, upstream, monkeypatch):
+    fail_profile(monkeypatch, Forbidden("This account is private", private=True))
+    result = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all").get(PROFILE, params={"handle": "someone"})
+    assert (result.status_code, result.json()["error"], result.json()["private"]) == (403, "forbidden", True)
+    assert fallback.HEADER not in result.headers and "fallback" not in result.json() and upstream.requests == []
+    fail_profile(monkeypatch, Forbidden("This video is age-restricted"))  # another source may reach that one
+    result = make(SOCIALSCRAPE_SCRAPECREATORS_FALLBACK="all").get(PROFILE, params={"handle": "someone"})
+    assert result.status_code == 200 and result.headers[fallback.HEADER] == fallback.PROVIDER
+    assert fallback._trigger(403, "forbidden", final=True) is None and fallback._trigger(403, "forbidden") == "restricted"
+
+
 def test_a_native_deactivated_profile_is_final_and_spends_no_credit(make, upstream, monkeypatch):
     # ScrapeCreators can only repeat it (and charges a credit to): native's own account_deactivated 404 stands.
     fail_profile(monkeypatch, NotFound("Account doesn't exist", handle="someone", account_deactivated=True))
@@ -992,7 +1003,7 @@ def test_a_shorts_page_with_hidden_counts_is_served_without_paying(make, upstrea
     assert fallback.HEADER not in response.headers and upstream.requests == []
 
 
-@pytest.mark.parametrize("provider_gaps,served", [(0, "provider"), (1, "provider"), (3, "native")])
+@pytest.mark.parametrize("provider_gaps,served", [(0, "provider"), (1, "provider"), (2, "native"), (3, "native")])
 def test_a_page_with_unread_dates_is_served_from_whichever_source_knows_more(
         make, upstream, monkeypatch, provider_gaps, served):
     unread = {**SHORT, "id": "s2", "publishDate": None, "likeCountInt": None}  # 2 gaps natively
@@ -1069,3 +1080,39 @@ def test_cached_duplicate_feed_still_refetches_instead_of_accepting_invalid_page
     result = client.get(SHORTS_PATH, params={"handle": "someone", "cache_max_age": "1d"})
     assert result.status_code == 200 and result.headers["x-cache"] == "miss"
     assert len(result.json()["shorts"]) == 1 and not upstream.requests
+
+
+# Instagram answers a placeholder like count (3, or 0) for a post whose creator hid likes, and ScrapeCreators passes it
+# on as a count. Four 06:00 UTC pages on Nov 17 were paid for over such gaps: one swapped 8 native reels for an empty
+# list, one had the very same gap as the native page.
+IG_POST = {"code": "C1", "media_type": 1, "product_type": "feed", "taken_at": 1762000000, "caption": {"text": "hi"},
+           "like_count": 5, "comment_count": 1}
+
+
+def _native_instagram_posts(monkeypatch, items):
+    async def fetch_feed(handle, tab="", cursor=None):
+        return None
+
+    monkeypatch.setattr(instagram, "fetch_feed", fetch_feed)
+    monkeypatch.setattr(instagram, "map_user_posts", lambda feed: {"items": items, "more_available": False})
+    monkeypatch.setattr(quality, "issues", REAL_QUALITY_ISSUES)
+
+
+def test_an_instagram_page_whose_only_gaps_no_one_can_fill_is_not_paid_for(make, upstream, monkeypatch):
+    hidden = {**IG_POST, "code": "C2", "like_count": None, "like_and_view_counts_disabled": True}
+    old_video = {**IG_POST, "code": "C3", "media_type": 2, "product_type": "feed"}  # Instagram shows it no plays
+    _native_instagram_posts(monkeypatch, [IG_POST, hidden, old_video])
+    response = make().get("/v2/instagram/user/posts", params={"handle": "someone"})
+    assert response.status_code == 200 and [item["code"] for item in response.json()["items"]] == ["C1", "C2", "C3"]
+    assert response.headers[fallback.MISSING_HEADER] == "2: feed[1].likes,feed[2].views"
+    assert fallback.HEADER not in response.headers and upstream.requests == []
+
+
+def test_a_paid_page_listing_fewer_posts_never_replaces_the_native_page(make, upstream, monkeypatch):
+    reel = {**IG_POST, "code": "C4", "media_type": 2, "product_type": "clips"}  # a reel's missing plays: fillable
+    _native_instagram_posts(monkeypatch, [IG_POST, reel])
+    upstream.reply(200, {"success": True, "items": []})
+    response = make().get("/v2/instagram/user/posts", params={"handle": "someone"})
+    assert len(upstream.requests) == 1  # asked, since another source may know the reel's plays
+    assert response.status_code == 200 and [item["code"] for item in response.json()["items"]] == ["C1", "C4"]
+    assert fallback.HEADER not in response.headers and response.headers[fallback.MISSING_HEADER] == "1: feed[1].views"

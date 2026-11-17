@@ -232,13 +232,16 @@ def prepare(path: str, answer: dict) -> dict:
 
 
 _SHORT_COUNT = re.compile(r"feed\[(\d+)\]\.(likes|comments)")
+_INSTAGRAM_FEEDS = ("/v2/instagram/user/posts", "/v1/instagram/user/reels")
+_INSTAGRAM_COUNT = re.compile(r"feed\[(\d+)\]\.(likes|views)")
 
 
 def unfillable(path: str, answer: dict, missing: list[str]) -> bool:
-    """Whether every missing field is a count YouTube shows nobody, which ScrapeCreators, reading the same pages,
-    answers with the same null: a channel whose about panel loaded (it has a joined date) without a subscriber count,
-    or a short read in full (its date and views) without its like or comment count. From Oct 26 to Nov 3 every one
-    of the 54 YouTube channel and shorts fallbacks ended incomplete too, a credit each."""
+    """Whether every missing field is a count no source can read, so ScrapeCreators would only repeat the gap (or fill
+    it with a 0 that isn't a count). On YouTube: a channel whose about panel loaded (it has a joined date) without a
+    subscriber count, or a short read in full (its date and views) without its like or comment count; from Oct 26 to
+    Nov 3 every one of the 54 YouTube channel and shorts fallbacks ended incomplete too, a credit each. On Instagram:
+    see below."""
     if not missing:
         return False
     if path == "/v1/youtube/channel":
@@ -251,6 +254,23 @@ def unfillable(path: str, answer: dict, missing: list[str]) -> bool:
             index = int(match.group(1)) if match else -1
             item = shorts[index] if isinstance(shorts, list) and 0 <= index < len(shorts) else None
             if not (isinstance(item, dict) and stamp(item.get("publishDate")) and number(item.get("viewCountInt"))):
+                return False
+        return True
+    if path in _INSTAGRAM_FEEDS:
+        # A like or view count the creator hid (like_and_view_counts_disabled: ScrapeCreators answers 0 for it, which
+        # isn't a count), or the views of a video that isn't a reel (an older feed video: Instagram shows no plays for
+        # it, and ScrapeCreators' page had the same gap). On Nov 17 four pages with such a gap were paid for.
+        items = answer.get("items")
+        for field in missing:
+            match = _INSTAGRAM_COUNT.fullmatch(field)
+            index = int(match.group(1)) if match else -1
+            item = items[index] if isinstance(items, list) and 0 <= index < len(items) else None
+            item = item.get("media", item) if isinstance(item, dict) else None
+            if not isinstance(item, dict) or not match:
+                return False
+            hidden = item.get("like_and_view_counts_disabled") is True
+            unplayed = match.group(2) == "views" and item.get("product_type") != "clips"
+            if not (hidden or unplayed):
                 return False
         return True
     return False

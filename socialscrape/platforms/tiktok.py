@@ -210,7 +210,7 @@ def _status_error(status: Any) -> ApiError | None:
     if not isinstance(status, int):  # TikTok's codes are numbers (and a list or object can't be looked up)
         return None
     if status in _PRIVATE:
-        return Forbidden(_PRIVATE[status])
+        return Forbidden(_PRIVATE[status], private=True)
     if status in _REFUSED:
         return UpstreamBlocked(f"TikTok refused the anonymous request (status {status}); retry later")
     return None
@@ -943,7 +943,7 @@ def _graph_page(ydl: yt_dlp.YoutubeDL, ident: str, kind: str, min_time: str | No
     scene, key = _GRAPH[kind]
     prof = _profile(ydl, ident)
     if prof["private"]:
-        raise Forbidden("This account is private")
+        raise Forbidden("This account is private", private=True)
     ie = ydl.get_info_extractor("TikTokUser")
     data = M.obj(_web_api(ie, _USER_LIST, ident, f"Downloading {kind}",
                           {"aid": "1988", "secUid": prof["secUid"], "scene": scene, "count": _GRAPH_PAGE,
@@ -1133,7 +1133,7 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
         deadline = time.monotonic() + _EMBED_SECONDS
         prof = _profile(ydl, name)
         if prof["private"]:
-            raise Forbidden("This account is private")
+            raise Forbidden("This account is private", private=True)
         if prof["videoCount"] == 0:
             return [], None
         ie = ydl.get_info_extractor("TikTokUser")
@@ -1187,7 +1187,7 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
         deadline = time.monotonic() + _EMBED_SECONDS
         prof = _profile(ydl, name)
         if prof["private"]:
-            raise Forbidden("This account is private")
+            raise Forbidden("This account is private", private=True)
         if prof["videoCount"] == 0:
             return {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": None,
                     "region_available": False, "reason": "no_public_posts",

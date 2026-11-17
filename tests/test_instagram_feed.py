@@ -578,3 +578,15 @@ def test_literal_play_count_opt_in_refuses_partial_success(client, monkeypatch, 
         assert response.status_code == 200
     response = client.get(path, params={'handle': 'sample', 'require_play_counts': 'true'})
     assert response.status_code == 503 and response.json()['error'] == 'play_counts_unavailable'
+
+
+
+def test_a_feed_item_keeps_instagrams_hidden_counts_flag():
+    from socialscrape.platforms import instagram
+    profile = {"username": "someone", "pk": "1", "id": "1"}
+    node = {"pk": "3001", "code": "Ddbz", "media_type": 2, "product_type": "clips", "like_count": 0, "play_count": 326,
+            "like_and_view_counts_disabled": True}
+    item = instagram.map_feed_item(node, profile, {"pk": "3001", "taken_at": 1789747484, "like_count": 0}, reel=True)
+    assert item["like_and_view_counts_disabled"] is True and item.get("like_count") is None and item["play_count"] == 326
+    plain = instagram.map_feed_item({**node, "like_and_view_counts_disabled": False, "like_count": 4}, profile, reel=True)
+    assert "like_and_view_counts_disabled" not in plain and plain["like_count"] == 4

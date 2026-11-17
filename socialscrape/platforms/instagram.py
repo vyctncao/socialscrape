@@ -1394,6 +1394,9 @@ def map_feed_item(node: dict[str, Any], profile: dict[str, Any], media: dict[str
         "like_count": _count("like_count", media, node),
         "comment_count": _count("comment_count", media, node),
         "play_count": play_count,
+        # the creator hid the like and view counts: no one but them can read those (Instagram answers 0, kept as None)
+        "like_and_view_counts_disabled": True if any(source.get("like_and_view_counts_disabled") is True
+                                                     for source in (node, media)) else None,
         "ig_play_count": play_count,
         "has_audio": media.get("has_audio") if video and isinstance(media.get("has_audio"), bool) else None,
         "video_duration": video_duration(media) if video and media else None,
@@ -2018,7 +2021,7 @@ async def instagram_user_reels(user_id: str | None = None, handle: str | None = 
     feed = await fetch_feed(clean_handle(handle), "reels", max_id or None)
     reels = map_user_reels(feed)
     if not reels["items"] and feed.user.get("is_private") is True:  # collab media of a private account stays visible
-        raise Forbidden("This account is private")
+        raise Forbidden("This account is private", private=True)
     if require_play_counts == "true":
         _require_play_counts(reels["items"], reels=True)
     return reels
@@ -2037,7 +2040,7 @@ async def instagram_highlights(user_id: str | None = None, handle: str | None = 
     user, _ = await fetch_profile(clean_handle(handle), highlights=True)
     highlights = map_highlights(user)
     if not highlights and user.get("is_private") is True:
-        raise Forbidden("This account is private")
+        raise Forbidden("This account is private", private=True)
     return {"highlights": highlights}
 
 

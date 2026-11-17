@@ -265,7 +265,7 @@ class Session(ig.WebSession):
         if not nodes and user.get("is_private") is True:
             if metadata:
                 return nodes, page
-            raise Forbidden("This account is private")
+            raise Forbidden("This account is private", private=True)
         known_count = user.get("total_clips_count" if tab else "media_count")
         if (
             not nodes
@@ -387,7 +387,7 @@ class Session(ig.WebSession):
         if len({str(post["pk"]) for post in posts}) != len(posts):
             raise UpstreamError("Instagram returned duplicate tagged posts in one page")
         if not posts and user.get("is_private") is True:
-            raise Forbidden("This account is private")
+            raise Forbidden("This account is private", private=True)
         return {
             "posts": posts,
             "cursor": next_cursor if more else None,
