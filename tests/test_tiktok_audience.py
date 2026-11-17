@@ -158,3 +158,38 @@ def test_private_tiktok_content_is_flagged_so_it_is_never_sent_to_the_fallback()
     for status, message in ((10222, "This account is private"), (10216, "This post is private")):
         assert tiktok._status_error(status).body() == {"success": False, "error": "forbidden", "message": message,
                                                        "private": True}
+
+
+def test_lookups_stop_starting_steps_the_native_budget_cant_finish(monkeypatch, client, sample):
+    """With error fallback on, a slow native answer becomes a paid one at the native budget: a lookup answers with
+    what it has instead of starting a step it can't finish."""
+    import time
+    from socialscrape import budget
+
+    asked = []
+    monkeypatch.setattr(tiktok, "_music_page", lambda ydl, clip, cursor: asked.append(clip) or {"aweme_list": []})
+    monkeypatch.setattr(tiktok, "_load_post", lambda ydl, url: asked.append(url) or (None, {"locationCreated": "US"}))
+    prof = {"id": "42", "nickname": "Creator"}
+    posts = [{"id": str(i), "music": {"id": str(500 + i), "original": True, "authorName": "Creator"}} for i in range(3)]
+    token = budget.deadline.set(time.monotonic() + 5.0)  # under _SOUND_RESERVE, over _PAGE_RESERVE
+    try:
+        assert tiktok._account_region(None, prof, posts) is None and asked == ["500"]  # one answered: stop there
+        asked.clear()
+        assert tiktok._post_location(None, "creator", posts) == "US" and len(asked) == 1
+        budget.deadline.set(time.monotonic() + 1.0)  # under _PAGE_RESERVE: no post page at all
+        asked.clear()
+        assert tiktok._post_location(None, "creator", posts) is None and asked == []
+        assert tiktok._post_location(None, "creator", [{"id": "9", "locationCreated": "GB"}]) == "GB"  # no page needed
+    finally:
+        budget.deadline.reset(token)
+    asked.clear()
+    assert tiktok._account_region(None, prof, posts) is None and asked == ["500", "501", "502"]  # no budget: all asked
+
+
+def test_an_audience_with_no_budget_left_answers_with_the_followers_placed(client, sample, monkeypatch):
+    sample["pages"] = [page([follower(i) for i in range(12)])]
+    sample["regions"] = {f"fan{i}": "US" for i in range(12)}
+    monkeypatch.setattr(tiktok.budget, "remaining", lambda default: 1.0)  # under _LOOKUP_RESERVE from the start
+    body = client.get("/v1/tiktok/user/audience", params={"handle": "someone"}).json()
+    assert sample["looked_up"] == [] and body["audienceLocations"] == []
+    assert (body["sampledFollowers"], body["resolvedFollowers"]) == (12, 0)

@@ -40,6 +40,7 @@ from yt_dlp.networking import HEADRequest
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError
 
+from .. import budget
 from ..errors import (
     AccountRejected,
     ApiError,
@@ -680,6 +681,12 @@ def _own_sound(prof: dict[str, Any], it: dict[str, Any]) -> bool:
 
 
 _REGION_LOOKUPS = 5  # distinct sound feeds asked per region lookup, about half a second each
+# With error fallback on, a slow native answer becomes a paid one at the native budget (20 s): a region or audience
+# lookup stops starting steps it can't finish in time and answers with what it has. Without fallback there's no budget.
+_BUDGET_UNSET = 3600.0
+_SOUND_RESERVE = 8.0  # s still left before another sound feed is asked once one has answered
+_PAGE_RESERVE = 3.0  # s still left before a post page is read for its location
+_LOOKUP_RESERVE = 6.0  # s still left before another follower is looked up for an audience
 
 
 def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dict[str, Any]],
@@ -706,6 +713,8 @@ def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dic
     failure: Exception | None = None
     answered = False
     for clip in sounds[:tries]:
+        if answered and budget.remaining(_BUDGET_UNSET) < _SOUND_RESERVE:
+            break  # leave the post location (_post_location) time to answer within the native budget
         try:
             resp = _music_page(ydl, clip, 0)
         except NotFound as exc:  # the app API answered: the sound is gone
@@ -736,6 +745,8 @@ def _post_location(ydl: yt_dlp.YoutubeDL, name: str, items: list[dict[str, Any]]
     ScrapeCreators' answer. item_list items lack it, so a post's own page is read; a web item from its own page (the
     embed route's) already has it."""
     for item in items[:tries]:
+        if not item.get("locationCreated") and budget.remaining(_BUDGET_UNSET) < _PAGE_RESERVE:
+            break  # a post page now would outlive the native budget, and the fallback would answer instead
         if not item.get("locationCreated") and _ID.fullmatch(str(item.get("id") or "")):
             try:
                 _, item = _load_post(ydl, M.web_url(name, str(item["id"])))
@@ -1049,7 +1060,8 @@ async def audience(handle: str = Query(...)) -> dict[str, Any]:
 
     async def place(user: dict[str, Any]) -> None:
         async with gate:
-            if time.monotonic() - started > _AUDIENCE_SECONDS or sum(regions.values()) >= _AUDIENCE_MAX:
+            if (time.monotonic() - started > _AUDIENCE_SECONDS or sum(regions.values()) >= _AUDIENCE_MAX
+                    or budget.remaining(_BUDGET_UNSET) < _LOOKUP_RESERVE):
                 return
             try:
                 region = await with_ydl(P, lambda ydl: _follower_region(ydl, user), extractor_args=_APP_API,
