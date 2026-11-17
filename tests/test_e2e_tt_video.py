@@ -511,12 +511,10 @@ def test_region(client):
 
 
 @pytest.mark.live
-def test_region_without_own_sound_is_404(client):
-    r = get(client, REGION, handle=NO_OWN_SOUND_USER)
-    if r.status_code == 200:
-        pytest.skip(f"@{NO_OWN_SOUND_USER} now has a post with its own original sound")
-    assert (r.status_code, r.json()["error"]) == (404, "region_unavailable")
-    assert "original sound" in r.json()["message"]
+def test_region_without_own_sound_still_answers(client):
+    # posts only to label tracks: a feed of one of them lists it, else its newest post's country, else an unknown
+    body = ok(client, REGION, handle=NO_OWN_SOUND_USER)
+    assert re.fullmatch(r"[A-Z]{2}", body["region"] or "") or body["reason"] == "region_unavailable", body
 
 
 @pytest.mark.live

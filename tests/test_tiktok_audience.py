@@ -68,18 +68,18 @@ def test_followers_who_never_posted_are_not_looked_up(client, sample):
     assert (body["sampledFollowers"], body["resolvedFollowers"]) == (30, 15)
 
 
-def test_a_thin_sample_is_a_501_the_fallback_answers(client, sample):
-    # emma.collins920: two of thirteen followers placed read 100% NG, where ScrapeCreators counted 83% US
-    sample["pages"] = [page([follower(i, posts=1 if i < 6 else 0) for i in range(13)])]
-    r = client.get("/v1/tiktok/user/audience", params={"handle": "someone"})
-    assert (r.status_code, r.json()["error"]) == (501, "not_supported")
-    assert sample["looked_up"] == []  # six posting followers can't reach the minimum: nothing is asked
-    assert (r.json()["sampled_followers"], r.json()["resolved_followers"]) == (13, 0)
+def test_a_thin_sample_is_answered_with_its_counts(client, sample):
+    """It never goes to the fallback: a small sample says how small it is. (emma.collins920: 2 of 13 followers placed
+    read 100% NG, where ScrapeCreators counted 83% US, because her US followers never post.)"""
+    sample["pages"] = [page([follower(i, posts=1 if i < 2 else 0) for i in range(13)])]
+    sample["regions"] = {"fan0": "NG", "fan1": "NG"}
+    body = client.get("/v1/tiktok/user/audience", params={"handle": "someone"}).json()
+    assert body["audienceLocations"] == [{"country": "Nigeria", "countryCode": "NG", "count": 2, "percentage": "100.00%"}]
+    assert (body["sampledFollowers"], body["resolvedFollowers"]) == (13, 2) and sample["looked_up"] == ["fan0", "fan1"]
     sample["asked_pages"].clear()
-    sample["pages"] = [page([follower(i) for i in range(20)])]
-    sample["regions"] = {f"fan{i}": "US" for i in range(8)}  # 8 placed: still too few
-    r = client.get("/v1/tiktok/user/audience", params={"handle": "someone"})
-    assert r.status_code == 501 and r.json()["resolved_followers"] == 8
+    sample["regions"] = {}  # none placed: an empty list, with the sample it came from
+    body = client.get("/v1/tiktok/user/audience", params={"handle": "someone"}).json()
+    assert body["audienceLocations"] == [] and (body["sampledFollowers"], body["resolvedFollowers"]) == (13, 0)
 
 
 def test_an_account_without_followers_has_an_empty_audience(client, sample):
@@ -104,31 +104,50 @@ def test_unknown_region_codes_keep_their_code_as_the_name(client, sample):
     assert body["audienceLocations"] == [{"country": "QQ", "countryCode": "QQ", "count": 10, "percentage": "100.00%"}]
 
 
-def test_follower_region_reads_the_newest_own_sound_post(monkeypatch):
+def test_follower_region_reads_their_newest_post_through_pages_only(monkeypatch):
     user = follower(1)
-    own = {"id": "9", "music": {"id": "555", "original": True, "authorName": "Fan 1"}}
-    borrowed = {"id": "8", "music": {"id": "556", "original": False, "authorName": "Someone"}}
-    asked = {}
-    monkeypatch.setattr(tiktok, "_feed_page", lambda ie, sec_uid, display, cursor, region: (
-        asked.update(sec_uid=sec_uid, display=display) or ([borrowed, own], None)))
+    posts = {"10": {"id": "10", "locationCreated": "mx"},
+             "11": {"id": "11", "music": {"id": "555", "original": True, "authorName": "Fan 1"}},
+             "12": {"id": "12", "music": {"id": "556", "original": False, "authorName": "Someone"}}}
+    embed, read, feeds = ["10"], [], []
+    monkeypatch.setattr(tiktok, "_embed_ids", lambda ydl, name: list(embed))
+    monkeypatch.setattr(tiktok, "_embed_post", lambda ydl, name, aweme_id: read.append(aweme_id) or posts.get(aweme_id))
+    monkeypatch.setattr(tiktok, "_feed_page", lambda *args: pytest.fail("item_list is never asked"))
 
     def account_region(ydl, prof, items, tries):
-        asked.update(prof=prof, items=[item["id"] for item in items], tries=tries)
+        feeds.append((prof, [item["id"] for item in items], tries))
         return "CA"
 
     monkeypatch.setattr(tiktok, "_account_region", account_region)
-
-    class Ydl:
-        def get_info_extractor(self, name):
-            return name
-
-    assert tiktok._follower_region(Ydl(), user) == "CA"
-    assert asked == {"sec_uid": "MS4wLjABAAAA1", "display": "fan1", "items": ["9"], "tries": 1,
-                     "prof": {"id": "1001", "secUid": "MS4wLjABAAAA1", "nickname": "Fan 1"}}
-    monkeypatch.setattr(tiktok, "_feed_page", lambda *args: ([borrowed], None))
-    assert tiktok._follower_region(Ydl(), user) is None  # no post with their own sound: not placed
+    assert tiktok._follower_region(None, user) == "MX" and read == ["10"] and feeds == []  # where the post was made
+    embed[:] = ["11"]  # no location, but their own sound: the app feed's region
+    assert tiktok._follower_region(None, user) == "CA"
+    assert feeds == [({"id": "1001", "secUid": "MS4wLjABAAAA1", "nickname": "Fan 1"}, ["11"], 1)]
+    embed[:], read[:] = ["99", "12", "10"], []  # a removed post, then a borrowed sound: the first two only
+    assert tiktok._follower_region(None, user) is None and read == ["99", "12"]
+    assert tiktok._follower_region(None, {**user, "unique_id": None}) is None  # no handle: no embed page
 
 
 def test_audience_is_listed_as_native(client):
     coverage = {row["path"]: row for row in client.get("/meta/coverage").json()["endpoints"]}
     assert coverage["/v1/tiktok/user/audience"]["status"] == "implemented"
+
+
+def test_post_location_reads_the_newest_post_pages_and_passes_over_failures(monkeypatch):
+    pages = {"1": UpstreamBlocked("blocked"), "2": {"locationCreated": "de"}, "3": {"locationCreated": "Earth"}}
+    loaded = []
+
+    def load_post(ydl, url):
+        aweme_id = url.rsplit("/", 1)[1]
+        loaded.append(aweme_id)
+        if isinstance(pages[aweme_id], Exception):
+            raise pages[aweme_id]
+        return None, pages[aweme_id]
+
+    monkeypatch.setattr(tiktok, "_load_post", load_post)
+    assert tiktok._post_location(None, "someone", [{"id": "1"}, {"id": "2"}, {"id": "4"}]) == "DE"
+    assert loaded == ["1", "2"]  # the newest two at most
+    loaded.clear()
+    assert tiktok._post_location(None, "someone", [{"id": "9", "locationCreated": "US"}]) == "US" and loaded == []
+    assert tiktok._post_location(None, "someone", [{"id": "3"}]) is None  # not a country code
+    assert tiktok._post_location(None, "someone", [{"id": "1"}, {"id": "2"}], tries=1) is None

@@ -726,6 +726,33 @@ def _account_region(ydl: yt_dlp.YoutubeDL, prof: dict[str, Any], items: list[dic
     return None
 
 
+_COUNTRY = re.compile(r"[A-Z]{2}")
+
+
+def _post_location(ydl: yt_dlp.YoutubeDL, name: str, items: list[dict[str, Any]], tries: int = 2) -> str | None:
+    """The country the creator's newest post was made in (its page's locationCreated), for when no app feed lists their
+    posts. It is where a post was made, not the account's region, but the two agreed for 23 of 24 accounts with both
+    known (bbcnews: registered AU, posts from GB), and for both accounts no feed listed (chloe.onyu0, jols.jpg) it was
+    ScrapeCreators' answer. item_list items lack it, so a post's own page is read; a web item from its own page (the
+    embed route's) already has it."""
+    for item in items[:tries]:
+        if not item.get("locationCreated") and _ID.fullmatch(str(item.get("id") or "")):
+            try:
+                _, item = _load_post(ydl, M.web_url(name, str(item["id"])))
+            except (ApiError, ExtractorError) as exc:
+                log.info("tiktok: no post location for %s from post %s: %s", name, item.get("id"), exc)
+                continue
+        if country := _country(item):
+            return country
+    return None
+
+
+def _country(item: dict[str, Any]) -> str | None:
+    """A web post's locationCreated as a country code, or None."""
+    location = item.get("locationCreated")
+    return location.upper() if isinstance(location, str) and _COUNTRY.fullmatch(location.upper()) else None
+
+
 def _music_page(ydl: yt_dlp.YoutubeDL, clip_id: str, cursor: int) -> dict[str, Any]:
     """TikTokSoundIE's app-API request: videos using a sound, 20 per page.
 
@@ -961,38 +988,49 @@ async def following(handle: str = Query(...), min_time: str | None = None, trim:
 # An audience's countries, read as ScrapeCreators reads them: the account regions of a sample of its followers,
 # counted. ScrapeCreators takes about 100 followers from TikTok's signed app follower list, whose users carry their
 # region (their followers answer has it: followers[].region); the anonymous app list answers with an empty body, and
-# the web list has no region. So here a follower's region comes from the app feed of their newest own original sound,
-# as /v1/tiktok/profile/region reads an account's, and only followers who have posted can be placed: on 6 accounts
-# with ScrapeCreators' answers cached, 30 sampled followers placed 2-13, and from 6 up the top country agreed.
+# the web list has no region. So here a follower's region comes from their own newest post: the country it was made in,
+# which matched the account region on 23 of 24 accounts checked, else (a post with their own sound) the app feed's.
+# Only followers who have posted can be placed, so the shares are those of the followers who post: with ScrapeCreators'
+# answers cached for 6 accounts, from 6 placed up the top country agreed, and an account whose US followers never post
+# read 100% NG from its 2 placed (ScrapeCreators: 83% US). The counts say how many each share stands for.
 _AUDIENCE_PAGES = 2  # follower pages sampled, 30 followers each
-_AUDIENCE_MIN = 10  # placed followers needed before the sample says anything: 2 placed read 100% NG for 83% US
 _AUDIENCE_MAX = 30  # placed followers after which no more are looked up
 _AUDIENCE_PARALLEL = 6  # followers looked up at once
-_AUDIENCE_SECONDS = 12.0  # no lookup starts later than this into the call
+_AUDIENCE_SECONDS = 10.0  # no lookup starts later than this into the call (the fallback's native budget is 20 s)
 _REGION_NAMES: dict[str, str] = json.loads((Path(__file__).parent.parent / "data" / "regions.json").read_text())
 
 
 def _follower_region(ydl: yt_dlp.YoutubeDL, user: dict[str, Any]) -> str | None:
-    """A follower's account region: the app feed of their newest post with their own original sound lists it, or None
-    (no such post on their first page). Needs extractor_args=_APP_API."""
+    """A follower's region, read off their newest post: the country it was made in (its page's locationCreated), else,
+    for a post with their own original sound, the app feed's author.region; None without a readable post. Pages only
+    (their embed page, then the post's), never item_list: a sample's lookups must not throttle the feed API the
+    tracking routes depend on (_item_list's cool-down covers every call from the IP). Needs extractor_args=_APP_API."""
+    name = user.get("unique_id")
+    if not M.is_handle(name):
+        return None
     prof = {"id": str(user.get("uid") or ""), "secUid": user.get("sec_uid"), "nickname": user.get("nickname")}
-    ie = ydl.get_info_extractor("TikTokUser")
-    items, _ = _feed_page(ie, prof["secUid"], user.get("unique_id") or prof["id"], int(time.time() * 1000), "US")
-    own = [item for item in items if _own_sound(prof, item)][:1]
-    return _account_region(ydl, prof, own, tries=1) if own else None
+    for aweme_id in _embed_ids(ydl, name)[:2]:  # a pinned post may lead
+        item = _embed_post(ydl, name, aweme_id)
+        if item is None:
+            continue
+        if country := _country(item):
+            return country
+        if _own_sound(prof, item):
+            return _account_region(ydl, prof, [item], tries=1)
+    return None
 
 
 @sc_get(router, "/v1/tiktok/user/audience",
-        source="TikTok web /api/user/list/ (followers) + each follower's /api/creator/item_list/ and TikTokSoundIE "
-               "app feed (music/aweme author.region)",
+        source="TikTok web /api/user/list/ (followers) + each follower's /embed/@handle page and newest post page "
+               "(locationCreated), or TikTokSoundIE app feed (music/aweme author.region)",
         notes="audienceLocations counts the account regions of up to 60 sampled followers (their newest 2 pages), "
               "as ScrapeCreators counts about 100, with each country's share of those placed. ScrapeCreators reads a "
               "follower's region from TikTok's signed app follower list; anonymously it can only be read off a "
-              "follower's own posts (the app feed of their own original sound, as /v1/tiktok/profile/region reads "
-              "it), so followers who never posted aren't counted and the shares are those of the followers who post. "
-              "sampledFollowers and resolvedFollowers say how many were sampled and placed. Fewer than 10 placed is "
-              "a 501 (the sample would say too little), which the ScrapeCreators fallback answers when enabled. An "
-              "account without followers is an empty list. A private account is a 403.")
+              "follower's own posts (the country their newest post was made in, else the app feed of its sound when "
+              "it is their own), so followers who never posted aren't "
+              "counted and the shares are those of the followers who post. sampledFollowers and resolvedFollowers "
+              "say how many were sampled and placed: a small resolvedFollowers is a small sample (an empty list when "
+              "none could be placed). An account without followers is an empty list. A private account is a 403.")
 async def audience(handle: str = Query(...)) -> dict[str, Any]:
     name = _handle(handle)
     followers: list[dict[str, Any]] = []
@@ -1007,15 +1045,6 @@ async def audience(handle: str = Query(...)) -> dict[str, Any]:
     if not followers:
         return {"audienceLocations": [], "sampledFollowers": 0, "resolvedFollowers": 0}
     posting = [user for user in followers if (M.to_int(user.get("aweme_count")) or 0) > 0 and user.get("sec_uid")]
-
-    def too_few(placed: int) -> NotSupported:
-        return NotSupported(f"Only {placed} of the {len(followers)} sampled followers could be placed: TikTok shows a "
-                            "follower's region only on their own posts, and too few of them have one to read an "
-                            f"audience from (at least {_AUDIENCE_MIN} are needed)", sampled_followers=len(followers),
-                            resolved_followers=placed)
-
-    if len(posting) < _AUDIENCE_MIN:
-        raise too_few(0)  # can't reach the minimum: no lookups
     started, gate, regions = time.monotonic(), asyncio.Semaphore(_AUDIENCE_PARALLEL), Counter()
 
     async def place(user: dict[str, Any]) -> None:
@@ -1033,8 +1062,6 @@ async def audience(handle: str = Query(...)) -> dict[str, Any]:
 
     await asyncio.gather(*(place(user) for user in posting))
     placed = sum(regions.values())
-    if placed < _AUDIENCE_MIN:
-        raise too_few(placed)
     return {"audienceLocations": [{"country": _REGION_NAMES.get(code, code), "countryCode": code, "count": count,
                                    "percentage": f"{100 * count / placed:.2f}%"}
                                   for code, count in regions.most_common()],
@@ -1131,13 +1158,16 @@ async def tiktok_profile_videos(handle: str = Query(...), user_id: str | None = 
               "the app feed (music/aweme) of a sound they used: the creator's own original sounds first, then the "
               "other sounds of their recent posts, up to 5 distinct sounds. That usually costs 3-4 TikTok requests. "
               "200 with region:null, region_available:false and reason:no_public_posts for an existing account with "
-              "no public posts (not a missing account; no paid fallback). 404 region_unavailable when no asked feed lists the creator's "
-              "posts. When the app API can't be reached "
+              "no public posts (not a missing account; no paid fallback). When no asked feed lists the creator's "
+              "posts, the region is the country their newest post was made in (its locationCreated), marked "
+              "region_source:post_location: it matched the account region on 23 of 24 accounts checked, and was "
+              "ScrapeCreators' answer where no feed listed the posts. Neither: 200 with region:null and "
+              "reason:region_unavailable. When the app API can't be reached "
               "for any of those sounds, the error is the retryable one /v1/tiktok/song gives (502 proxy_error/"
               "network_error, 503 when throttled), not a 404. When item_list is throttled or bot-checked (see "
               "/v3/tiktok/profile/videos), the creator's posts are found on its embed page and read from their own "
               "pages until two use its own sound, keeping borrowed sounds as candidates too. Also at /v1/tiktok/profile-region. A handle's answer (its region, "
-              "the 404 or the 503) is reused for 90 s, so a retry at once or through the alias asks TikTok nothing. "
+              "an unknown or the 503) is reused for 90 s, so a retry at once or through the alias asks TikTok nothing. "
               "TikTokSoundIE is marked broken in yt-dlp, so this may stop working without notice.")
 async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
     name = _handle(handle)
@@ -1150,7 +1180,7 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
             err = hit[1]
             raise type(err)(err.message, code=err.code, retry_after=math.ceil(left) if err.status == 503 else None)
         if isinstance(hit[1], dict):
-            return {**hit[1], "handle": name}
+            return {**hit[1], "handle": name, "profile_url": f"https://www.tiktok.com/@{name}"}
         return {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": hit[1]}
 
     def go(ydl: yt_dlp.YoutubeDL) -> str | dict[str, Any] | None:
@@ -1171,7 +1201,11 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
         except UpstreamBlocked as blocked:
             items = _with_embed_fallback(blocked, name, lambda: _embed_own_sound_posts(ydl, name, prof,
                                                                                        deadline=deadline))
-        return _account_region(ydl, prof, items)
+        if region := _account_region(ydl, prof, items):
+            return region
+        located = _post_location(ydl, name, items)
+        return {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": located,
+                "region_source": "post_location"} if located else None
 
     def remember(outcome: str | dict[str, Any] | ApiError) -> None:
         with _regions_lock:
@@ -1188,11 +1222,12 @@ async def tiktok_profile_region(handle: str = Query(...)) -> dict[str, Any]:
     if isinstance(region, dict):
         remember(region)
         return region
-    if not region:
-        missing = NotFound("Could not read this account's region: the first page of each sound its recent posts "
-                           "use doesn't list them", code="region_unavailable")
-        remember(missing)
-        raise missing
+    if not region:  # an answer like no_public_posts: no source has more (and the fallback would only be asked)
+        unknown = {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": None,
+                   "region_available": False, "reason": "region_unavailable",
+                   "message": "No app feed lists this account's recent posts and they carry no post location."}
+        remember(unknown)
+        return unknown
     remember(region)
     return {"handle": name, "profile_url": f"https://www.tiktok.com/@{name}", "region": region}
 

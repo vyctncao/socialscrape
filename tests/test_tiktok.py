@@ -975,9 +975,17 @@ def test_profile_region_route(client, fake_ydl, monkeypatch):
     assert calls[-1]["extractor_args"] == tiktok._APP_API
     feed.extra = {"music": {**own["music"], "original": False}}  # someone else's sound: still asked, still listed
     assert ok(client, "/v1/tiktok/profile/region", handle="someone")["region"] == "US"
+    # no feed lists the posts (chloe.onyu0, jols.jpg): the country the newest post was made in, marked as such
     monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": []})
-    r = client.get("/v1/tiktok/profile/region", params={"handle": "someone"})
-    assert r.status_code == 404 and r.json()["error"] == "region_unavailable"
+    loaded = []
+    monkeypatch.setattr(tiktok, "_load_post", lambda ydl, url: loaded.append(url) or (None, {"locationCreated": "us"}))
+    body = ok(client, "/v1/tiktok/profile/region", handle="someone")
+    assert (body["region"], body["region_source"]) == ("US", "post_location")
+    assert loaded == [f"https://www.tiktok.com/@someone/video/{now - 60}"]
+    monkeypatch.setattr(tiktok, "_load_post", lambda ydl, url: (None, {}))  # nor a post location: unknown, not a 404
+    body = ok(client, "/v1/tiktok/profile/region", handle="someone")
+    assert (body["region"], body["region_available"], body["reason"]) == (None, False, "region_unavailable")
+    assert "region_source" not in body
 
 
 def test_an_account_without_posts_has_no_region_and_does_not_fall_back(client, fake_ydl, monkeypatch):
@@ -1028,12 +1036,13 @@ def test_profile_region_app_api_failure_is_retryable(client, monkeypatch):
         r = client.get("/v1/tiktok/profile/region", params={"handle": "someone"})
         assert (r.status_code, r.json()["error"]) == (status, code), r.text
         assert looked_up == ["555", "556"] and "original sound" not in r.json()["message"]
-    # one lookup answering is enough: its region, or a 404 when it doesn't list the account
+    # one lookup answering is enough: its region, or (it doesn't list the account) the newest post's country
     answers["556"] = {"aweme_list": [{"aweme_id": "9", "author": {"uid": "42", "region": "GB"}}]}
     assert ok(client, "/v1/tiktok/profile/region", handle="someone")["region"] == "GB"
     answers["556"] = {"aweme_list": []}
-    r = client.get("/v1/tiktok/profile/region", params={"handle": "someone"})
-    assert (r.status_code, r.json()["error"]) == (404, "region_unavailable")
+    monkeypatch.setattr(tiktok, "_load_post", lambda ydl, url: (None, {"locationCreated": "GB"}))
+    body = ok(client, "/v1/tiktok/profile/region", handle="someone")
+    assert (body["region"], body["region_source"]) == ("GB", "post_location")
 
 
 def test_collection_route(client, fake_ydl):
@@ -1833,17 +1842,19 @@ def test_profile_region_answers_are_reused_briefly(client, real_ydl, monkeypatch
     """verify-consumer: Stratton retries /v1/tiktok/profile/region's failure at /v1/tiktok/profile-region at once,
     which repeated every TikTok request (5-10 more) into a throttled IP. The handle's answer is reused for 90 s."""
     monkeypatch.setattr(tiktok, "_music_page", lambda ydl, mid, cursor: {"aweme_list": []})
-    for embed, status, code in (([_WAF_PAGE], 503, "upstream_blocked"), ([_EMBED_PAGE], 404, "region_unavailable")):
+    for embed, status, code in (([_WAF_PAGE], 503, "upstream_blocked"), ([_EMBED_PAGE], 200, "region_unavailable")):
         tiktok._regions.clear()
         tiktok._cooling.clear()
         net = _Net(monkeypatch, {_ITEM_LIST: [_BLOCK_PAGE], _STOOL_EMBED: embed, **_STOOL_POSTS})
         r = client.get("/v1/tiktok/profile/region", params={"handle": "stoolpresidente"})
-        assert (r.status_code, r.json()["error"]) == (status, code), r.text
+        assert (r.status_code, r.json().get("error") or r.json().get("reason")) == (status, code), r.text
         asked = len(net.asked)
         again = client.get("/v1/tiktok/profile-region", params={"handle": "StoolPresidente"})
-        assert (again.status_code, again.json()["error"], again.json()["message"]) == (
+        assert (again.status_code, again.json().get("error") or again.json().get("reason"), again.json()["message"]) == (
             status, code, r.json()["message"])
         assert len(net.asked) == asked  # answered without asking TikTok
+        if status == 200:  # the kept answer, for the handle as asked
+            assert again.json()["profile_url"] == "https://www.tiktok.com/@StoolPresidente"
         if status == 503:
             assert 0 < int(again.headers["Retry-After"]) <= 90
     tiktok._regions.clear()
